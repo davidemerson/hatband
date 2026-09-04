@@ -46,9 +46,10 @@ func reviewWebsiteRejectsEveryFormatScalarAnywhere(scalar: Unicode.Scalar) {
 }
 
 /// Every printable ASCII byte in a path, query and fragment: the nine RFC 3986
-/// delimiters the fix names are refused, everything else is kept as typed.
+/// delimiters the fix names are refused, as is a `%` that starts no `%XX`
+/// triple (RFC 3986 §2.1); everything else is kept as typed.
 @Test func reviewWebsiteSweepsPrintableASCIIOutsideTheHost() {
-    let refused = Set("<>\"\\^`{|}")
+    let refused = Set("<>\"\\^`{|}%")
     for byte in UInt8(0x20)...UInt8(0x7f) {
         let ch = Character(Unicode.Scalar(byte))
         for (prefix, suffix) in [("nnix.com/x", "y"), ("nnix.com?q=", ""), ("nnix.com/#", "z"), ("nnix.com/", "")] {
@@ -94,13 +95,17 @@ func reviewWebsitePorts(input: String, address: String?) {
 }
 
 /// RFC 3986 §2.1: `%` is only legal as `%` HEXDIG HEXDIG. Half an escape is
-/// kept as typed and reaches the canonical URI, where Foundation's URL
-/// parser refuses it.
+/// refused here rather than kept as typed for the canonical URI, where
+/// Foundation's URL parser would refuse it.
 @Test func reviewWebsiteKeepsMalformedPercentEscapes() {
-    withKnownIssue("a % that does not start a pct-encoded triple is accepted") {
-        for input in ["example.com/%", "example.com/%ZZ", "example.com/%2", "example.com?q=100%"] {
-            #expect(throws: Normalize.Error.invalidCharacter("%")) { try Normalize.website(input) }
-        }
+    for input in ["example.com/%", "example.com/%ZZ", "example.com/%2", "example.com?q=100%", "example.com/#%", "example.com/%%41",
+                  "example.com/%4G", "example.com/%-1"] {
+        #expect(throws: Normalize.Error.invalidCharacter("%")) { try Normalize.website(input) }
+    }
+    // Non-ASCII after a `%` is named as itself: the path sweep runs first.
+    #expect(throws: Normalize.Error.invalidCharacter("\u{FF10}")) { try Normalize.website("example.com/%\u{FF10}\u{FF10}") }
+    for input in ["example.com/%41", "example.com/%4a%4A", "example.com/%00?%ff#%Ff", "example.com/%25"] {
+        #expect((try? Normalize.website(input))?.address == input)
     }
 }
 
@@ -124,14 +129,14 @@ func reviewGithubRejectsEveryReservedSegment(word: String) throws {
     #expect(try Normalize.github("https://github.com/\(word)-x") == "\(word)-x")
 }
 
-/// The reserved list says what is not a profile; the same word typed alone
-/// is stored, and its canonical URI is the site path it names.
-@Test func reviewGithubBareReservedWordsAreStillAccepted() {
-    withKnownIssue("a reserved word typed alone is stored although it can never be a profile") {
-        for word in githubReservedWords {
-            #expect(throws: Normalize.Error.invalidUsername) { try Normalize.github(word) }
-            #expect(throws: Normalize.Error.invalidUsername) { try Normalize.github("@" + word.uppercased()) }
-        }
+/// The reserved list says what is not a profile, and the same word typed
+/// alone can never be one either: its canonical URI would be the site path.
+@Test func reviewGithubBareReservedWordsAreStillAccepted() throws {
+    for word in githubReservedWords {
+        #expect(throws: Normalize.Error.invalidUsername) { try Normalize.github(word) }
+        #expect(throws: Normalize.Error.invalidUsername) { try Normalize.github("@" + word.uppercased()) }
+        #expect(throws: Normalize.Error.invalidUsername) { try Normalize.github(" " + word + " ") }
+        #expect(try Normalize.github(word + "-x") == word + "-x")
     }
 }
 
@@ -240,11 +245,18 @@ func reviewSSHDoesNotInventOptions(line: String, error: SSHPublicKey.Error) {
 @Test func reviewAllowedSignersPrincipalCannotBeginWithHash() throws {
     let key = try SSHPublicKey(line: ed1)
     #expect(try Normalize.email("#bloom@nnix.com") == "#bloom@nnix.com")
-    withKnownIssue("a leading # makes the allowed_signers entry a comment") {
-        for principal in ["#bloom@nnix.com", "\u{0}#bloom@nnix.com", " #", "#"] {
-            #expect(!key.allowedSignersLine(principal: principal).hasPrefix("#"))
-        }
+    for principal in ["#bloom@nnix.com", "\u{0}#bloom@nnix.com", " #", "#", "##bloom@nnix.com", "#\u{301}bloom@nnix.com", ",#,"] {
+        let line = key.allowedSignersLine(principal: principal)
+        #expect(!line.hasPrefix("#") && line.unicodeScalars.first != "#", "\(principal)")
+        #expect(line.hasSuffix(" namespaces=\"git\" ssh-ed25519 " + ed1Base64))
     }
+    #expect(key.allowedSignersLine(principal: "#bloom@nnix.com").hasPrefix("bloom@nnix.com "))
+    #expect(key.allowedSignersLine(principal: "##bloom@nnix.com").hasPrefix("bloom@nnix.com "))
+    for principal in ["#", " #", ",#,", "#\u{0}#"] {
+        #expect(key.allowedSignersLine(principal: principal).hasPrefix("* "))
+    }
+    // Only a leading `#` is a comment marker; one inside a local part stays.
+    #expect(key.allowedSignersLine(principal: "bloom#1@nnix.com").hasPrefix("bloom#1@nnix.com "))
 }
 
 // MARK: - vCard

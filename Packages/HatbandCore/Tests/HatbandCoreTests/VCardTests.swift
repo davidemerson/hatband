@@ -307,6 +307,22 @@ func rejectsBadInput(text: String, error: VCard.Error) {
     #expect(VCard.splitProperty("no colon") == nil)
 }
 
+/// RFC 2426 works on octets: a combining mark after `;`, `.` or `:` in a
+/// header does not fuse with it, and a Greek question mark (U+037E, which
+/// Swift's `==` treats as equal to `;`) is not a semicolon.
+@Test func headersAndEscapesAreScalarBased() throws {
+    let text = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:x\r\nTEL;\u{301}TYPE=CELL:+1\r\nitem1.URL;X=\u{301}:https://nnix.com\r\n"
+        + "item1.X-ABLabel:\u{301}Web\r\nX-HATBAND-\u{301}KEY:v\r\nEND:VCARD\r\n"
+    let card = try VCard.parseBasic(text)
+    #expect(card.phone == "+1")
+    #expect(card.links == [VCard.Link(label: "\u{301}Web", url: "https://nnix.com")])
+    #expect(card.extensions == [VCard.Extension(name: "KEY", value: "v")])
+    #expect(VCard.escape("\u{037E}").utf8.elementsEqual("\u{037E}".utf8))
+    #expect(VCard.splitComponents("a\u{037E}b").map { Array($0.utf8) } == [Array("a\u{037E}b".utf8)])
+    #expect(VCard.unescape("\\\u{301}") == "\u{301}")
+    #expect(VCard.escape("\r\n\u{301}") == "\\n\u{301}")
+}
+
 @Test func escapeDropsControlsButKeepsTabs() throws {
     #expect(VCard.escape("a\u{0}b\u{1b}c\u{0b}d\u{0c}e\u{7f}f") == "abcdef")
     #expect(VCard.escape("\u{1}\u{1f}") == "")

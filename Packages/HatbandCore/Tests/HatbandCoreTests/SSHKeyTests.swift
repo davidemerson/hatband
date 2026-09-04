@@ -218,6 +218,28 @@ func inlineMaterialMatchesKind(index: Int) throws {
     }
 }
 
+/// Sanitising and field splitting work on scalars, as sshd works on bytes: a
+/// combining mark after a `,`, a `"` or a space does not shield the
+/// character before it from the filter, nor vanish with it.
+@Test func combiningMarksCannotShieldSeparators() throws {
+    let key = try SSHPublicKey(line: ed25519.line)
+    let base64 = ed25519.line.split(separator: " ")[1]
+    let mark = "\u{301}"
+    let tail = "namespaces=\"git\" ssh-ed25519 \(base64)"
+    #expect(key.allowedSignersLine(principal: "a@x.ie,\(mark)b@x.ie") == "a@x.ie\(mark)b@x.ie \(tail)")
+    #expect(key.allowedSignersLine(principal: "a@x.ie \(mark)cert-authority") == "a@x.ie\(mark)cert-authority \(tail)")
+    #expect(key.allowedSignersLine(principal: "bloom@nnix.com", namespace: "git\"\(mark) x=\"y")
+            == "bloom@nnix.com namespaces=\"git\(mark)x=y\" ssh-ed25519 \(base64)")
+    // sshsig reads a first byte of `#` as a comment, however many there are.
+    #expect(key.allowedSignersLine(principal: "##bloom@nnix.com") == "bloom@nnix.com \(tail)")
+    #expect(key.allowedSignersLine(principal: "#\(mark)") == "\(mark) \(tail)")
+    // A field that begins with a mark is that field, not part of the space before it.
+    #expect(throws: SSHPublicKey.Error.invalidBase64) { try SSHPublicKey(line: "ssh-ed25519 \(mark)\(base64)") }
+    let commented = try SSHPublicKey(line: "ssh-ed25519 \(base64) \(mark)Bloom")
+    #expect(commented.comment == "\(mark)Bloom")
+    #expect(try SSHPublicKey(line: commented.authorizedKeysLine()) == commented)
+}
+
 private let badMalformedLines: [(String, SSHPublicKey.Error)] = [
     ("", SSHPublicKey.Error.malformedLine), ("   ", .malformedLine), ("ssh-ed25519", .malformedLine),
     (ed25519.line + "\nssh-rsa AAAA", .malformedLine),

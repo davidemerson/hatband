@@ -1,6 +1,10 @@
 /// A vCard 3.0 (RFC 2426) the way Contacts likes it: `N` and `FN`, a mobile
 /// number, an internet email, labelled URLs as `item<n>.URL` pairs, a note,
 /// an inline JPEG, and `X-HATBAND-*` lines for what the app wants back.
+///
+/// The RFC is defined on octets, so every scan here walks Unicode scalars,
+/// never `Character`s: a `;` or `:` followed by a combining mark is still a
+/// separator, and a value may begin with a mark.
 public struct VCard: Sendable, Hashable {
     public struct Link: Sendable, Hashable {
         public var label: String
@@ -87,21 +91,24 @@ public struct VCard: Sendable, Hashable {
     public static let foldWidth = 75
 
     /// RFC 2426 §2.4.2: backslash, comma and semicolon get a backslash and
-    /// a line break becomes the two characters `\n`. The other C0 controls
-    /// except HTAB, and DEL, are dropped: they are not VALUE-CHARs and some
-    /// readers treat them as line breaks.
+    /// a line break (CRLF counted once) becomes the two characters `\n`. The
+    /// other C0 controls except HTAB, and DEL, are dropped: they are not
+    /// VALUE-CHARs and some readers treat them as line breaks.
     static func escape(_ value: String) -> String {
         var out = ""
         out.reserveCapacity(value.utf8.count)
-        for ch in value {
-            switch ch {
+        var previous: Unicode.Scalar = " "
+        for scalar in value.unicodeScalars {
+            switch scalar {
             case "\\": out += "\\\\"
             case ",": out += "\\,"
             case ";": out += "\\;"
-            case "\r\n", "\n", "\r", "\u{85}", "\u{2028}", "\u{2029}": out += "\\n"
-            default:
-                for scalar in ch.unicodeScalars where !Self.isDropped(scalar) { out.unicodeScalars.append(scalar) }
+            case "\n" where previous == "\r": break
+            case "\n", "\r", "\u{85}", "\u{2028}", "\u{2029}": out += "\\n"
+            case _ where isDropped(scalar): break
+            default: out.unicodeScalars.append(scalar)
             }
+            previous = scalar
         }
         return out
     }
@@ -142,12 +149,14 @@ public struct VCard: Sendable, Hashable {
     /// as CRLF and unfolds continuations.
     public static func parseBasic(_ text: String) throws -> VCard {
         var logical: [String] = []
-        for raw in text.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\r\n" || $0 == "\n" }) {
-            // Scalars, not graphemes: a fold may land before a combining mark.
-            if let first = raw.unicodeScalars.first, first == " " || first == "\t", !logical.isEmpty {
-                logical[logical.count - 1] += String(Substring(raw.unicodeScalars.dropFirst()))
-            } else if !raw.isEmpty {
-                logical.append(String(raw))
+        for raw in text.unicodeScalars.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = raw.last == "\r" ? raw.dropLast() : raw
+            // A fold may land right before a combining mark, so the space is
+            // a scalar, not the first grapheme.
+            if let first = line.first, first == " " || first == "\t", !logical.isEmpty {
+                logical[logical.count - 1] += String(line.dropFirst())
+            } else if !line.isEmpty {
+                logical.append(String(line))
             }
         }
         guard logical.first?.uppercased() == "BEGIN:VCARD", logical.last?.uppercased() == "END:VCARD" else {
@@ -156,14 +165,15 @@ public struct VCard: Sendable, Hashable {
         var card = VCard(formattedName: "", familyName: "", givenName: "")
         var labels: [String: String] = [:]
         var urls: [(group: String, url: String)] = []
+        let extensionPrefix = "X-HATBAND-".unicodeScalars
         for line in logical.dropFirst().dropLast() {
             guard case let (head, value)? = splitProperty(line) else { throw Error.malformedLine(line) }
-            let nameAndParams = head.split(separator: ";", maxSplits: 1, omittingEmptySubsequences: false)
-            var name = nameAndParams[0].uppercased()
+            let params = head.unicodeScalars.split(separator: ";", omittingEmptySubsequences: false).map { String($0) }
+            var name = params[0].uppercased()
             var group = ""
-            if let dot = name.firstIndex(of: ".") {
+            if let dot = name.unicodeScalars.firstIndex(of: ".") {
                 group = String(name[..<dot])
-                name = String(name[name.index(after: dot)...])
+                name = String(name.unicodeScalars[name.unicodeScalars.index(after: dot)...])
             }
             switch name {
             case "VERSION":
@@ -182,12 +192,13 @@ public struct VCard: Sendable, Hashable {
             case "PHOTO":
                 // `VALUE=uri` is a reference, not data; that and anything
                 // else that is not base64 is skipped rather than refused.
-                let params = head.split(separator: ";").dropFirst().map { $0.uppercased().filter { $0 != "\"" } }
-                guard !params.contains("VALUE=URI"), let bytes = try? Base64.decode(value.filter { !$0.isWhitespace }) else { break }
+                let unquoted = params.dropFirst().map { param in String(param.uppercased().unicodeScalars.filter { $0 != "\"" }) }
+                guard !unquoted.contains("VALUE=URI"), let bytes = try? Base64.decode(value.filter { !$0.isWhitespace }) else { break }
                 card.photoJPEG = bytes
             default:
-                if name.hasPrefix("X-HATBAND-") {
-                    card.extensions.append(Extension(name: String(name.dropFirst("X-HATBAND-".count)), value: unescape(value)))
+                if name.unicodeScalars.starts(with: extensionPrefix) {
+                    let rest = String(name.unicodeScalars.dropFirst(extensionPrefix.count))
+                    card.extensions.append(Extension(name: rest, value: unescape(value)))
                 }
             }
         }
@@ -199,11 +210,12 @@ public struct VCard: Sendable, Hashable {
     /// a double-quoted parameter value (RFC 2426 §4 `quoted-string`). Nil
     /// when there is no such colon.
     static func splitProperty(_ line: String) -> (head: Substring, value: String)? {
+        let scalars = line.unicodeScalars
         var quoted = false
-        for index in line.indices {
-            switch line[index] {
+        for index in scalars.indices {
+            switch scalars[index] {
             case "\"": quoted.toggle()
-            case ":" where !quoted: return (line[..<index], String(line[line.index(after: index)...]))
+            case ":" where !quoted: return (line[..<index], String(scalars[scalars.index(after: index)...]))
             default: break
             }
         }
@@ -215,19 +227,14 @@ public struct VCard: Sendable, Hashable {
         var parts: [String] = []
         var current = ""
         var escaped = false
-        for ch in value {
-            if escaped {
-                current.append(ch)
-                escaped = false
-            } else if ch == "\\" {
-                current.append(ch)
-                escaped = true
-            } else if ch == ";" {
+        for scalar in value.unicodeScalars {
+            if !escaped, scalar == ";" {
                 parts.append(current)
                 current = ""
-            } else {
-                current.append(ch)
+                continue
             }
+            current.unicodeScalars.append(scalar)
+            escaped = !escaped && scalar == "\\"
         }
         parts.append(current)
         return parts.map(unescape)
@@ -236,20 +243,17 @@ public struct VCard: Sendable, Hashable {
     static func unescape(_ value: String) -> String {
         var out = ""
         var escaped = false
-        for ch in value {
+        for scalar in value.unicodeScalars {
             if escaped {
-                switch ch {
-                case "n", "N": out.append("\n")
-                default: out.append(ch)
-                }
+                out.unicodeScalars.append(scalar == "n" || scalar == "N" ? "\n" : scalar)
                 escaped = false
-            } else if ch == "\\" {
+            } else if scalar == "\\" {
                 escaped = true
             } else {
-                out.append(ch)
+                out.unicodeScalars.append(scalar)
             }
         }
-        if escaped { out.append("\\") }
+        if escaped { out += "\\" }
         return out
     }
 }

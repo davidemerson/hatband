@@ -89,14 +89,14 @@ public enum Normalize {
         text = text.droppingPrefix("tel:", caseInsensitive: true)
         var digits = ""
         var sawPlus = false
-        for ch in text {
-            if ch.isWhitespace || phoneFormatting.contains(ch) { continue }
-            if ch == "+" && !sawPlus && digits.isEmpty {
+        for scalar in text.unicodeScalars {
+            if scalar.properties.isWhitespace || phoneFormatting.contains(scalar) { continue }
+            if scalar == "+" && !sawPlus && digits.isEmpty {
                 sawPlus = true
                 continue
             }
-            guard ch.isASCIIDigit else { throw Error.invalidCharacter(ch) }
-            digits.append(ch)
+            guard scalar.isASCIIDigit else { throw Error.invalidCharacter(Character(scalar)) }
+            digits.unicodeScalars.append(scalar)
         }
         guard sawPlus || !digits.isEmpty else { throw Error.empty }
         guard sawPlus else { throw Error.missingPlus }
@@ -111,13 +111,14 @@ public enum Normalize {
     /// not accepted; a `Name <addr>` wrapper and a `mailto:` prefix are.
     public static func email(_ input: String) throws -> String {
         var text = Substring(input.trimmed())
-        if text.last == ">", let open = text.lastIndex(of: "<") {
-            text = text[text.index(after: open)..<text.index(before: text.endIndex)].trimmed()
+        let scalars = text.unicodeScalars
+        if scalars.last == ">", let open = scalars.lastIndex(of: "<") {
+            text = text[scalars.index(after: open)..<scalars.index(before: scalars.endIndex)].trimmed()
         }
-        let hadScheme = text.lowercased().hasPrefix("mailto:")
+        let hadScheme = text.lowercased().starts(withScalars: "mailto:")
         text = text.droppingPrefix("mailto:", caseInsensitive: true)
         if hadScheme {
-            if let query = text.firstIndex(of: "?") { text = text[..<query] }
+            if let query = text.unicodeScalars.firstIndex(of: "?") { text = text[..<query] }
             guard let decoded = PercentEncoding.decode(text) else { throw Error.invalidCharacter("%") }
             text = Substring(decoded)
         }
@@ -139,9 +140,9 @@ public enum Normalize {
     /// flag, the host is lowercased and may be an IDN, the port is 1 to 65535
     /// without leading zeros. The path, query and fragment are kept as typed
     /// but must be ASCII with the RFC 3986 delimiters that need
-    /// percent-encoding (space, `<>"\^{|}` and the backtick) already encoded.
-    /// Unicode format characters (U+200B, U+202E, U+FEFF and kin) are refused
-    /// anywhere.
+    /// percent-encoding (space, `<>"\^{|}` and the backtick) already encoded,
+    /// and every `%` starting a `%XX` triple. Unicode format characters
+    /// (U+200B, U+202E, U+FEFF and kin) are refused anywhere.
     public static func website(_ input: String) throws -> (address: String, insecure: Bool) {
         let text = Substring(input.trimmed())
         guard !text.isEmpty else { throw Error.empty }
@@ -153,11 +154,11 @@ public enum Normalize {
         case "http"?: insecure = true
         case let scheme?: throw Error.unsupportedScheme(scheme)
         }
-        guard !pasted.authority.contains("@") else { throw Error.userinfo }
+        guard !pasted.authority.unicodeScalars.contains("@") else { throw Error.userinfo }
         var hostPart = pasted.authority
         var port = ""
-        if let colon = hostPart.lastIndex(of: ":") {
-            let digits = hostPart[hostPart.index(after: colon)...]
+        if let colon = hostPart.unicodeScalars.lastIndex(of: ":") {
+            let digits = hostPart[hostPart.unicodeScalars.index(after: colon)...]
             guard (1...5).contains(digits.count), digits.first != "0", digits.allSatisfy(\.isASCIIDigit),
                   let number = Int(digits), number <= 65535
             else { throw Error.invalidHost }
@@ -166,19 +167,20 @@ public enum Normalize {
         }
         guard let host = Hostname.normalized(hostPart) else { throw Error.invalidHost }
         for ch in pasted.rest where !ch.isASCII || pathUnsafe.contains(ch) { throw Error.invalidCharacter(ch) }
+        guard PercentEncoding.isWellFormed(pasted.rest) else { throw Error.invalidCharacter("%") }
         let rest = pasted.rest == "/" ? "" : pasted.rest
         return (host + port + rest, insecure)
     }
 
     /// `@user`, `user`, or a github.com profile URL. Usernames are 1 to 39
     /// letters, digits and single hyphens, not starting or ending with one.
-    /// A URL whose first segment is a reserved site path (`orgs`, `settings`,
-    /// `login`, ...) is not a profile.
+    /// A reserved site path (`orgs`, `settings`, `login`, ...) is not a
+    /// profile, whether it is a URL's first segment or typed alone.
     public static func github(_ input: String) throws -> String {
         let text = Substring(input.trimmed()).droppingPrefix("@")
         guard !text.isEmpty else { throw Error.empty }
         var user = text
-        if text.contains("/") || text.lowercased().contains("github.com") {
+        if text.unicodeScalars.contains("/") || text.lowercased().contains("github.com") {
             let pasted = try Pasted(text, hosts: ["github.com", "www.github.com"])
             guard let first = pasted.pathSegments.first else { throw Error.invalidPath }
             guard !githubReserved.contains(first.lowercased()) else { throw Error.invalidPath }
@@ -186,7 +188,7 @@ public enum Normalize {
         }
         guard user.count <= 39 else { throw Error.tooLong }
         guard !user.isEmpty, user.first != "-", user.last != "-", !user.contains("--"),
-              user.allSatisfy({ $0.isASCIIAlphanumeric || $0 == "-" })
+              user.allSatisfy({ $0.isASCIIAlphanumeric || $0 == "-" }), !githubReserved.contains(user.lowercased())
         else { throw Error.invalidUsername }
         return String(user)
     }
@@ -201,9 +203,9 @@ public enum Normalize {
         var slug = text
         let lower = text.lowercased()
         var segments: [Substring]?
-        if lower.hasPrefix("in/") || lower.hasPrefix("company/") || lower.hasPrefix("mwlite/") {
+        if lower.starts(withScalars: "in/") || lower.starts(withScalars: "company/") || lower.starts(withScalars: "mwlite/") {
             segments = Pasted.segments(of: text)
-        } else if text.contains("/") || lower.contains("linkedin.com") {
+        } else if text.unicodeScalars.contains("/") || lower.contains("linkedin.com") {
             segments = try Pasted(text, hosts: ["linkedin.com"], subdomains: true).pathSegments
         }
         if var segments {
@@ -229,11 +231,11 @@ public enum Normalize {
         guard !text.isEmpty else { throw Error.empty }
         let user: Substring
         let instance: Substring
-        if text.contains("/") {
+        if text.unicodeScalars.contains("/") {
             let pasted = try Pasted(text, hosts: nil)
             let segments = pasted.pathSegments
-            if segments.count == 1, segments[0].first == "@" {
-                user = segments[0].dropFirst()
+            if segments.count == 1, segments[0].unicodeScalars.first == "@" {
+                user = segments[0].droppingPrefix("@")
             } else if segments.count == 2, segments[0] == "users" {
                 user = segments[1]
             } else {
@@ -241,11 +243,11 @@ public enum Normalize {
             }
             instance = pasted.authority
         } else {
-            let parts = text.split(separator: "@", omittingEmptySubsequences: false)
+            let parts = text.unicodeScalars.split(separator: "@", omittingEmptySubsequences: false)
             guard parts.count >= 2 else { throw Error.missingAt }
             guard parts.count == 2 else { throw Error.multipleAt }
-            user = parts[0]
-            instance = parts[1]
+            user = Substring(parts[0])
+            instance = Substring(parts[1])
         }
         guard !user.isEmpty, user.count <= 30, user.allSatisfy({ $0.isASCIIAlphanumeric || $0 == "_" })
         else { throw Error.invalidUsername }
@@ -280,10 +282,10 @@ public enum Normalize {
         text = text.droppingPrefix("OPENPGP4FPR:", caseInsensitive: true).trimmed()
         text = text.droppingPrefix("0x", caseInsensitive: true)
         var nibbles: [UInt8] = []
-        for ch in text {
-            if ch.isWhitespace || ch == ":" { continue }
+        for scalar in text.unicodeScalars {
+            if scalar.properties.isWhitespace || scalar == ":" { continue }
             // `hexDigitValue` also reads fullwidth forms; only ASCII counts.
-            guard ch.isASCII, let value = ch.hexDigitValue else { throw Error.invalidCharacter(ch) }
+            guard scalar.isASCII, let value = Character(scalar).hexDigitValue else { throw Error.invalidCharacter(Character(scalar)) }
             nibbles.append(UInt8(value))
         }
         guard !nibbles.isEmpty else { throw Error.empty }
@@ -296,7 +298,7 @@ public enum Normalize {
         return try GPGFingerprint(bytes: bytes)
     }
 
-    private static let phoneFormatting: Set<Character> = ["-", "\u{2010}", "\u{2011}", "\u{2012}", "\u{2013}", "\u{2014}", "\u{2212}", ".", "(", ")"]
+    private static let phoneFormatting: Set<Unicode.Scalar> = ["-", "\u{2010}", "\u{2011}", "\u{2012}", "\u{2013}", "\u{2014}", "\u{2212}", ".", "(", ")"]
     private static let atextSymbols: Set<Character> = ["!", "#", "$", "%", "&", "'", "*", "+", "-", "/", "=", "?", "^", "_", "`", "{", "|", "}", "~", "."]
     /// Neither `pchar` nor a query/fragment character in RFC 3986 §3.3-3.5;
     /// whitespace is refused earlier.
@@ -443,6 +445,8 @@ enum Hostname {
 
 /// A pasted address split into scheme, authority and the rest, without
 /// Foundation's URL parser, which is lenient where we want to be strict.
+/// Delimiters are matched as scalars, so a combining mark after `/`, `:`
+/// or `@` cannot hide the delimiter and move it into the authority.
 struct Pasted {
     var scheme: String?
     var authority: Substring
@@ -451,25 +455,29 @@ struct Pasted {
 
     init(_ text: Substring) {
         var remainder = text
-        if let colon = text.firstIndex(of: ":") {
+        if text.starts(withScalars: "//") {
+            // Scheme-relative: nothing before `//` can be a scheme, so a later
+            // colon is a port or part of the path.
+            remainder = text.droppingPrefix("//")
+        } else if let colon = text.unicodeScalars.firstIndex(of: ":") {
             let head = text[..<colon]
-            let tail = text[text.index(after: colon)...]
+            let tail = text[text.unicodeScalars.index(after: colon)...]
             let looksLikeScheme = head.first?.isLetter == true
                 && head.allSatisfy({ $0.isASCIIAlphanumeric || $0 == "+" || $0 == "-" || $0 == "." })
-            // `localhost:8080/x` is a host and port, not a scheme.
-            let port = tail.prefix { $0 != "/" && $0 != "?" && $0 != "#" }
+            // `localhost:8080/x` is a host and port, not a scheme. So is
+            // `mailto:1234/x`, which therefore fails as `invalidHost` rather
+            // than `unsupportedScheme`.
+            let port = tail.unicodeScalars.prefix { $0 != "/" && $0 != "?" && $0 != "#" }
             let looksLikePort = !port.isEmpty && port.allSatisfy(\.isASCIIDigit)
-            if looksLikeScheme, tail.hasPrefix("//") {
+            if looksLikeScheme, tail.starts(withScalars: "//") {
                 scheme = head.lowercased()
-                remainder = tail.dropFirst(2)
+                remainder = tail.droppingPrefix("//")
             } else if looksLikeScheme, !head.contains("."), !tail.isEmpty, !looksLikePort {
                 scheme = head.lowercased()
                 remainder = tail
             }
-        } else if text.hasPrefix("//") {
-            remainder = text.dropFirst(2)
         }
-        let end = remainder.firstIndex(where: { $0 == "/" || $0 == "?" || $0 == "#" }) ?? remainder.endIndex
+        let end = remainder.unicodeScalars.firstIndex(where: { $0 == "/" || $0 == "?" || $0 == "#" }) ?? remainder.endIndex
         authority = remainder[..<end]
         rest = remainder[end...]
     }
@@ -482,7 +490,7 @@ struct Pasted {
         case nil, "https"?, "http"?: break
         case let scheme?: throw Normalize.Error.unsupportedScheme(scheme)
         }
-        guard !authority.contains("@") else { throw Normalize.Error.userinfo }
+        guard !authority.unicodeScalars.contains("@") else { throw Normalize.Error.userinfo }
         let host = authority.lowercased()
         if let hosts {
             guard hosts.contains(host) || (subdomains && hosts.contains(where: { host.hasSuffix("." + $0) }))
@@ -498,8 +506,8 @@ struct Pasted {
     }
 
     static func segments(of path: Substring) -> [Substring] {
-        let end = path.firstIndex(where: { $0 == "?" || $0 == "#" }) ?? path.endIndex
-        return path[..<end].split(separator: "/", omittingEmptySubsequences: true)
+        let end = path.unicodeScalars.firstIndex(where: { $0 == "?" || $0 == "#" }) ?? path.endIndex
+        return path[..<end].unicodeScalars.split(separator: "/", omittingEmptySubsequences: true).map { Substring($0) }
     }
 }
 
@@ -507,22 +515,43 @@ enum PercentEncoding {
     /// Decodes `%XX` triples; nil when a triple is malformed or the result is
     /// not UTF-8. Text without `%` comes back unchanged.
     static func decode(_ text: Substring) -> String? {
-        guard text.contains("%") else { return String(text) }
+        guard text.utf8.contains(UInt8(ascii: "%")) else { return String(text) }
         var bytes: [UInt8] = []
         var iterator = text.utf8.makeIterator()
         while let byte = iterator.next() {
             if byte == UInt8(ascii: "%") {
                 guard let high = iterator.next(), let low = iterator.next(),
-                      let h = Character(Unicode.Scalar(high)).hexDigitValue,
-                      let l = Character(Unicode.Scalar(low)).hexDigitValue
+                      let h = hexValue(high), let l = hexValue(low)
                 else { return nil }
-                bytes.append(UInt8(h << 4 | l))
+                bytes.append(h << 4 | l)
             } else {
                 bytes.append(byte)
             }
         }
         return String(validating: bytes, as: UTF8.self)
     }
+
+    /// RFC 3986 §2.1: every `%` starts a `%` HEXDIG HEXDIG triple.
+    static func isWellFormed(_ text: Substring) -> Bool {
+        let bytes = Array(text.utf8)
+        for (i, byte) in bytes.enumerated() where byte == UInt8(ascii: "%") {
+            guard i + 2 < bytes.count, hexValue(bytes[i + 1]) != nil, hexValue(bytes[i + 2]) != nil else { return false }
+        }
+        return true
+    }
+
+    private static func hexValue(_ byte: UInt8) -> UInt8? {
+        switch byte {
+        case UInt8(ascii: "0")...UInt8(ascii: "9"): return byte - UInt8(ascii: "0")
+        case UInt8(ascii: "A")...UInt8(ascii: "F"): return byte - UInt8(ascii: "A") + 10
+        case UInt8(ascii: "a")...UInt8(ascii: "f"): return byte - UInt8(ascii: "a") + 10
+        default: return nil
+        }
+    }
+}
+
+extension Unicode.Scalar {
+    var isASCIIDigit: Bool { ("0"..."9").contains(self) }
 }
 
 extension Character {
@@ -539,17 +568,28 @@ extension Character {
 }
 
 extension StringProtocol {
+    /// Strips whitespace and controls from both ends, scalar by scalar: a
+    /// combining mark after a leading space is content, not whitespace.
     func trimmed() -> Substring {
-        var s = Substring(self)
-        while let f = s.first, f.isWhitespace || f.isControl { s = s.dropFirst() }
-        while let l = s.last, l.isWhitespace || l.isControl { s = s.dropLast() }
-        return s
+        let blank = { (s: Unicode.Scalar) in s.properties.isWhitespace || s.properties.generalCategory == .control }
+        var s = Substring(self).unicodeScalars.drop(while: blank)
+        while let l = s.last, blank(l) { s = s.dropLast() }
+        return Substring(s)
+    }
+
+    /// `hasPrefix` on scalars: a combining mark right after the prefix
+    /// neither hides it nor gets dropped with it.
+    func starts(withScalars prefix: String) -> Bool {
+        unicodeScalars.starts(with: prefix.unicodeScalars)
     }
 }
 
 extension Substring {
+    /// Drops an ASCII prefix, matched scalar by scalar.
     func droppingPrefix(_ prefix: String, caseInsensitive: Bool = false) -> Substring {
-        let matches = caseInsensitive ? lowercased().hasPrefix(prefix.lowercased()) : hasPrefix(prefix)
-        return matches ? dropFirst(prefix.count) : self
+        let head = unicodeScalars.prefix(prefix.unicodeScalars.count)
+        let matches = head.count == prefix.unicodeScalars.count && head.allSatisfy(\.isASCII)
+            && (caseInsensitive ? String(head).lowercased() == prefix.lowercased() : head.elementsEqual(prefix.unicodeScalars))
+        return matches ? self[head.endIndex...] : self
     }
 }

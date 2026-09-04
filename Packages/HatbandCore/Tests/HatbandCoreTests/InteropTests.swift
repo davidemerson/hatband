@@ -188,6 +188,8 @@ private let goodWebsites: [(String, String, Bool)] = [
     ("example.com:1", "example.com:1", false),
     ("example.com:65535/x", "example.com:65535/x", false),
     ("example.com/a!$&'()*+,;=:@[]~-._%20", "example.com/a!$&'()*+,;=:@[]~-._%20", false),
+    ("example.com/%7e/x%2fy?q=%e6%B0%b4#%25", "example.com/%7e/x%2fy?q=%e6%B0%b4#%25", false),
+    ("//example.com:9/a:b?c:d", "example.com:9/a:b?c:d", false),
 ]
 
 @Test(arguments: goodWebsites)
@@ -228,6 +230,9 @@ private let badWebsites: [(String, Normalize.Error)] = [
     ("MÜLLER.de/Straße", .invalidCharacter("ß")), ("example.com/水", .invalidCharacter("水")),
     ("example.com?q=é", .invalidCharacter("é")), ("example.com/#✓", .invalidCharacter("✓")),
     ("example.com/\u{FF0F}", .invalidCharacter("\u{FF0F}")),
+    // RFC 3986 §2.1: a `%` must start a `%XX` triple.
+    ("example.com/%", .invalidCharacter("%")), ("example.com/%2", .invalidCharacter("%")), ("example.com/%ZZ", .invalidCharacter("%")),
+    ("example.com?q=100%", .invalidCharacter("%")), ("example.com/#%G0", .invalidCharacter("%")), ("example.com/%%20", .invalidCharacter("%")),
 ]
 
 @Test(arguments: badWebsites)
@@ -242,7 +247,7 @@ private let goodGitHub: [(String, String)] = [
     ("https://github.com/bloom", "bloom"), ("https://github.com/bloom/", "bloom"),
     ("https://www.github.com/Bloom?tab=repositories", "Bloom"), ("github.com/bloom/hatband", "bloom"),
     ("http://GitHub.com/bloom", "bloom"), ("GITHUB.COM/bloom#readme", "bloom"),
-    ("a", "a"), ("a-b", "a-b"), ("1234", "1234"),
+    ("a", "a"), ("a-b", "a-b"), ("1234", "1234"), ("orgs-x", "orgs-x"), ("settings1", "settings1"),
     (String(repeating: "a", count: 39), String(repeating: "a", count: 39)),
 ]
 
@@ -265,6 +270,8 @@ private let badGitHub: [(String, Normalize.Error)] = [
     ("https://github.com/orgs/freemans-journal", .invalidPath), ("github.com/settings/profile", .invalidPath),
     ("https://github.com/Login", .invalidPath), ("https://www.github.com/sponsors/bloom", .invalidPath),
     ("github.com/new", .invalidPath), ("GITHUB.COM/Explore", .invalidPath), ("github.com/sessions/two-factor", .invalidPath),
+    // The same words typed alone are not usernames either.
+    ("orgs", .invalidUsername), ("@Settings", .invalidUsername), ("LOGIN", .invalidUsername), (" new ", .invalidUsername),
     ("ftp://github.com/bloom", .unsupportedScheme("ftp")), ("https://bloom@github.com/bloom", .userinfo),
 ]
 
@@ -454,6 +461,33 @@ func rejectsFingerprints(input: String, error: Normalize.Error) {
 @Test(arguments: [0, 1, 19, 21, 31, 33, 64])
 func fingerprintRequiresTwentyOrThirtyTwoBytes(count: Int) {
     #expect(throws: Normalize.Error.wrongLength(count)) { try GPGFingerprint(bytes: [UInt8](repeating: 0, count: count)) }
+}
+
+// MARK: - Combining marks
+
+/// Delimiters, prefixes and whitespace are matched as scalars, never as
+/// graphemes: a combining mark right after one of them is content that
+/// starts the next value, so it can neither hide the delimiter nor be
+/// swallowed together with it.
+@Test func combiningMarksDoNotHideDelimiters() throws {
+    let mark = "\u{301}"
+    // Trimming and prefixes: the mark is refused, not silently dropped.
+    #expect(throws: Normalize.Error.invalidCharacter("\u{301}")) { try Normalize.phone(" \(mark)+353871234567") }
+    #expect(throws: Normalize.Error.invalidCharacter("\u{301}")) { try Normalize.phone("tel:\(mark)+353871234567") }
+    #expect(throws: Normalize.Error.invalidCharacter("\u{301}")) { try Normalize.gpgFingerprint("0x\(mark)" + torV4Hex) }
+    #expect(throws: Normalize.Error.invalidUsername) { try Normalize.github(" \(mark)bloom") }
+    #expect(throws: Normalize.Error.invalidUsername) { try Normalize.github("@\(mark)bloom") }
+    // The `Name <addr>` wrapper is found; a mailto header is dropped whole.
+    #expect(throws: Normalize.Error.invalidCharacter("\u{301}")) { try Normalize.email("Bloom <\(mark)bloom@nnix.com>") }
+    #expect(try Normalize.email("mailto:bloom@nnix.com?\(mark)subject=x") == "bloom@nnix.com")
+    // `Pasted`: the mark belongs to the path, port or userinfo it follows, not to the host.
+    #expect(throws: Normalize.Error.invalidCharacter("/\u{301}")) { try Normalize.website("nnix.com/\(mark)x") }
+    #expect(throws: Normalize.Error.userinfo) { try Normalize.website("https://user@\(mark)nnix.com") }
+    #expect(throws: Normalize.Error.invalidHost) { try Normalize.website("nnix.com:\(mark)80") }
+    #expect(throws: Normalize.Error.invalidUsername) { try Normalize.github("github.com/\(mark)bloom") }
+    #expect(throws: Normalize.Error.invalidUsername) { try Normalize.mastodon("merveilles.town/@\(mark)bloom") }
+    #expect(throws: Normalize.Error.invalidHost) { try Normalize.mastodon("bloom@\(mark)merveilles.town") }
+    #expect(throws: Normalize.Error.invalidUsername) { try Normalize.linkedin("in/\(mark)bloom") }
 }
 
 // MARK: - Canonical URIs

@@ -96,10 +96,14 @@ public struct SSHPublicKey: Sendable, Hashable {
 
     /// An authorized_keys line: `<type> <base64> [comment]`. A leading
     /// options field (`no-pty,command="..." ssh-ed25519 ...`) is refused.
+    /// Fields split on whitespace scalars, as sshd splits on bytes: a
+    /// combining mark after a space starts the next field, it is not
+    /// swallowed with the space.
     public init(line: String) throws {
         let text = line.trimmed()
-        guard !text.isEmpty, !text.contains(where: \.isNewline) else { throw Error.malformedLine }
-        let fields = text.split(maxSplits: 2, omittingEmptySubsequences: true, whereSeparator: \.isWhitespace)
+        guard !text.isEmpty, !text.unicodeScalars.contains(where: Self.isLineBreak) else { throw Error.malformedLine }
+        let fields = text.unicodeScalars.split(maxSplits: 2, omittingEmptySubsequences: true, whereSeparator: \.properties.isWhitespace)
+            .map { Substring($0) }
         guard fields.count >= 2 else { throw Error.malformedLine }
         let typeName = String(fields[0])
         guard let kind = Kind(typeName: typeName) else {
@@ -114,23 +118,29 @@ public struct SSHPublicKey: Sendable, Hashable {
     /// What follows one options field, skipped as sshd does: up to
     /// whitespace, except inside double quotes, where `\"` is a literal.
     private static func afterOptions(_ text: Substring) -> Substring {
+        let scalars = text.unicodeScalars
         var quoted = false
-        var index = text.startIndex
-        while index < text.endIndex, quoted || !text[index].isWhitespace {
-            let next = text.index(after: index)
-            if text[index] == "\\", next < text.endIndex, text[next] == "\"" {
+        var index = scalars.startIndex
+        while index < scalars.endIndex, quoted || !scalars[index].properties.isWhitespace {
+            let next = scalars.index(after: index)
+            if scalars[index] == "\\", next < scalars.endIndex, scalars[next] == "\"" {
                 index = next
-            } else if text[index] == "\"" {
+            } else if scalars[index] == "\"" {
                 quoted.toggle()
             }
-            index = text.index(after: index)
+            index = scalars.index(after: index)
         }
-        return text[index...].drop(while: \.isWhitespace)
+        return Substring(scalars[index...].drop(while: \.properties.isWhitespace))
     }
 
     private static func startsWithKeyType(_ text: Substring) -> Bool {
-        let name = text.prefix { !$0.isWhitespace }
-        return Kind(typeName: String(name)) != nil || name.hasPrefix("sk-")
+        let name = String(text.unicodeScalars.prefix { !$0.properties.isWhitespace })
+        return Kind(typeName: name) != nil || name.hasPrefix("sk-")
+    }
+
+    /// What `Character.isNewline` matches, scalar by scalar.
+    private static func isLineBreak(_ scalar: Unicode.Scalar) -> Bool {
+        (0x0a...0x0d).contains(scalar.value) || scalar.value == 0x85 || scalar == "\u{2028}" || scalar == "\u{2029}"
     }
 
     /// Decodes a wire blob and checks the key material is well formed.
@@ -228,27 +238,33 @@ public struct SSHPublicKey: Sendable, Hashable {
     /// result always re-parses with `init(line:)`.
     public func authorizedKeysLine(comment: String? = nil) -> String {
         var line = kind.typeName + " " + base64
-        if let comment = (comment ?? self.comment).map(Self.oneLine), !comment.isEmpty {
+        if let comment = (comment ?? self.comment).map({ Self.scrubbed($0) }), !comment.isEmpty {
             line += " " + comment
         }
         return line
     }
 
     /// A git `gpg.ssh.allowedSignersFile` entry: the principal (an email),
-    /// the namespace restriction, and the key. A principal with nothing left
-    /// after sanitising becomes `*`, the OpenSSH wildcard, so the line stays
-    /// well formed.
+    /// the namespace restriction, and the key. Whitespace, commas and any
+    /// leading `#` (sshsig reads a line whose first byte is `#` as a comment)
+    /// leave the principal; one with nothing left becomes `*`, the OpenSSH
+    /// wildcard, so the line stays well formed.
     public func allowedSignersLine(principal: String, namespace: String = "git") -> String {
-        var principal = Self.oneLine(principal).filter { !$0.isWhitespace && $0 != "," }
+        var principal = String(Self.scrubbed(principal, whitespaceAnd: ",").unicodeScalars.drop(while: { $0 == "#" }))
         if principal.isEmpty { principal = "*" }
-        let namespace = Self.oneLine(namespace).filter { !$0.isWhitespace && $0 != "\"" }
+        let namespace = Self.scrubbed(namespace, whitespaceAnd: "\"")
         return "\(principal) namespaces=\"\(namespace)\" \(kind.typeName) \(base64)"
     }
 
-    /// Drops controls and everything `isNewline` matches, including U+2028
-    /// and U+2029, which are not controls but which `init(line:)` refuses.
-    private static func oneLine(_ text: String) -> String {
-        text.filter { !$0.isControl && !$0.isNewline }
+    /// Drops controls and line breaks (U+2028 and U+2029 are not controls,
+    /// but `init(line:)` refuses them), and on request whitespace plus one
+    /// more separator. Scalar by scalar: a combining mark after a `,` or `"`
+    /// would otherwise shield it from a `Character` filter.
+    private static func scrubbed(_ text: String, whitespaceAnd separator: Unicode.Scalar? = nil) -> String {
+        String(text.unicodeScalars.filter {
+            !($0.properties.generalCategory == .control || isLineBreak($0)
+              || separator != nil && ($0.properties.isWhitespace || $0 == separator))
+        })
     }
 
     // MARK: Randomart
@@ -283,7 +299,9 @@ public struct SSHPublicKey: Sendable, Hashable {
 
         func border(_ text: String) -> String {
             // OpenSSH formats the label into a 17-byte buffer, so at most 16
-            // characters fit; a longer one is dropped.
+            // characters fit. Not full parity: OpenSSH truncates a 17-character
+            // title to 16 and falls back to `[type]` beyond that; we drop any
+            // title of 17 or more.
             let label = text.count < width ? text : ""
             let lead = (width - label.count) / 2
             return "+" + String(repeating: "-", count: lead) + label
