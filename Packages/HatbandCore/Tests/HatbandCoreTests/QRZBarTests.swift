@@ -5,8 +5,29 @@ import Testing
 /// Round trips through an independent decoder: render to a bitmap, run
 /// `zbarimg --raw`, compare. The suite is skipped when zbar is not installed.
 enum ZBar {
-    static let path: String? = ["/usr/bin/zbarimg", "/usr/local/bin/zbarimg", "/opt/homebrew/bin/zbarimg"]
-        .first { FileManager.default.isExecutableFile(atPath: $0) }
+    /// `$ZBARIMG`, then the usual install locations, then `$PATH` through
+    /// `/usr/bin/env` so a brew-installed zbar is found on the macOS runner.
+    static let path: String? = {
+        let fixed = ["/usr/bin/zbarimg", "/usr/local/bin/zbarimg", "/opt/homebrew/bin/zbarimg"]
+        let candidates = (ProcessInfo.processInfo.environment["ZBARIMG"].map { [$0] } ?? []) + fixed
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? onPath("zbarimg")
+    }()
+
+    /// The first executable named `name` on `$PATH`, via `/usr/bin/env`.
+    static func onPath(_ name: String) -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["sh", "-c", "command -v -- \"$1\"", "sh", name]
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return nil }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0, let text = String(data: data, encoding: .utf8) else { return nil }
+        let found = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return found.hasPrefix("/") && FileManager.default.isExecutableFile(atPath: found) ? found : nil
+    }
 
     static var available: Bool { path != nil }
 
@@ -64,6 +85,14 @@ private func asciiText(count: Int) -> String {
 /// The most bytes a byte segment can carry at a version and level.
 private func byteCapacity(version: Int, level: QRCode.ErrorCorrection) -> Int {
     (QRCode.dataCapacity(version: version, errorCorrection: level) - 4 - QRSegment.Mode.byte.characterCountBits(version: version)) / 8
+}
+
+/// The `$PATH` lookup finds a tool every POSIX system has and nothing else.
+@Test func pathLookupFindsExecutables() {
+    let sh = ZBar.onPath("sh")
+    #expect(sh?.hasPrefix("/") == true && FileManager.default.isExecutableFile(atPath: sh ?? ""))
+    #expect(ZBar.onPath("hatband-no-such-tool") == nil)
+    #expect(ZBar.onPath("") == nil)
 }
 
 @Suite("zbar round trips", .enabled(if: ZBar.available, "zbarimg is not installed"))

@@ -87,7 +87,10 @@ public struct QRSegment: Sendable, Equatable {
 
     /// Hatband's URL shape: a byte segment through the first `#`, then an
     /// alphanumeric segment for the fragment when it is entirely in that set.
-    /// Base32 is, so a card costs 5.5 bits per character instead of 8.
+    /// Base32 is, so a card costs 5.5 bits per character instead of 8. The
+    /// second header costs 13 bits at versions 1–9, so a single byte segment
+    /// would be smaller for a fragment of one to five characters; a card's is
+    /// always far longer, and the split is kept as specified.
     public static func segments(forURL url: String) -> [QRSegment] {
         let utf8 = Array(url.utf8)
         guard let hash = utf8.firstIndex(of: UInt8(ascii: "#")), hash + 1 < utf8.count,

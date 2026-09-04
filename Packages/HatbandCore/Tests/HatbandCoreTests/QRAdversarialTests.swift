@@ -577,15 +577,14 @@ func alphanumericRejectsLookalikes(text: String) {
     #expect(!path.contains(" h") && !path.contains("\n"))
 }
 
-/// Colour strings are interpolated into attributes verbatim, so a caller
-/// passing anything but a colour breaks the document.
-@Test func svgDoesNotEscapeColourArguments() throws {
+/// Colour strings are interpolated into attributes, so anything but a hex
+/// colour is replaced by the default rather than reaching the document.
+@Test func svgIgnoresNonColourArguments() throws {
     let code = try QRCode.encode([try .alphanumeric("HATBAND")], errorCorrection: .medium)
-    withKnownIssue("svg(dark:light:) does not validate or escape its colour arguments") {
-        let svg = code.svg(dark: "#000\"/><script>", light: "red\" onload=\"x")
-        let injected = svg.contains("<script>") || svg.contains("onload=")
-        #expect(!injected)
-    }
+    let svg = code.svg(dark: "#000\"/><script>", light: "red\" onload=\"x")
+    #expect(!svg.contains("<script>") && !svg.contains("onload="))
+    #expect(svg == code.svg())
+    #expect(code.svg(dark: "#000000\"/><script>", light: "#fff'") == code.svg())
 }
 
 @Test func fractionalModuleSizeKeepsCoordinatesProportional() {
@@ -699,29 +698,30 @@ private func bits(_ s: String) -> [Bool] {
     }
 }
 
-/// The encoder scores N3 only for the seven-module pattern at unit scale and
-/// does not require the far side to be light; Nayuki's reference scores the
-/// 1:1:3:1:1 ratio at every scale and demands a light module on the far side.
-@Test func linePenaltyDivergesFromReferenceOnScaledAndAbuttingPatterns() {
-    let divergent = [
-        // 2:2:6:2:2 with eight light modules either side: the reference sees two finders.
-        "00000000" + "1100111111001100" + "00000000",
+/// N3 scores the 1:1:3:1:1 ratio at every scale, needs the flanking dark runs
+/// to be exactly n, and needs at least n light modules on the far side.
+@Test func linePenaltyAgreesWithReferenceOnScaledAndAbuttingPatterns() {
+    let scaled = [
+        // 2:2:6:2:2 with eight light modules either side: two finders, plus N1 runs of 8, 6 and 10.
+        ("00000000" + "1100111111001100" + "00000000", 98),
         // Unit pattern with four lights after it but a dark module before it.
-        "1" + "1011101" + "0000",
+        ("1" + "1011101" + "0000", 0),
         // Unit pattern with four lights before it but a dark module after it.
-        "0000" + "1011101" + "1",
+        ("0000" + "1011101" + "1", 0),
+        // 3:3:9:3:3 with twelve lights before it: two lights after are too few, three are enough.
+        ("000000000000" + "111000111111111000111" + "00" + "1", 17),
+        ("000000000000" + "111000111111111000111" + "000" + "1", 57),
+        // A leading dark module and one light, then a unit pattern with four lights after.
+        ("10" + "1011101" + "0000", 40),
     ]
-    withKnownIssue("N3 scoring differs from the Nayuki reference; symbols stay valid, only the mask choice can differ") {
-        for line in divergent {
-            #expect(Matrix.linePenalty(bits(line)) == singleLine(bits(line)), "\(line)")
-        }
+    for (line, expected) in scaled {
+        #expect(Matrix.linePenalty(bits(line)) == expected, "\(line)")
+        #expect(singleLine(bits(line)) == expected, "\(line)")
     }
 }
 
-@Test func penaltyAgreesWithReferenceExceptForN3() throws {
+@Test func penaltyAgreesWithReference() throws {
     var rng = SplitMix(state: 0x9A5C)
-    var agreements = 0
-    var disagreements = 0
     for _ in 0..<30 {
         let length = Int.random(in: 5...120, using: &rng)
         let text = String((0..<length).map { _ in "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567".randomElement(using: &rng)! })
@@ -732,18 +732,14 @@ private func bits(_ s: String) -> [Bool] {
             matrix.modules = code.modules
             let ours = matrix.penalty()
             let reference = referencePenalty(size: code.size) { code.module(x: $0, y: $1) }
-            if ours == reference { agreements += 1 } else { disagreements += 1 }
-            // Whatever N3 says, the other three rules agree: differences are multiples of 40.
-            #expect((ours - reference) % 40 == 0, "\(text) mask \(mask): \(ours) vs \(reference)")
+            #expect(ours == reference, "\(text) mask \(mask): \(ours) vs \(reference)")
         }
     }
-    #expect(agreements > 0)
-    #expect(agreements + disagreements == 240)
 }
 
-/// How often the chosen mask differs from the reference's choice: an
-/// exploratory count, reported through the failure message.
-@Test func maskChoiceVersusReference() throws {
+/// The chosen mask is the reference's choice: lowest reference penalty, ties
+/// to the lower number.
+@Test func maskChoiceAgreesWithReference() throws {
     var rng = SplitMix(state: 0x3A5C)
     var mismatches: [String] = []
     for i in 0..<60 {
@@ -759,9 +755,7 @@ private func bits(_ s: String) -> [Bool] {
         let reference = scores.firstIndex(of: scores.min()!)!
         if reference != auto.mask { mismatches.append("case \(i): chose \(auto.mask), reference \(reference) \(scores)") }
     }
-    withKnownIssue("mask choice can differ from the Nayuki reference because N3 is scored differently") {
-        #expect(mismatches.isEmpty, "\(mismatches.count) of 60: \(mismatches.prefix(3))")
-    }
+    #expect(mismatches.isEmpty, "\(mismatches.count) of 60: \(mismatches.prefix(3))")
 }
 
 // MARK: - zbar at every version and level

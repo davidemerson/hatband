@@ -94,6 +94,15 @@ func generatorHasTheExpectedRoots(degree: Int) {
     #expect(ecc == [0xA5, 0x24, 0xD4, 0xC1, 0xED, 0x36, 0xC7, 0x87, 0x2C, 0x55])
 }
 
+/// The generator of degree 0 is 1, which divides everything: no remainder.
+@Test func degreeZeroGeneratorHasNoRemainder() {
+    let g = ReedSolomon.generator(degree: 0)
+    #expect(g == [1])
+    #expect(ReedSolomon.remainder(of: [1, 2, 3], generator: g) == [])
+    #expect(ReedSolomon.remainder(of: [], generator: g) == [])
+    #expect(ReedSolomon.remainder(of: [0xFF], generator: []) == [])
+}
+
 @Test func zeroDataHasZeroECC() {
     let g = ReedSolomon.generator(degree: 16)
     #expect(ReedSolomon.remainder(of: [UInt8](repeating: 0, count: 40), generator: g) == [UInt8](repeating: 0, count: 16))

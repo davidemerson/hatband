@@ -80,9 +80,11 @@ extension QRCode {
 
         var level = errorCorrection
         if boostErrorCorrection {
-            for candidate in ErrorCorrection.allCases where used <= dataCapacity(version: version, errorCorrection: candidate) {
-                level = candidate
-            }
+            // The level spending the most codewords on error correction that
+            // still holds the data, chosen by capacity rather than case order;
+            // the requested level always qualifies.
+            func capacity(_ level: ErrorCorrection) -> Int { dataCapacity(version: version, errorCorrection: level) }
+            level = ErrorCorrection.allCases.filter { used <= capacity($0) }.min { capacity($0) < capacity($1) } ?? level
         }
 
         let data = dataCodewords(segments, version: version, errorCorrection: level)
@@ -95,9 +97,11 @@ extension QRCode {
         return QRCode(version: version, errorCorrection: level, mask: chosen, size: matrix.size, modules: matrix.modules)
     }
 
-    /// Data bits available at a version and level: data codewords × 8.
+    /// Data bits available at a version and level: data codewords × 8, or 0
+    /// outside versions 1–40.
     public static func dataCapacity(version: Int, errorCorrection: ErrorCorrection) -> Int {
-        dataCodewordCount(version: version, errorCorrection: errorCorrection) * 8
+        guard (minVersion...maxVersion).contains(version) else { return 0 }
+        return dataCodewordCount(version: version, errorCorrection: errorCorrection) * 8
     }
 
     /// The smallest version 1–40 whose capacity at the level holds the segments.
@@ -426,27 +430,45 @@ struct Matrix {
     }
 
     /// N1: each run of five or more, 3 plus one per extra module. N3: each
-    /// 1:1:3:1:1 finder-like pattern with four light modules on a side, 40;
-    /// the quiet zone beyond either end counts as light.
+    /// finder-like run pattern dark n, light n, dark 3n, light n, dark n with
+    /// at least 4n light modules on one side and n on the other, 40 per such
+    /// side; the quiet zone beyond either end counts as a light run as long as
+    /// the line. Nayuki's run-length scan, which libqrencode agrees with.
     static func linePenalty(_ line: [Bool]) -> Int {
+        let border = line.count
         var result = 0
-        var run = 1
-        for i in line.indices.dropFirst() {
-            if line[i] == line[i - 1] {
-                run += 1
-                if run == 5 { result += 3 } else if run > 5 { result += 1 }
+        var runColor = false
+        var runLength = 0
+        // The last seven runs, most recent first; [0] is light when counted.
+        var history = [Int](repeating: 0, count: 7)
+        func addHistory(_ length: Int) {
+            var length = length
+            if history[0] == 0 { length += border }
+            for i in stride(from: 6, to: 0, by: -1) { history[i] = history[i - 1] }
+            history[0] = length
+        }
+        func countPatterns() -> Int {
+            let n = history[1]
+            let core = n > 0 && history[2] == n && history[3] == 3 * n && history[4] == n && history[5] == n
+            return (core && history[0] >= 4 * n && history[6] >= n ? 1 : 0)
+                + (core && history[6] >= 4 * n && history[0] >= n ? 1 : 0)
+        }
+        for dark in line {
+            if dark == runColor {
+                runLength += 1
+                if runLength == 5 { result += 3 } else if runLength > 5 { result += 1 }
             } else {
-                run = 1
+                addHistory(runLength)
+                if !runColor { result += countPatterns() * 40 }
+                runColor = dark
+                runLength = 1
             }
         }
-        let finder = [true, false, true, true, true, false, true]
-        guard line.count >= finder.count else { return result }
-        func light(_ i: Int) -> Bool { i < 0 || i >= line.count || !line[i] }
-        for x in 0...(line.count - finder.count) {
-            guard finder.indices.allSatisfy({ line[x + $0] == finder[$0] }) else { continue }
-            if (x - 4..<x).allSatisfy(light) { result += 40 }
-            if (x + 7..<x + 11).allSatisfy(light) { result += 40 }
+        if runColor {
+            addHistory(runLength)
+            runLength = 0
         }
-        return result
+        addHistory(runLength + border)
+        return result + countPatterns() * 40
     }
 }

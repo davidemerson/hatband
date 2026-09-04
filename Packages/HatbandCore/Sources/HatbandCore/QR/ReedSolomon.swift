@@ -31,8 +31,10 @@ enum ReedSolomon {
     }
 
     /// The error correction codewords for `data`: the remainder of
-    /// data·x^degree divided by the generator, by synthetic division.
+    /// data·x^degree divided by the generator, by synthetic division. Empty
+    /// for degree 0, where the generator is 1 and divides everything.
     static func remainder(of data: [UInt8], generator: [UInt8]) -> [UInt8] {
+        guard generator.count > 1 else { return [] }
         var result = [UInt8](repeating: 0, count: generator.count - 1)
         for byte in data {
             let factor = byte ^ result[0]

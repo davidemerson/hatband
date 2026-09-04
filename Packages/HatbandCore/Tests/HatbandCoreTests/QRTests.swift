@@ -182,6 +182,19 @@ func codewordTables(version: Int) {
     #expect(QRCode.totalCodewords(version: 40) == 3706)
 }
 
+@Test(arguments: [Int.min, -1, 0, 41, Int.max])
+func dataCapacityIsZeroOutsideTheVersionRange(version: Int) {
+    for level in levels { #expect(QRCode.dataCapacity(version: version, errorCorrection: level) == 0) }
+}
+
+/// Boost picks the fitting level with the least data capacity, so the tables
+/// must rank the levels strictly the way `allCases` and `index` do.
+@Test(arguments: 1...40)
+func levelOrderIsCapacityOrder(version: Int) {
+    let capacities = levels.map { QRCode.dataCapacity(version: version, errorCorrection: $0) }
+    #expect(zip(capacities, capacities.dropFirst()).allSatisfy(>) && levels.map(\.index) == [0, 1, 2, 3])
+}
+
 // MARK: - Codewords
 
 @Test func isoWorkedExampleCodewords() throws {
@@ -497,14 +510,19 @@ func dataRegionHoldsExactlyTheCodewordsPlusRemainder(version: Int) {
     #expect(Matrix.linePenalty([Bool](repeating: true, count: 6)) == 4)
     #expect(Matrix.linePenalty([Bool](repeating: true, count: 9)) == 7)
     #expect(Matrix.linePenalty(bits("01010")) == 0)
-    // Finder-like pattern with four lights after it only.
-    #expect(Matrix.linePenalty(bits("110111010000")) == 40)
+    // Finder-like pattern with four lights after it and one before.
+    #expect(Matrix.linePenalty(bits("1010111010000")) == 40)
+    // A flanking dark run of two is not part of a 1:1:3:1:1 pattern.
+    #expect(Matrix.linePenalty(bits("110111010000")) == 0)
     // Border counts as light on both ends.
     #expect(Matrix.linePenalty(bits("1011101")) == 80)
     #expect(Matrix.linePenalty(bits("00001011101")) == 80)
     #expect(Matrix.linePenalty(bits("0000101110100011")) == 40)
+    // The ratio counts at any scale: 2:2:6:2:2 against the border, plus a run of six.
+    #expect(Matrix.linePenalty(bits("11001111110011")) == 84)
     // Not a finder pattern; a run of five.
     #expect(Matrix.linePenalty(bits("000001011100")) == 3)
+    #expect(Matrix.linePenalty([]) == 0)
 }
 
 @Test func penaltyOnBlankSymbol() {
@@ -612,6 +630,29 @@ private let tiny = QRCode(version: 1, errorCorrection: .low, mask: 0, size: 3, m
     #expect(styled.contains("width=\"30\""))
     #expect(styled.contains("fill=\"#f2f2f2\""))
     #expect(styled.contains("fill=\"#0d0d0d\""))
+}
+
+@Test func svgAcceptsOnlyHexColours() {
+    for colour in ["#abc", "#ABC", "#0F9", "#000000", "#ffffff", "#0D0d0D", "#123456"] {
+        #expect(tiny.svg(dark: colour, light: colour).contains("fill=\"\(colour)\""), "\(colour)")
+        #expect(QRCode.hexColour(colour) == colour)
+    }
+    for colour in ["", "#", "#ab", "#abcd", "#abcde", "#abcdef0", "#abcdefab", "abc", "abcdef", "#ggg", "#00000g", "#00 000", " #abc", "#abc ", "red", "rgb(0,0,0)", "#０００", "#abc\n", "#\u{301}bc"] {
+        #expect(QRCode.hexColour(colour) == nil, "\(colour)")
+        #expect(tiny.svg(dark: colour, light: colour) == tiny.svg(), "\(colour)")
+    }
+}
+
+@Test func renderersClampDegenerateSizes() {
+    #expect(tiny.pbm(scale: 0, quietZone: -3) == tiny.pbm(scale: 1, quietZone: 0))
+    #expect(tiny.pbm(scale: -7, quietZone: Int.min) == tiny.pbm(scale: 1, quietZone: 0))
+    #expect(tiny.pbm(scale: Int.min, quietZone: 1) == tiny.pbm(scale: 1, quietZone: 1))
+    #expect(tiny.svg(moduleSize: 0, quietZone: -1) == tiny.svg(moduleSize: 1, quietZone: 0))
+    #expect(tiny.svg(moduleSize: -4, quietZone: -4) == tiny.svg(moduleSize: 1, quietZone: 0))
+    for size in [0, -1, -2.5, .nan, .infinity, -.infinity, -.leastNonzeroMagnitude] as [Double] {
+        #expect(tiny.pathData(moduleSize: size, quietZone: -2) == tiny.pathData(moduleSize: 1, quietZone: 0), "\(size)")
+    }
+    #expect(tiny.pathData(moduleSize: 0.5, quietZone: -1) == tiny.pathData(moduleSize: 0.5, quietZone: 0))
 }
 
 @Test func pbmIsPlainBitmap() {
