@@ -12,8 +12,10 @@ private let fingerprint64 = fingerprint40 + "0123456789ABCDEF01234567"
     ("https://host:443", .ok),
     ("https://host:1", .ok),
     ("https://host:65535/x", .ok),
-    ("https://127.0.0.1", .ok),
+    ("https://localhost:8080/x", .ok),
     ("https://example.com/a%2Fb%20c", .ok),
+    ("https://example.com/%C3%A9%F0%9F%98%80", .ok),
+    ("https://example.com/?next=https://evil.com", .ok),
     ("https://example.com/Stra\u{DF}e", .ok),
     ("https://example.com/~bloom/(1),2;3=4&5+6*7!8$9'", .ok),
     ("https://de.wikipedia.org/wiki/Ulysses_(Roman)", .ok),
@@ -46,6 +48,10 @@ func acceptsWebLinks(url: String, verdict: Verdict) {
     (":", .reject("missing scheme")),
     ("1http://x", .reject("missing scheme")),
     ("example.com/path:80", .reject("missing scheme")),
+    ("example.com:80", .reject("missing scheme")),                   // a port, not a path after scheme `example.com`
+    ("example.com:8080/x", .reject("missing scheme")),
+    ("localhost:8080", .reject("missing scheme")),
+    ("example.com:abc", .reject("scheme not allowed: example.com")),  // the grammar's answer when no port follows
     ("ht tp://x", .reject("whitespace")),
 ])
 func rejectsOtherSchemes(url: String, verdict: Verdict) {
@@ -98,6 +104,12 @@ func rejectsHiddenCharacters(url: String, verdict: Verdict) {
     ("https://example.com.", .reject("invalid host label")),
     ("https://ex_ample.com", .reject("invalid host label")),
     ("https://example.com\\evil", .reject("invalid host label")),
+    ("https://127.0.0.1", .reject("IP address")),
+    ("https://2130706433/", .reject("IP address")),
+    ("https://0x7f000001:443", .reject("IP address")),
+    ("https://example.123", .reject("IP address")),
+    ("https://xn--pple-43d.com", .reject("non-ASCII host, looks like “apple.com”")),
+    ("https://xn--b.com", .reject("invalid punycode label")),
 ])
 func rejectsBadAuthorities(url: String, verdict: Verdict) {
     #expect(URLPolicy.verdict(for: url) == verdict)
@@ -115,6 +127,11 @@ func rejectsBadAuthorities(url: String, verdict: Verdict) {
     ("https://example.com/%2", .reject("bad percent-encoding")),
     ("https://example.com/%", .reject("bad percent-encoding")),
     ("https://example.com/?%G0", .reject("bad percent-encoding")),
+    ("https://example.com/%00", .reject("control character")),                    // what a triplet hides is scanned too
+    ("https://example.com/%0d%0a", .reject("control character")),
+    ("https://example.com/%E2%80%AE", .reject("bidirectional control character")),
+    ("https://example.com/?%E2%80%8B", .reject("invisible character")),
+    ("https://example.com/#%EE%80%80", .reject("unassigned or private-use character")),
 ])
 func rejectsBadPaths(url: String, verdict: Verdict) {
     #expect(URLPolicy.verdict(for: url) == verdict)
@@ -145,6 +162,19 @@ func rejectsBadPaths(url: String, verdict: Verdict) {
     ("mailto:ünï@b", .reject("non-ASCII character")),
     ("mailto:a@münchen.de", .reject("non-ASCII host")),
     ("mailto:a@g\u{456}thub.com", .reject("non-ASCII host, looks like “github.com”")),
+    ("mailto:a@b?body=x", .ok),
+    ("mailto:a@b?Subject=x&BODY=y", .ok),
+    ("mailto:a@b?%53ubject=x", .ok),
+    ("mailto:a@b?subject=a=b&", .ok),
+    ("mailto:a@b?bcc=spy@evil.com", .reject("mailto header not allowed")),
+    ("mailto:a@b?to=x", .reject("mailto header not allowed")),
+    ("mailto:a@b?cc=x&subject=hi", .reject("mailto header not allowed")),
+    ("mailto:a@b?subject=x&BCC=y", .reject("mailto header not allowed")),
+    ("mailto:a@b?%62cc=x", .reject("mailto header not allowed")),
+    ("mailto:a@b?in-reply-to=x", .reject("mailto header not allowed")),
+    ("mailto:a@b?x", .reject("mailto header not allowed")),
+    ("mailto:a@b?subject=%0D%0Abcc:x", .reject("control character")),
+    ("mailto:a@127.0.0.1", .reject("IP address")),
 ])
 func judgesMailto(url: String, verdict: Verdict) {
     #expect(URLPolicy.verdict(for: url) == verdict)
@@ -211,6 +241,9 @@ func judgesAcct(url: String, verdict: Verdict) {
     ("", false),
     (" https://x", false),
     ("github.com", false),
+    ("https://127.0.0.1", false),
+    ("https://xn--pple-43d.com", false),
+    ("mailto:a@b?bcc=x", false),
 ])
 func decidesTappability(url: String, tappable: Bool) {
     #expect(URLPolicy.isTappable(url) == tappable)
@@ -239,6 +272,11 @@ func decidesTappability(url: String, tappable: Bool) {
     #expect(URLPolicy.scheme(of: Array("a/b:".utf8)) == nil)
     #expect(URLPolicy.scheme(of: Array(":x".utf8)) == nil)
     #expect(URLPolicy.scheme(of: []) == nil)
+    #expect(URLPolicy.scheme(of: Array("example.com:80".utf8)) == nil, "host and port")
+    #expect(URLPolicy.scheme(of: Array("example.com:80/x".utf8)) == nil)
+    #expect(URLPolicy.scheme(of: Array("example.com:123456".utf8)) == "example.com", "six digits are no port")
+    #expect(URLPolicy.scheme(of: Array("tel:5551234".utf8)) == "tel")
+    #expect(URLPolicy.scheme(of: Array("https://host:443".utf8)) == "https")
     let long = String(repeating: "z", count: 100) + ":"
     #expect(URLPolicy.verdict(for: long) == .reject("scheme not allowed: " + String(repeating: "z", count: 32)))
 }

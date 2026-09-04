@@ -20,25 +20,33 @@ public enum FieldValidator {
     }
 
     /// Stored without a scheme (`nnix.com/~bloom`); checked as its https URL.
+    /// A scheme of its own is refused, whether `https://x`, `javascript:x`
+    /// or `http:x`; `host:port` is not one, and a `://` past the authority
+    /// is a URL inside the path or query.
     public static func website(_ s: String, limits: Limits) -> Verdict {
         if let failure = asciiPrelude(s, maxBytes: limits.website) { return failure }
-        guard !s.utf8.starts(with: "//".utf8), !hasSchemeSeparator(s) else { return .reject("scheme in website") }
+        guard !s.utf8.starts(with: "//".utf8), !hasScheme(s) else { return .reject("scheme in website") }
         return URLPolicy.verdict(for: "https://" + s)
     }
 
     /// A GitHub, LinkedIn or Calendly identifier (`bloom`, `bloom/coffee`),
-    /// or a Mastodon `user@instance`. ASCII only: every one of these sites
-    /// keeps its identifiers in ASCII, and a look-alike here is a phishing
-    /// link.
+    /// or a Mastodon `user@instance`, also as pasted with a leading `@`.
+    /// ASCII only: every one of these sites keeps its identifiers in ASCII,
+    /// and a look-alike here is a phishing link.
     public static func handle(_ s: String, limits: Limits) -> Verdict {
         if let failure = asciiPrelude(s, maxBytes: limits.handle) { return failure }
-        let bytes = Array(s.utf8)
-        if let at = bytes.firstIndex(of: UInt8(ascii: "@")) {
-            guard at > 0, isSlug(bytes[..<at]) else { return .reject("invalid handle") }
-            return Confusables.domainVerdict(String(decoding: bytes[(at + 1)...], as: UTF8.self))
+        var bytes = Array(s.utf8)[...]
+        var verdict = Verdict.ok
+        if bytes.first == UInt8(ascii: "@"), bytes.dropFirst().contains(UInt8(ascii: "@")) {
+            bytes = bytes.dropFirst()
+            verdict = .warning("leading @, use “\(String(decoding: bytes, as: UTF8.self))”")
         }
-        guard isSlug(bytes[...]) else { return .reject("invalid handle") }
-        return .ok
+        if let at = bytes.firstIndex(of: UInt8(ascii: "@")) {
+            guard at > bytes.startIndex, isSlug(bytes[..<at]) else { return .reject("invalid handle") }
+            return verdict.merged(with: Confusables.domainVerdict(String(decoding: bytes[(at + 1)...], as: UTF8.self)))
+        }
+        guard isSlug(bytes) else { return .reject("invalid handle") }
+        return verdict
     }
 
     /// A pasted `signal.me` link: `#p/+E.164` (discloses the number) or
@@ -83,7 +91,8 @@ public enum FieldValidator {
     }
 
     public static func customCount(_ count: Int, limits: Limits) -> Verdict {
-        count <= limits.customFields ? .ok : .reject("more than \(limits.customFields) custom fields")
+        guard count >= 0 else { return .reject("negative count") }
+        return count <= limits.customFields ? .ok : .reject("more than \(limits.customFields) custom fields")
     }
 
     public static func photo(byteCount: Int, limits: Limits) -> Verdict {
@@ -95,11 +104,13 @@ public enum FieldValidator {
     }
 
     public static func payload(byteCount: Int, limits: Limits) -> Verdict {
-        byteCount <= limits.payloadBytes ? .ok : .reject("over \(limits.payloadBytes) bytes")
+        guard byteCount >= 0 else { return .reject("negative size") }
+        return byteCount <= limits.payloadBytes ? .ok : .reject("over \(limits.payloadBytes) bytes")
     }
 
     public static func nesting(depth: Int, limits: Limits) -> Verdict {
-        depth <= limits.nesting ? .ok : .reject("nested deeper than \(limits.nesting)")
+        guard depth >= 0 else { return .reject("negative depth") }
+        return depth <= limits.nesting ? .ok : .reject("nested deeper than \(limits.nesting)")
     }
 
     // MARK: - Shared
@@ -153,17 +164,16 @@ public enum FieldValidator {
         return true
     }
 
-    private static func hasSchemeSeparator(_ s: String) -> Bool {
-        var seen = 0
-        for b in s.utf8 {
-            switch (seen, b) {
-            case (_, UInt8(ascii: ":")): seen = 1
-            case (1, UInt8(ascii: "/")): seen = 2
-            case (2, UInt8(ascii: "/")): return true
-            default: seen = 0
-            }
-        }
-        return false
+    /// A colon in the authority (before the first `/`, `?` or `#`) that is
+    /// neither followed by a port nor preceded by a dotted host: `http:x`
+    /// and `javascript:x` are schemes, `localhost:8080` and `nnix.com:abc`
+    /// are hosts, the second with a bad port.
+    private static func hasScheme(_ s: String) -> Bool {
+        let authority = s.utf8.prefix { !"/?#".utf8.contains($0) }
+        guard let colon = authority.firstIndex(of: UInt8(ascii: ":")) else { return false }
+        let port = authority[authority.index(after: colon)...]
+        if (1...5).contains(port.count), port.allSatisfy(isDigit) { return false }
+        return !authority[..<colon].contains(UInt8(ascii: "."))
     }
 
     private static func isWordByte(_ b: UInt8) -> Bool {
@@ -172,7 +182,11 @@ public enum FieldValidator {
 
     private static func isAlphanumeric(_ b: UInt8) -> Bool {
         (UInt8(ascii: "a")...UInt8(ascii: "z")).contains(b) || (UInt8(ascii: "A")...UInt8(ascii: "Z")).contains(b)
-            || (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(b)
+            || isDigit(b)
+    }
+
+    private static func isDigit(_ b: UInt8) -> Bool {
+        (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(b)
     }
 
     private static func isBase64URLByte(_ b: UInt8) -> Bool {

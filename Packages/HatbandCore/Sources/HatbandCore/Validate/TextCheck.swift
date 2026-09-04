@@ -10,6 +10,8 @@ public enum TextCheck {
         guard !trimmed.isEmpty else { return .reject("empty") }
         guard s.utf8.count <= maxBytes else { return .reject("over \(maxBytes) bytes") }
         if let problem = problem(in: s, allowNewlines: allowNewlines) { return .reject(problem) }
+        // Marks and selectors alone draw nothing: empty to the eye.
+        guard trimmed.contains(where: isVisible) else { return .reject("empty") }
 
         var verdict = Verdict.ok
         if Confusables.mixedScripts(in: s) {
@@ -29,7 +31,8 @@ public enum TextCheck {
     }
 
     /// Why a scalar is never allowed in card text, or nil. Shared by the URL
-    /// and host checks so every string gets the same scan.
+    /// and host checks so every string gets the same scan. Three invisibles
+    /// are allowed in context by `problem(in:)`, never alone.
     static func problem(_ scalar: Unicode.Scalar, allowNewlines: Bool = false) -> String? {
         switch scalar.value {
         case 0x0A where allowNewlines:
@@ -39,13 +42,9 @@ public enum TextCheck {
         // Bidi controls (UAX #9) reverse the displayed text.
         case 0x061C, 0x200E, 0x200F, 0x202A...0x202E, 0x2066...0x2069:
             return "bidirectional control character"
-        // Zero-width and other invisibles: soft hyphen, grapheme joiner,
-        // Mongolian vowel separator, ZW space/non-joiner/joiner, line and
-        // paragraph separators, word joiner and invisible operators,
-        // deprecated format controls, BOM, interlinear annotation, and the
-        // tag block that smuggles ASCII into text nobody can see.
-        case 0x00AD, 0x034F, 0x180E, 0x200B...0x200D, 0x2028, 0x2029, 0x2060...0x2064,
-             0x206A...0x206F, 0xFEFF, 0xFFF9...0xFFFB, 0xE0000...0xE007F:
+        // Line and paragraph separators, and the blank Braille cell: a
+        // symbol that draws nothing.
+        case 0x2028, 0x2029, 0x2800:
             return "invisible character"
         default:
             switch scalar.properties.generalCategory {
@@ -53,17 +52,91 @@ public enum TextCheck {
             // Assignment follows the stdlib's Unicode version.
             case .unassigned, .privateUse, .surrogate:
                 return "unassigned or private-use character"
+            // Format controls are layout instructions, not text: soft hyphen,
+            // zero-width space and joiners, BOM, interlinear annotation, the
+            // hieroglyph and shorthand controls, and the tag block that
+            // smuggles ASCII into text nobody can see.
+            case .format:
+                return "invisible character"
             default:
-                return nil
+                // Default_Ignorable_Code_Point (UAX #44) beyond Cf: Hangul
+                // fillers, the grapheme joiner, Khmer and Mongolian selectors
+                // and variation selectors render as nothing, so they can hide
+                // anything.
+                return scalar.properties.isDefaultIgnorableCodePoint ? "invisible character" : nil
             }
         }
     }
 
+    /// The first problem in `s`, or nil. Three invisibles are allowed where
+    /// they do their job and nowhere else: a variation selector (U+FE00–FE0F,
+    /// U+E0100–E01EF) right after a scalar that is not itself ignorable, a
+    /// ZWJ between two pictographs (the rainbow flag, a family), and a ZWNJ
+    /// between two Arabic letters (Persian and Urdu spell with it; RFC 5892
+    /// Appendix A.1 allows the same).
     static func problem(in s: String, allowNewlines: Bool = false) -> String? {
-        for scalar in s.unicodeScalars {
-            if let problem = problem(scalar, allowNewlines: allowNewlines) { return problem }
+        let scalars = s.unicodeScalars
+        var previous: Unicode.Scalar?
+        var base: Unicode.Scalar?  // the last scalar that was not a mark or selector
+        var index = scalars.startIndex
+        while index < scalars.endIndex {
+            let scalar = scalars[index]
+            index = scalars.index(after: index)
+            let next = index < scalars.endIndex ? scalars[index] : nil
+            let allowed: Bool
+            switch scalar.value {
+            case 0xFE00...0xFE0F, 0xE0100...0xE01EF:
+                allowed = previous.map { !$0.properties.isDefaultIgnorableCodePoint } ?? false
+            case 0x200D:
+                allowed = base.map(isPictograph) == true && next.map(isPictograph) == true
+            case 0x200C:
+                allowed = base.map(isArabicLetter) == true && next.map(isArabicLetter) == true
+            default:
+                if let problem = problem(scalar, allowNewlines: allowNewlines) { return problem }
+                allowed = true
+            }
+            guard allowed else { return "invisible character" }
+            previous = scalar
+            if !attaches(scalar) { base = scalar }
         }
         return nil
+    }
+
+    /// Marks and variation selectors belong to the scalar before them.
+    private static func attaches(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0xFE00...0xFE0F, 0xE0100...0xE01EF: return true
+        default: return scalar.properties.generalCategory == .nonspacingMark
+        }
+    }
+
+    /// Extended_Pictographic, near enough: the stdlib has no such property,
+    /// and every emoji outside ASCII (`#`, `*`, the digits) is one.
+    private static func isPictograph(_ scalar: Unicode.Scalar) -> Bool {
+        scalar.value >= 0x80 && scalar.properties.isEmoji
+    }
+
+    /// A letter in one of the Arabic blocks.
+    private static func isArabicLetter(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x0600...0x06FF, 0x0750...0x077F, 0x08A0...0x08FF, 0xFB50...0xFDFF, 0xFE70...0xFEFF:
+            switch scalar.properties.generalCategory {
+            case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter: return true
+            default: return false
+            }
+        default:
+            return false
+        }
+    }
+
+    /// Draws something of its own: not whitespace, a mark, a format control
+    /// or a default-ignorable.
+    private static func isVisible(_ scalar: Unicode.Scalar) -> Bool {
+        guard !scalar.properties.isWhitespace, !scalar.properties.isDefaultIgnorableCodePoint else { return false }
+        switch scalar.properties.generalCategory {
+        case .nonspacingMark, .spacingMark, .enclosingMark, .format: return false
+        default: return true
+        }
     }
 
     /// Unicode White_Space stripped from both ends.

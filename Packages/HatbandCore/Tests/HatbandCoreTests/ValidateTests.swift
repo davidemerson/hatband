@@ -79,9 +79,28 @@ private func scalar(_ value: UInt32) -> String {
     ("a\u{7F}b", .reject("control character")),
     ("a\u{85}b", .reject("control character")),
     ("a\u{9F}b", .reject("control character")),
-    ("🏳\u{FE0F}\u{200D}🌈", .reject("invisible character")),   // ZWJ sequences are out, by design
-    ("👨\u{200D}👩\u{200D}👧", .reject("invisible character")),
-    ("می\u{200C}خواهم", .reject("invisible character")),      // and so is ZWNJ, which Persian needs
+    ("🏳\u{FE0F}\u{200D}🌈", .ok),                              // ZWJ between two pictographs
+    ("👨\u{200D}👩\u{200D}👧", .ok),
+    ("👨🏽\u{200D}👩🏽\u{200D}👧", .ok),                          // skin tones are pictographs too
+    ("❤\u{FE0F}\u{200D}🔥", .ok),
+    ("1\u{FE0F}\u{20E3}", .ok),                                 // keycap
+    ("e\u{301}\u{FE0F}", .ok),
+    ("می\u{200C}خواهم", .ok),                                  // ZWNJ between two Arabic letters, as Persian is written
+    ("\u{645}\u{650}\u{200C}\u{62E}", .ok),                     // a vowel mark keeps the letter before it
+    ("a\u{200D}b", .reject("invisible character")),            // joiners anywhere else are hidden
+    ("😀\u{200D}a", .reject("invisible character")),
+    ("\u{200D}😀", .reject("invisible character")),
+    ("😀\u{200D}", .reject("invisible character")),
+    ("a\u{200C}b", .reject("invisible character")),
+    ("\u{645}\u{200C}a", .reject("invisible character")),
+    ("\u{FE0F}a", .reject("invisible character")),             // a selector needs a base before it
+    ("a\u{FE0F}\u{FE0F}", .reject("invisible character")),
+    ("Jo\u{3164}hn", .reject("invisible character")),          // Hangul filler, default-ignorable
+    ("Jo\u{13430}hn", .reject("invisible character")),         // hieroglyph joiner, a format control
+    ("a\u{2800}b", .reject("invisible character")),            // blank Braille cell
+    ("\u{301}", .reject("empty")),                             // a mark with nothing to sit on
+    ("\u{20DD}\u{20DD}", .reject("empty")),
+    (" \u{301} ", .reject("empty")),
     ("a\u{E000}b", .reject("unassigned or private-use character")),
     ("a\u{378}b", .reject("unassigned or private-use character")),
     ("a\u{FFFE}b", .reject("unassigned or private-use character")),
@@ -124,6 +143,7 @@ private let bidi: [UInt32] = [0x061C, 0x200E, 0x200F, 0x202A, 0x202B, 0x202C, 0x
 private let invisible: [UInt32] = [
     0x200B, 0x200C, 0x200D, 0x2060, 0xFEFF, 0x00AD, 0x034F, 0x180E, 0x2028, 0x2029, 0xFFF9, 0xFFFA, 0xFFFB,
     0x2061, 0x2062, 0x2063, 0x2064, 0x206A, 0x206F, 0xE0001, 0xE0020, 0xE0041, 0xE007F,
+    0x115F, 0x1160, 0x3164, 0xFFA0, 0x17B4, 0x17B5, 0x180B, 0x180F, 0x1BCA0, 0x1BCA3, 0x1D173, 0x1D17A, 0x13430, 0x2800,
 ]
 private let unassigned: [UInt32] = [
     0x0378, 0x0380, 0x2FE0, 0xE0080, 0xFDD0, 0xFDEF, 0xFFFE, 0xFFFF, 0x1FFFE, 0x1FFFF, 0x10FFFF,
@@ -165,12 +185,32 @@ func rejectsEachUnassignedOrPrivate(value: UInt32) {
     }
     #expect(counts["control character"] == 65)
     #expect(counts["bidirectional control character"] == 12)
-    #expect(counts["invisible character"] == 3 + 3 + 2 + 5 + 6 + 1 + 3 + 128)
+    // Every assigned format control but the 12 bidi controls, every other
+    // assigned default-ignorable, and the three listed by hand. The counts
+    // follow the tables pinned by `unicodeTablesVersion`.
+    #expect(counts["invisible character"] == (170 - 12) + 267 + 3)
     #expect(counts["unassigned or private-use character", default: 0] > 800_000)
     #expect(TextCheck.problem("a") == nil)
-    #expect(TextCheck.problem("\u{FE0F}") == nil, "variation selectors carry emoji presentation")
+    #expect(TextCheck.problem("\u{FE0F}") == "invisible character", "a selector alone")
+    #expect(TextCheck.problem(in: "❤\u{FE0F}") == nil, "after a base it carries emoji presentation")
     #expect(TextCheck.problem("\u{301}") == nil)
     #expect(TextCheck.problem("\u{A0}") == nil)
+}
+
+/// Pins the Unicode version of the stdlib's tables, which decide what is
+/// assigned, ignorable and emoji. It exists to make a table change visible:
+/// when a toolchain update moves it, the counts above move with it, and a
+/// name with a newly assigned emoji that this writer accepts is refused by
+/// a reader built on the older tables.
+@Test func unicodeTablesVersion() {
+    let sentinel = Unicode.Scalar(0x1FA8A)!  // assigned in Unicode 17.0
+    #expect(sentinel.properties.age.map { [$0.major, $0.minor] } == [17, 0])
+    var newest = (major: 0, minor: 0)
+    for value in UInt32(0)...0x10FFFF {
+        guard let age = Unicode.Scalar(value)?.properties.age else { continue }
+        if (age.major, age.minor) > (newest.major, newest.minor) { newest = (age.major, age.minor) }
+    }
+    #expect(newest.major == 17 && newest.minor == 0, "the tables are newer than the sentinel: \(newest)")
 }
 
 @Test func capCountsUTF8Bytes() {
@@ -315,15 +355,23 @@ func validatesPhone(s: String, verdict: Verdict) {
     ("nnix.com/~bloom", .ok),
     ("example.org:8080/x", .ok),
     ("NNIX.COM", .ok),
-    ("127.0.0.1", .ok),
+    ("localhost:8080/x", .ok),
     ("example.com/path?q=1#frag", .ok),
+    ("example.com/?next=https://evil.com", .ok),          // a URL in the query is not a scheme
+    ("nnix.com/a://b", .ok),
     ("xn--mnchen-3ya.de", .warning("punycode host label")),
     ("", .reject("empty")),
+    ("127.0.0.1", .reject("IP address")),
+    ("2130706433", .reject("IP address")),
+    ("xn--pple-43d.com", .reject("non-ASCII host, looks like “apple.com”")),
     ("https://nnix.com", .reject("scheme in website")),
     ("http://nnix.com", .reject("scheme in website")),
     ("HTTPS://nnix.com", .reject("scheme in website")),
     ("//nnix.com", .reject("scheme in website")),
-    ("nnix.com/a://b", .reject("scheme in website")),
+    ("javascript:alert(1)", .reject("scheme in website")),
+    ("http:evil.com", .reject("scheme in website")),
+    ("data:text/html,x", .reject("scheme in website")),
+    ("mailto:a@b", .reject("scheme in website")),
     ("user@nnix.com", .reject("userinfo in URL")),
     ("nnix.com:abc", .reject("invalid port")),
     ("nnix .com", .reject("whitespace")),
@@ -360,6 +408,7 @@ func validatesWebsite(s: String, verdict: Verdict) {
     ("Bloom123", .ok),
     ("a", .ok),
     ("bloom@xn--mnchen-3ya.de", .warning("punycode host label")),
+    ("@bloom@merveilles.town", .warning("leading @, use “bloom@merveilles.town”")),
     ("", .reject("empty")),
     ("-bloom", .reject("invalid handle")),
     ("bloom-", .reject("invalid handle")),
@@ -508,6 +557,12 @@ func validatesCustomValue(s: String, kind: CustomKind, verdict: Verdict) {
     #expect(FieldValidator.nesting(depth: 3, limits: qr) == .ok)
     #expect(FieldValidator.nesting(depth: 4, limits: qr) == .reject("nested deeper than 3"))
     #expect(FieldValidator.nesting(depth: 0, limits: file) == .ok)
+
+    for count in [-1, Int.min] {
+        #expect(FieldValidator.customCount(count, limits: qr) == .reject("negative count"))
+        #expect(FieldValidator.payload(byteCount: count, limits: file) == .reject("negative size"))
+        #expect(FieldValidator.nesting(depth: count, limits: qr) == .reject("negative depth"))
+    }
 }
 
 // MARK: - Fuzz

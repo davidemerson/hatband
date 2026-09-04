@@ -46,8 +46,13 @@ public enum Confusables {
     /// bytes in all, any letter case (the canonical form is lowercase).
     /// Non-ASCII hosts are rejected outright; the message names the ASCII
     /// host they resemble so the user reads "looks like github.com", never
-    /// punycode. An `xn--` label is accepted with a warning: the text on the
-    /// card is not deceptive, but a browser may render it as something else.
+    /// punycode. An IP address is rejected in every spelling: RFC 3696 §2
+    /// (a top-level label is never all digits) plus the WHATWG URL "ends in
+    /// a number" rule catch `127.0.0.1`, `2130706433`, `0x7f000001` and
+    /// `0177.0.0.1` alike. An `xn--` label is decoded (RFC 3492) and judged
+    /// as the text it spells: a look-alike is refused the way the raw form
+    /// is; an honest IDN is accepted with a warning, since a browser may
+    /// render it as something else.
     public static func domainVerdict(_ host: String) -> Verdict {
         guard !host.isEmpty else { return .reject("empty host") }
         guard host.utf8.count <= 253 else { return .reject("host over 253 bytes") }
@@ -58,17 +63,46 @@ public enum Confusables {
             }
             return .reject("non-ASCII host")
         }
-        var punycode = false
-        for label in host.utf8.split(separator: UInt8(ascii: "."), omittingEmptySubsequences: false) {
+        let labels = host.utf8.split(separator: UInt8(ascii: "."), omittingEmptySubsequences: false)
+        for label in labels {
             guard (1...63).contains(label.count),
                   label.first != UInt8(ascii: "-"), label.last != UInt8(ascii: "-"),
                   label.allSatisfy(isLabelByte)
             else { return .reject("invalid host label") }
-            if label.count > 4, label.prefix(4).elementsEqual("xn--".utf8, by: { $0 | 0x20 == $1 }) {
-                punycode = true
-            }
         }
-        return punycode ? .warning("punycode host label") : .ok
+        if let last = labels.last, isNumber(last) { return .reject("IP address") }
+        guard labels.contains(where: isPunycode) else { return .ok }
+        var spelled: [String] = []
+        for label in labels {
+            guard isPunycode(label) else {
+                spelled.append(String(decoding: label, as: UTF8.self))
+                continue
+            }
+            guard let text = Punycode.decode(label.dropFirst(4)),
+                  !text.unicodeScalars.contains(where: { $0.properties.isWhitespace })
+            else { return .reject("invalid punycode label") }
+            spelled.append(text)
+        }
+        let unicode = spelled.joined(separator: ".")
+        if let problem = TextCheck.problem(in: unicode) { return .reject(problem) }
+        if let skeleton = looksLikeASCII(unicode) { return .reject("non-ASCII host, looks like “\(skeleton)”") }
+        if mixedScripts(in: unicode) { return .reject("mixed scripts in punycode label") }
+        return .warning("punycode host label")
+    }
+
+    /// `xn--` and something after it, in any case.
+    private static func isPunycode(_ label: some Collection<UInt8>) -> Bool {
+        label.count > 4 && label.prefix(4).elementsEqual("xn--".utf8, by: { $0 | 0x20 == $1 })
+    }
+
+    /// All digits, or `0x` and hex digits: what a browser resolves as an
+    /// IPv4 address (WHATWG URL §3.5).
+    private static func isNumber(_ label: some Collection<UInt8>) -> Bool {
+        if label.allSatisfy(isDigit) { return true }
+        guard label.count >= 2, label.first == UInt8(ascii: "0"),
+              label.dropFirst().first.map({ $0 | 0x20 }) == UInt8(ascii: "x")
+        else { return false }
+        return label.dropFirst(2).allSatisfy(isHexDigit)
     }
 
     private static func isLabelByte(_ b: UInt8) -> Bool {
@@ -79,6 +113,14 @@ public enum Confusables {
         default:
             return false
         }
+    }
+
+    private static func isDigit(_ b: UInt8) -> Bool {
+        (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(b)
+    }
+
+    private static func isHexDigit(_ b: UInt8) -> Bool {
+        isDigit(b) || (UInt8(ascii: "a")...UInt8(ascii: "f")).contains(b) || (UInt8(ascii: "A")...UInt8(ascii: "F")).contains(b)
     }
 
     /// Letters, marks and numbers stay in a word; everything else ends it.
@@ -95,8 +137,8 @@ public enum Confusables {
 
     /// The ASCII a scalar is routinely mistaken for. Cyrillic and Greek
     /// letters that share a glyph with Latin, a few Latin and Armenian
-    /// forms, the fullwidth block, and the dots and slashes that pass for
-    /// `.` and `/` inside a host.
+    /// forms, the fullwidth block, the dashes that pass for `-`, and the
+    /// dots and slashes that pass for `.` and `/` inside a host.
     static func asciiLookalike(_ scalar: Unicode.Scalar) -> Unicode.Scalar? {
         let ascii: UInt8
         switch scalar.value {
@@ -186,6 +228,8 @@ public enum Confusables {
         // One dot leader, ideographic full stop; division and fraction slashes
         case 0x2024, 0x3002: ascii = UInt8(ascii: ".")
         case 0x2044, 0x2215: ascii = UInt8(ascii: "/")
+        // Hyphen through horizontal bar, minus sign, small hyphen-minus
+        case 0x2010...0x2015, 0x2212, 0xFE63: ascii = UInt8(ascii: "-")
         default: return nil
         }
         return Unicode.Scalar(ascii)

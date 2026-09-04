@@ -9,16 +9,19 @@ public enum URLPolicy {
     /// for display only.
     static let tappableSchemes: Set<String> = ["https", "http", "mailto", "tel"]
 
+    /// RFC 6068 header fields a link may prefill. `to`, `cc` and `bcc` add
+    /// recipients the card never showed (§3); the rest are for mail clients
+    /// to ignore.
+    static let mailtoHeaders: Set<String> = ["subject", "body"]
+
     /// `https` is fine; `http` warns; `mailto`, `tel`, `acct` and
     /// `OPENPGP4FPR` must parse as such. A `signal.me` link is plain https.
     /// Everything else is rejected, including any URL with userinfo,
     /// whitespace, a hidden character, or an untappable host.
     public static func verdict(for url: String) -> Verdict {
         guard url.utf8.count <= maxBytes else { return .reject("over \(maxBytes) bytes") }
-        for scalar in url.unicodeScalars {
-            if let problem = TextCheck.problem(scalar) { return .reject(problem) }
-            if scalar.properties.isWhitespace { return .reject("whitespace") }
-        }
+        if let problem = TextCheck.problem(in: url) { return .reject(problem) }
+        guard !url.unicodeScalars.contains(where: { $0.properties.isWhitespace }) else { return .reject("whitespace") }
         let bytes = Array(url.utf8)
         guard let scheme = scheme(of: bytes) else { return .reject("missing scheme") }
         let rest = bytes[(scheme.utf8.count + 1)...]
@@ -39,16 +42,21 @@ public enum URLPolicy {
         return tappableSchemes.contains(scheme)
     }
 
-    /// RFC 3986 §3.1, lowercased. Nil when the text does not start with one.
+    /// RFC 3986 §3.1, lowercased. Nil when the text does not start with one,
+    /// or when a port follows the colon: by the grammar `example.com:80` has
+    /// scheme `example.com`, but nobody means that.
     static func scheme(of bytes: [UInt8]) -> String? {
         guard let colon = bytes.firstIndex(of: UInt8(ascii: ":")), colon > 0,
               isASCIILetter(bytes[0]), bytes[..<colon].allSatisfy(isSchemeByte)
         else { return nil }
+        let port = bytes[(colon + 1)...].prefix { !"/?#".utf8.contains($0) }
+        guard !((1...5).contains(port.count) && port.allSatisfy(isDigit)) else { return nil }
         return String(decoding: bytes[..<colon], as: UTF8.self).lowercased()
     }
 
     /// `//host[:port][/path][?query][#fragment]`. The host must pass
-    /// `Confusables.domainVerdict`; IP literals fail it, by design.
+    /// `Confusables.domainVerdict`, which refuses an IP address in any
+    /// spelling and judges an `xn--` label by what it spells.
     private static func web(_ rest: ArraySlice<UInt8>) -> Verdict {
         guard rest.starts(with: "//".utf8) else { return .reject("malformed URL") }
         let afterSlashes = rest.dropFirst(2)
@@ -67,12 +75,21 @@ public enum URLPolicy {
         return hostVerdict.merged(with: tail(afterSlashes[authorityEnd...]))
     }
 
-    /// RFC 6068: one address, then optional header fields after `?`.
+    /// RFC 6068: one address, then header fields after `?`, each named in
+    /// `mailtoHeaders` (any case, percent-encoded or not).
     private static func mailto(_ rest: ArraySlice<UInt8>) -> Verdict {
         let end = rest.firstIndex(of: UInt8(ascii: "?")) ?? rest.endIndex
         let verdict = address(rest[..<end], or: "not an email address")
         guard verdict.isAccepted else { return verdict }
-        return verdict.merged(with: tail(rest[end...]))
+        let tailVerdict = tail(rest[end...])
+        guard tailVerdict.isAccepted else { return tailVerdict }
+        for field in rest[end...].dropFirst().split(separator: UInt8(ascii: "&")) {
+            let name = percentDecoded(field.prefix { $0 != UInt8(ascii: "=") })
+            guard mailtoHeaders.contains(String(decoding: name, as: UTF8.self).lowercased()) else {
+                return .reject("mailto header not allowed")
+            }
+        }
+        return verdict.merged(with: tailVerdict)
     }
 
     /// `local@host`: an RFC 5322 dot-atom of at most 64 bytes and a host
@@ -97,7 +114,9 @@ public enum URLPolicy {
     }
 
     /// Path, query and fragment: RFC 3986 characters, valid percent triplets,
-    /// and any non-ASCII that passed the scan (an IRI, RFC 3987).
+    /// and any non-ASCII that passed the scan (an IRI, RFC 3987). What the
+    /// triplets encode gets the scan the raw text had: `%00`, `%0D%0A` and
+    /// `%E2%80%AE` hide the same things.
     private static func tail(_ bytes: ArraySlice<UInt8>) -> Verdict {
         var index = bytes.startIndex
         while index < bytes.endIndex {
@@ -112,7 +131,27 @@ public enum URLPolicy {
             guard b >= 0x80 || isTailByte(b) else { return .reject("invalid character in URL") }
             index += 1
         }
+        if let problem = TextCheck.problem(in: String(decoding: percentDecoded(bytes), as: UTF8.self)) {
+            return .reject(problem)
+        }
         return .ok
+    }
+
+    /// Each `%XX` replaced by its octet; `tail` has vetted every triplet.
+    private static func percentDecoded(_ bytes: ArraySlice<UInt8>) -> [UInt8] {
+        var out: [UInt8] = []
+        var index = bytes.startIndex
+        while index < bytes.endIndex {
+            if bytes[index] == UInt8(ascii: "%"), bytes.distance(from: index, to: bytes.endIndex) >= 3,
+               let high = hexValue(bytes[index + 1]), let low = hexValue(bytes[index + 2]) {
+                out.append(high << 4 | low)
+                index += 3
+            } else {
+                out.append(bytes[index])
+                index += 1
+            }
+        }
+        return out
     }
 
     /// 40 hex digits (v4) or 64 (v6), either case.
@@ -141,7 +180,16 @@ public enum URLPolicy {
     }
 
     private static func isHexDigit(_ b: UInt8) -> Bool {
-        isDigit(b) || (UInt8(ascii: "a")...UInt8(ascii: "f")).contains(b) || (UInt8(ascii: "A")...UInt8(ascii: "F")).contains(b)
+        hexValue(b) != nil
+    }
+
+    private static func hexValue(_ b: UInt8) -> UInt8? {
+        switch b {
+        case UInt8(ascii: "0")...UInt8(ascii: "9"): return b - UInt8(ascii: "0")
+        case UInt8(ascii: "a")...UInt8(ascii: "f"): return b - UInt8(ascii: "a") + 10
+        case UInt8(ascii: "A")...UInt8(ascii: "F"): return b - UInt8(ascii: "A") + 10
+        default: return nil
+        }
     }
 
     private static func isSchemeByte(_ b: UInt8) -> Bool {

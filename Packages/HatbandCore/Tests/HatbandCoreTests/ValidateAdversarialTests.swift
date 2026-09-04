@@ -4,10 +4,9 @@ import Testing
 // Adversarial review of Validate. These tables go where the module's own
 // tests do not: every hidden scalar at every position, the exact byte
 // alphabets the parsers accept, every look-alike in the table, message
-// hygiene and determinism under fuzz, and the hostile forms the module still
-// lets through. Those last are wrapped in `withKnownIssue` so the suite stays
-// green; the day one stops failing the test fails, the cue to move it up
-// into a table.
+// hygiene and determinism under fuzz, and the hostile forms the module once
+// let through, kept under "Closed gaps" so they stay refused. A new gap goes
+// there wrapped in `withKnownIssue` until it is closed.
 
 private let qr = Limits.qr
 private let file = Limits.file
@@ -45,7 +44,8 @@ private let hiddenByReason: [(String, [UInt32])] = [
      [0x061C, 0x200E, 0x200F, 0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2066, 0x2067, 0x2068, 0x2069]),
     ("invisible character",
      [0x00AD, 0x034F, 0x180E, 0x200B, 0x200C, 0x200D, 0x2028, 0x2029, 0x2060, 0x2061, 0x2064, 0x206A, 0x206F,
-      0xFEFF, 0xFFF9, 0xFFFA, 0xFFFB, 0xE0001, 0xE0020, 0xE007F]),
+      0xFEFF, 0xFFF9, 0xFFFA, 0xFFFB, 0xE0001, 0xE0020, 0xE007F,
+      0x115F, 0x1160, 0x3164, 0xFFA0, 0x17B4, 0x180B, 0x180F, 0x1BCA0, 0x1D173, 0x13430, 0x2800]),
     ("unassigned or private-use character",
      [0x0378, 0xE000, 0xF8FF, 0xFDD0, 0xFFFE, 0xFFFF, 0xF0000, 0x10FFFD, 0x10FFFF]),
 ]
@@ -236,7 +236,7 @@ func pureScriptLookalikesPassAsText(s: String) {
     #expect(URLPolicy.verdict(for: "mailto:a@" + host255) == .reject("host over 253 bytes"))
 }
 
-@Test(arguments: ["xn--a", "XN--a", "Xn--a", "xN--a", "a.xn--b", "xn--b.a", "xn--80ak6aa92e.com", "xn--pple-43d.com"])
+@Test(arguments: ["xn--mnchen-3ya", "XN--MNCHEN-3YA", "Xn--Mnchen-3ya", "xN--mnchen-3YA", "a.xn--mnchen-3ya", "xn--mnchen-3ya.a", "xn--9ca", "xn--i-7iq"])
 func punycodeLabelsWarnInAnyCase(host: String) {
     #expect(Confusables.domainVerdict(host) == .warning("punycode host label"))
     #expect(URLPolicy.verdict(for: "https://" + host) == .warning("punycode host label"))
@@ -284,7 +284,7 @@ func punycodeShapesStillNeedValidLabels(host: String) {
         default: .ok
         }
         #expect(URLPolicy.verdict(for: url) == expected, "\(url)")
-        #expect(URLPolicy.verdict(for: "mailto:a@b?" + String(Unicode.Scalar(byte))) == expected, "\(url)")
+        #expect(URLPolicy.verdict(for: "mailto:a@b?subject=" + String(Unicode.Scalar(byte))) == expected, "\(url)")
     }
 }
 
@@ -294,7 +294,9 @@ func punycodeShapesStillNeedValidLabels(host: String) {
         let hexDigit = ("0"..."9").contains(c) || ("a"..."f").contains(c) || ("A"..."F").contains(c)
         let expected: Verdict = byte == UInt8(ascii: " ") ? .reject("whitespace") : hexDigit ? .ok : .reject("bad percent-encoding")
         #expect(URLPolicy.verdict(for: "https://x/%4" + c) == expected, "\(c)")
-        #expect(URLPolicy.verdict(for: "https://x/%" + c + "4") == expected, "\(c)")
+        // `%04` and `%14` are well-formed triplets that decode to controls.
+        let decoded: Verdict = c == "0" || c == "1" ? .reject("control character") : expected
+        #expect(URLPolicy.verdict(for: "https://x/%" + c + "4") == decoded, "\(c)")
     }
     #expect(URLPolicy.verdict(for: "https://x/%") == .reject("bad percent-encoding"))
     #expect(URLPolicy.verdict(for: "https://x/%4") == .reject("bad percent-encoding"))
@@ -353,7 +355,8 @@ func rejectsEveryOtherScheme(scheme: String) {
     ("https://example.com:00443", .ok),
     ("https://EXAMPLE.com:443/A%2f", .ok),
     ("HTTP://EXAMPLE.COM", .warning("not encrypted")),
-    ("http://xn--pple-43d.com/", .warning("punycode host label; not encrypted")),
+    ("http://xn--mnchen-3ya.de/", .warning("punycode host label; not encrypted")),
+    ("http://xn--pple-43d.com/", .reject("non-ASCII host, looks like “apple.com”")),
 ])
 func judgesTrickyWebForms(url: String, verdict: Verdict) {
     #expect(URLPolicy.verdict(for: url) == verdict)
@@ -373,7 +376,7 @@ func everyUnicodeSpaceIsWhitespaceInAURL(value: UInt32) {
 
 @Test(arguments: [
     ("mailto:a@b?", Verdict.ok),
-    ("mailto:a@b??", .ok),
+    ("mailto:a@b??", .reject("mailto header not allowed")),                    // a header named `?`
     ("mailto:a@b?subject=", .ok),
     ("mailto:a@b?subject=x&subject=y", .ok),
     ("mailto:A@B?SUBJECT=x", .ok),
@@ -479,23 +482,26 @@ func judgesTrickyAcct(url: String, verdict: Verdict) {
     ("?evil.com", .reject("empty host")),
     ("#evil.com", .reject("empty host")),
     (":443", .reject("empty host")),
-    ("example.com/path?next=https://evil.com", .reject("scheme in website")),   // `://` anywhere, even in a query
+    ("example.com/path?next=https://evil.com", .ok),                            // a URL in the query is not a scheme
+    ("localhost:8080", .ok),
+    ("localhost:abc", .reject("scheme in website")),
     ("example.com/%2e%2e/", .ok),
     ("example.com/<", .reject("invalid character in URL")),
     ("example.com/%zz", .reject("bad percent-encoding")),
-    ("2130706433", .ok),                                                          // see knownGapObfuscatedHosts
+    ("2130706433", .reject("IP address")),
 ])
 func judgesTrickyWebsites(s: String, verdict: Verdict) {
     #expect(FieldValidator.website(s, limits: qr) == verdict)
     #expect(FieldValidator.website(s, limits: file) == verdict)
 }
 
-/// A scheme in a website is refused whatever the reason given. The reason is
-/// not pinned: `javascript:` reads as host `javascript` and port `alert(1)`.
-@Test(arguments: ["javascript:alert(1)", "http:evil.com", "http:/evil.com", "data:text/html,x", "mailto:a@b", "tel:+1555", "file:/etc/passwd", "HTTPS:example.com"])
+/// A scheme in a website is named as such, even a bare one that the URL
+/// grammar would read as host `javascript` with port `alert(1)`.
+@Test(arguments: ["javascript:alert(1)", "http:evil.com", "http:/evil.com", "data:text/html,x", "mailto:a@b", "tel:+1555", "file:/etc/passwd",
+                  "HTTPS:example.com", "https://x", "//x", "a:b", "wiki:main/page"])
 func websiteRefusesAnyScheme(s: String) {
-    #expect(!FieldValidator.website(s, limits: qr).isAccepted)
-    #expect(!FieldValidator.website(s, limits: file).isAccepted)
+    #expect(FieldValidator.website(s, limits: qr) == .reject("scheme in website"))
+    #expect(FieldValidator.website(s, limits: file) == .reject("scheme in website"))
 }
 
 @Test func websiteCapIsBytesAndComesBeforeASCII() {
@@ -513,7 +519,7 @@ func websiteRefusesAnyScheme(s: String) {
     ("a/b/c/d/e/f/g", .ok),
     ("BLOOM", .ok),
     ("bloom@X.COM", .ok),
-    ("bloom@127.0.0.1", .ok),
+    ("bloom@127.0.0.1", .reject("IP address")),
     ("a/../b", .reject("invalid handle")),
     ("a/.b", .reject("invalid handle")),
     ("a//b", .reject("invalid handle")),
@@ -530,8 +536,12 @@ func websiteRefusesAnyScheme(s: String) {
     ("bloom@x@y", .reject("invalid host label")),
     ("bloom@x:80", .reject("invalid host label")),
     ("bloom@x/y", .reject("invalid host label")),
-    ("@bloom@x", .reject("invalid handle")),                                     // the pasted Mastodon form is not accepted
+    ("@bloom@x", .warning("leading @, use “bloom@x”")),                          // the pasted Mastodon form
+    ("@bloom@xn--mnchen-3ya.de", .warning("leading @, use “bloom@xn--mnchen-3ya.de”; punycode host label")),
     ("@bloom", .reject("invalid handle")),
+    ("@@x", .reject("invalid handle")),
+    ("@bloom@", .reject("empty host")),
+    ("@bl\u{43E}om@x", .reject("non-ASCII character, looks like “@bloom@x”")),
     ("bloom@", .reject("empty host")),
     ("a\u{0}", .reject("control character")),
 ])
@@ -557,7 +567,7 @@ func judgesTrickyHandles(s: String, verdict: Verdict) {
     ("a@b:25", .reject("invalid host label")),
     ("a@b/c", .reject("invalid host label")),
     ("a@[127.0.0.1]", .reject("invalid host label")),
-    ("a@127.0.0.1", .ok),
+    ("a@127.0.0.1", .reject("IP address")),
     ("a@localhost", .ok),
     ("a@b\u{2024}c", .reject("non-ASCII character, looks like “a@b.c”")),
     ("\u{FF41}@b", .reject("non-ASCII character, looks like “a@b”")),
@@ -580,7 +590,7 @@ func judgesTrickyEmails(s: String, verdict: Verdict) {
     ("+1\u{200B}555", .reject("invisible character")),
     ("+1\u{A0}555", .reject("non-ASCII character")),
     ("+1\u{FF15}55", .reject("non-ASCII character, looks like “+1555”")),
-    ("\u{2212}1555", .reject("non-ASCII character")),                           // minus sign is not a plus
+    ("\u{2212}1555", .reject("non-ASCII character, looks like “-1555”")),      // minus sign is not a plus
     ("+1555\r", .reject("control character")),
     (" +1555", .reject("not an E.164 number")),
     ("+1555 ", .reject("not an E.164 number")),
@@ -692,63 +702,155 @@ func judgesTrickyCustomValues(s: String, kind: CustomKind, verdict: Verdict) {
     #expect(FieldValidator.gpgKey(byteCount: 2, limits: tiny) == .reject("key over 1 bytes"))
 }
 
-// MARK: - Known gaps
+// MARK: - Closed gaps
 
-/// Default_Ignorable_Code_Point scalars outside the listed ranges render as
-/// nothing yet pass: the Hangul fillers (Lo), Khmer and Mongolian selectors
-/// (Mn), and the musical and shorthand format controls (Cf). The stdlib
-/// exposes `isDefaultIgnorableCodePoint`; variation selectors would need an
-/// exemption to keep emoji presentation.
+/// Default_Ignorable_Code_Point scalars outside the old hand-kept list
+/// render as nothing and are refused: the Hangul fillers (Lo), Khmer and
+/// Mongolian selectors (Mn), the musical and shorthand format controls (Cf),
+/// and the hieroglyph controls, Cf but not ignorable.
 @Test(arguments: [0x115F, 0x1160, 0x3164, 0xFFA0, 0x17B4, 0x17B5, 0x180B, 0x180F, 0x1BCA0, 0x1BCA3, 0x1D173, 0x1D17A, 0x13430] as [UInt32])
-func knownGapDefaultIgnorables(value: UInt32) {
-    withKnownIssue("\(hex(value)) is default-ignorable and passes TextCheck") {
-        #expect(!TextCheck.check("Jo" + u(value) + "hn", maxBytes: 64).isAccepted)
-    }
+func rejectsDefaultIgnorables(value: UInt32) {
+    #expect(TextCheck.check("Jo" + u(value) + "hn", maxBytes: 64) == .reject("invisible character"), "\(hex(value))")
+    #expect(URLPolicy.verdict(for: "https://example.com/" + u(value)) == .reject("invisible character"), "\(hex(value))")
+    #expect(FieldValidator.handle("jo" + u(value) + "hn", limits: qr) == .reject("invisible character"), "\(hex(value))")
 }
 
-/// A value with no visible base character is "empty" to the eye but not to
-/// the trim: marks, variation selectors and fillers alone are accepted.
-@Test(arguments: ["\u{FE0F}", "\u{301}", "\u{3164}", "\u{E0100}", String(repeating: "\u{FE0F}", count: 20), "\u{20DD}\u{20DD}"])
-func knownGapMarkOnlyValues(s: String) {
-    withKnownIssue("a value of marks alone passes as a name") {
-        #expect(!FieldValidator.name(s, limits: qr).isAccepted)
-    }
+/// The three invisibles with a job are allowed only where they do it. A
+/// variation selector follows a base; a ZWJ joins two pictographs, skin
+/// tone and presentation selector included; a ZWNJ parts two Arabic
+/// letters, a vowel mark on the first included.
+@Test(arguments: [
+    ("🏳\u{FE0F}\u{200D}🌈", Verdict.ok),
+    ("👨🏽\u{200D}👩🏽\u{200D}👧🏽\u{200D}👦🏽", .ok),
+    ("👁\u{FE0F}\u{200D}🗨\u{FE0F}", .ok),
+    ("\u{A9}\u{200D}\u{2122}", .ok),                                             // pictographs, if odd ones
+    ("\u{645}\u{6CC}\u{200C}\u{62E}\u{648}\u{627}\u{647}\u{645}", .ok),
+    ("\u{645}\u{650}\u{200C}\u{62E}", .ok),
+    ("\u{6A9}\u{200C}\u{6C1}", .ok),                                             // Urdu letters
+    ("\u{FB56}\u{200C}\u{FE8D}", .ok),                                           // presentation forms
+    ("a\u{200D}😀", .reject("invisible character")),
+    ("😀\u{200D}\u{200D}😀", .reject("invisible character")),
+    ("😀\u{FE0F}\u{200D}", .reject("invisible character")),
+    ("😀\u{200D}\u{FE0F}😀", .reject("invisible character")),
+    ("1\u{200D}2", .reject("invisible character")),                              // ASCII emoji are not pictographs
+    ("#\u{200D}#", .reject("invisible character")),
+    ("😀\u{200C}😀", .reject("invisible character")),                            // the joiners are not interchangeable
+    ("\u{645}\u{200D}\u{62E}", .reject("invisible character")),
+    ("\u{645}\u{200C}\u{200C}\u{62E}", .reject("invisible character")),
+    ("\u{645}\u{200C} \u{62E}", .reject("invisible character")),
+    ("\u{660}\u{200C}\u{62E}", .reject("invisible character")),                  // an Arabic digit is not a letter
+    ("\u{5D0}\u{200C}\u{5D1}", .reject("invisible character")),                  // Hebrew has no such rule
+    ("\u{915}\u{200D}\u{937}", .reject("invisible character")),                  // nor Devanagari, by design
+    ("\u{200D}", .reject("invisible character")),
+    ("a\u{3164}\u{FE0F}", .reject("invisible character")),                       // a filler is no base
+    ("a\u{FE0F}\u{E0100}", .reject("invisible character")),
+])
+func joinersAndSelectorsInContext(s: String, verdict: Verdict) {
+    #expect(TextCheck.check(s, maxBytes: 64) == verdict)
+    #expect(FieldValidator.customValue(s, kind: .text, limits: file) == verdict)
+    let inPath = URLPolicy.verdict(for: "https://example.com/" + s)
+    #expect(inPath == verdict, "in a path")
+    #expect(URLPolicy.verdict(for: "https://example.com/" + percentEncoded(s)) == verdict, "in a path, percent-encoded")
 }
 
-/// Numeric and hex host forms a browser resolves to an address are ASCII
-/// labels and pass, though `URLPolicy.web` says IP literals fail by design;
-/// an all-digit last label is never a public suffix (RFC 3696 §2).
-@Test(arguments: ["2130706433", "0x7f000001", "0177.0.0.1", "256.256.256.256", "example.123"])
-func knownGapObfuscatedHosts(host: String) {
-    withKnownIssue("\(host) is accepted as a tappable host") {
-        #expect(!URLPolicy.isTappable("https://" + host))
-    }
+private func percentEncoded(_ s: String) -> String {
+    s.utf8.map { byte in
+        let hex = String(byte, radix: 16, uppercase: true)
+        return "%" + (hex.count == 1 ? "0" + hex : hex)
+    }.joined()
+}
+
+/// A value with no visible base character is empty to the eye: marks alone
+/// read "empty", and a selector or filler alone is the invisible it is.
+@Test(arguments: [
+    ("\u{FE0F}", Verdict.reject("invisible character")),
+    ("\u{E0100}", .reject("invisible character")),
+    (String(repeating: "\u{FE0F}", count: 20), .reject("invisible character")),
+    ("\u{3164}", .reject("invisible character")),
+    ("\u{301}", .reject("empty")),
+    ("\u{20DD}\u{20DD}", .reject("empty")),
+    ("\u{301}\u{FE0F}", .reject("empty")),
+    (" \u{94B} ", .reject("empty")),                                              // a spacing mark
+])
+func rejectsValuesWithNoVisibleBase(s: String, verdict: Verdict) {
+    #expect(FieldValidator.name(s, limits: qr) == verdict)
+    #expect(FieldValidator.customValue(s, kind: .text, limits: file) == verdict)
+}
+
+/// Numeric and hex host forms a browser resolves to an address, and an
+/// all-digit last label (never a public suffix, RFC 3696 §2), are refused
+/// as addresses by every field that takes a host.
+@Test(arguments: ["2130706433", "0x7f000001", "0177.0.0.1", "256.256.256.256", "example.123", "127.0.0.1"])
+func rejectsObfuscatedHosts(host: String) {
+    #expect(URLPolicy.verdict(for: "https://" + host) == .reject("IP address"))
+    #expect(!URLPolicy.isTappable("https://" + host))
+    #expect(FieldValidator.website(host, limits: qr) == .reject("IP address"))
+    #expect(FieldValidator.website(host + "/path", limits: qr) == .reject("IP address"))
+    #expect(FieldValidator.email("a@" + host, limits: qr) == .reject("IP address"))
+    #expect(FieldValidator.handle("a@" + host, limits: qr) == .reject("IP address"))
+    #expect(FieldValidator.customValue("http://" + host, kind: .url, limits: qr) == .reject("IP address"))
 }
 
 /// RFC 6068 §3: `to`, `cc` and `bcc` header fields add recipients, so a
-/// link that reads as one address can prefill another.
-@Test(arguments: ["mailto:a@b?bcc=spy@evil.com", "mailto:a@b?to=spy@evil.com", "mailto:a@b?cc=spy@evil.com&subject=hi", "mailto:a@b?subject=x&BCC=spy@evil.com"])
-func knownGapMailtoRecipientHeaders(url: String) {
-    withKnownIssue("recipient headers in a mailto link are accepted") {
-        #expect(!URLPolicy.isTappable(url))
-    }
+/// link that reads as one address could prefill another. Only `subject` and
+/// `body` pass, in any case and any encoding; nothing else is a header.
+@Test(arguments: ["mailto:a@b?bcc=spy@evil.com", "mailto:a@b?to=spy@evil.com", "mailto:a@b?cc=spy@evil.com&subject=hi", "mailto:a@b?subject=x&BCC=spy@evil.com",
+                  "mailto:a@b?%62cc=x", "mailto:a@b?subject=x&=y", "mailto:a@b?in-reply-to=x", "mailto:a@b?subject%3Dx", "mailto:a@b?#bcc=x", "mailto:a@b?subject=x#&bcc=y"])
+func rejectsMailtoRecipientHeaders(url: String) {
+    #expect(URLPolicy.verdict(for: url) == .reject("mailto header not allowed"))
+    #expect(!URLPolicy.isTappable(url))
 }
 
-/// Percent-encoded control and bidi bytes are valid RFC 3986 and pass; a
-/// display layer that decodes the path for the user reintroduces them.
-@Test(arguments: ["https://example.com/%00", "https://example.com/%0D%0A", "https://example.com/%1B%5B31m", "https://example.com/%E2%80%AEexe.txt", "mailto:a@b?subject=%0D%0Abcc:x"])
-func knownGapPercentEncodedControls(url: String) {
-    withKnownIssue("percent-encoded controls are accepted") {
-        #expect(!URLPolicy.verdict(for: url).isAccepted)
-    }
+@Test(arguments: ["mailto:a@b?subject=x", "mailto:a@b?body=x", "mailto:a@b?Subject=x&BODY=y", "mailto:a@b?%53ubject=x", "mailto:a@b?subject=a=b&",
+                  "mailto:a@b?&&subject=x", "mailto:a@b?subject=x#frag", "mailto:a@b?body=to=x"])
+func allowsMailtoSubjectAndBody(url: String) {
+    #expect(URLPolicy.verdict(for: url) == .ok)
 }
 
-/// `xn--pple-43d.com` is `аpple.com`; decoding the label (RFC 3492) and
-/// running the skeleton on it would refuse it the way the raw form is.
-@Test func knownGapPunycodeHomographIsTappable() {
-    withKnownIssue("an IDN homograph in punycode is tappable with only a warning") {
-        #expect(!URLPolicy.isTappable("https://xn--pple-43d.com"))
-    }
+/// Percent-encoded control, bidi and invisible bytes are valid RFC 3986;
+/// decoded, they get the scan the raw text gets.
+@Test(arguments: [
+    ("https://example.com/%00", "control character"),
+    ("https://example.com/%0D%0A", "control character"),
+    ("https://example.com/%1B%5B31m", "control character"),
+    ("https://example.com/%E2%80%AEexe.txt", "bidirectional control character"),
+    ("https://example.com/?q=%E2%80%8B", "invisible character"),
+    ("https://example.com/#%EF%BB%BF", "invisible character"),
+    ("https://example.com/%E3%85%A4", "invisible character"),                  // Hangul filler
+    ("https://example.com/%F3%A0%80%81", "invisible character"),               // tag block
+    ("https://example.com/%E2%80%8D", "invisible character"),                  // a ZWJ with nothing to join
+    ("https://example.com/%EF%B8%8F%EF%B8%8F", "invisible character"),         // a selector on a selector
+    ("https://example.com/%EE%80%80", "unassigned or private-use character"),
+    ("mailto:a@b?subject=%0D%0Abcc:x", "control character"),
+    ("mailto:a@b?body=%E2%80%AE", "bidirectional control character"),
+    ("mailto:a@b?body=%0A", "control character"),
+])
+func rejectsPercentEncodedControls(url: String, reason: String) {
+    #expect(URLPolicy.verdict(for: url) == .reject(reason))
+}
+
+/// Encoded text that is fine raw is fine encoded: UTF-8, a space, a selector
+/// after the `/`, and bytes that are not UTF-8 at all (they decode to
+/// U+FFFD, a plain symbol).
+@Test(arguments: ["https://example.com/%C3%A9", "https://example.com/%FF%FE", "https://example.com/%20%2F%25", "https://example.com/%7e/%2e%2e",
+                  "https://example.com/%EF%B8%8F", "mailto:a@b?subject=%F0%9F%98%80&body=%20x"])
+func acceptsPercentEncodedText(url: String) {
+    #expect(URLPolicy.verdict(for: url) == .ok)
+}
+
+/// `xn--pple-43d.com` is `аpple.com`: the label is decoded (RFC 3492) and
+/// refused the way the raw form is, by every path that reaches a host.
+@Test func punycodeHomographIsNotTappable() {
+    let apple = Verdict.reject("non-ASCII host, looks like “apple.com”")
+    #expect(!URLPolicy.isTappable("https://xn--pple-43d.com"))
+    #expect(URLPolicy.verdict(for: "https://xn--pple-43d.com") == apple)
+    #expect(URLPolicy.verdict(for: "https://\u{430}pple.com") == apple)
+    #expect(URLPolicy.verdict(for: "mailto:a@xn--80ak6aa92e.com") == apple)
+    #expect(URLPolicy.verdict(for: "acct:a@xn--80ak6aa92e.com") == apple)
+    #expect(FieldValidator.website("xn--80ak6aa92e.com/path", limits: qr) == apple)
+    #expect(FieldValidator.email("a@xn--pple-43d.com", limits: qr) == apple)
+    #expect(FieldValidator.handle("a@xn--pple-43d.com", limits: qr) == apple)
+    #expect(URLPolicy.isTappable("https://xn--mnchen-3ya.de"))
 }
 
 // MARK: - Properties under fuzz
