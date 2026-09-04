@@ -1,0 +1,27 @@
+# Swift / Xcode
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+*.xcuserstate
+*.xcresult
+*.dSYM/
+*.ipa
+
+# Site
+node_modules/
+site/dist/
+
+# Secrets and signing material
+.env*
+*.p8
+*.p12
+*.cer
+*.mobileprovision
+*.keychain*
+infra/outputs*.json
+
+# OS
+.DS_Store

@@ -1,0 +1,15 @@
+Additional permission under GNU GPL version 3, section 7
+
+Hatband is distributed through Apple's App Store and TestFlight. Some of
+Apple's terms conflict with the GNU General Public License version 3. As
+copyright holder, David Emerson grants this additional permission:
+
+You may convey Hatband, in binary form signed by Apple, through the App
+Store and TestFlight notwithstanding that conflict. The copyright holder
+commits not to pursue any license violation that results solely from the
+conflict between GPLv3 and Apple's terms of service.
+
+If you modify this program you may extend this permission to your
+version, but you are not obliged to. Contributors accept the Developer
+Certificate of Origin (https://developercertificate.org) by signing off
+their commits.
