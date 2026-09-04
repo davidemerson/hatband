@@ -71,6 +71,13 @@ func generatesTheRequestedNumberOfWords(count: Int) {
     #expect(Passphrase.generate(words: count).split(separator: " ").count == count)
 }
 
+@Test func zeroWordsIsTheEmptyString() {
+    var rng = SplitMix64(state: 0)
+    #expect(Passphrase.generate(words: 0, using: &rng) == "")
+    #expect(Passphrase.generate(words: 0) == "")
+    #expect(Passphrase.generate(words: 1, using: &rng).split(separator: " ").count == 1, "the generator is untouched")
+}
+
 @Test func seededGeneratorIsReproducible() {
     var a = SplitMix64(state: 1904_06_16)
     var b = SplitMix64(state: 1904_06_16)

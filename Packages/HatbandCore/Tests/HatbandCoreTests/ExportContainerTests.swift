@@ -85,6 +85,7 @@ func roundTripsAnyPassphrase(passphrase: String) throws {
     #expect(ExportContainer.formatVersion == 1 && ExportContainer.kdfPBKDF2 == 1)
     #expect(ExportContainer.iterationRange == 100_000...10_000_000)
     #expect(ExportContainer.maxContainerSize == 32 * 1024 * 1024)
+    #expect(ExportContainer.maxPlaintextSize == 32 * 1024 * 1024 - 49 - 16)
 }
 
 @Test func sealingTwiceGivesUnrelatedContainers() throws {
@@ -184,6 +185,63 @@ func sealRejectsIterationsOutOfRange(count: Int) {
     #expect(throws: ExportError.iterationsOutOfRange) {
         try ExportContainer.seal(plaintext, passphrase: passphrase, iterations: count)
     }
+}
+
+@Test func sealRejectsOversizePlaintextBeforeTheKDF() {
+    let plaintext = [UInt8](repeating: 0, count: ExportContainer.maxPlaintextSize + 1)
+    let clock = ContinuousClock()
+    let elapsed = clock.measure {
+        #expect(throws: ExportError.tooLarge) {
+            try ExportContainer.seal(plaintext, passphrase: passphrase, iterations: iterations)
+        }
+    }
+    #expect(elapsed < .milliseconds(100), "\(elapsed)")
+    #expect(throws: ExportError.iterationsOutOfRange, "the iteration count is checked first") {
+        try ExportContainer.seal(plaintext, passphrase: passphrase, iterations: 1)
+    }
+}
+
+@Test func sealsAndOpensTheLargestPlaintext() throws {
+    // The bound is exact: the container just fits `maxContainerSize`.
+    let big = [UInt8](repeating: 0x5a, count: ExportContainer.maxPlaintextSize)
+    let container = try ExportContainer.seal(big, passphrase: passphrase, iterations: iterations)
+    #expect(container.count == ExportContainer.maxContainerSize)
+    #expect(try ExportContainer.open(container, passphrase: passphrase) == big)
+}
+
+@Test func nonMapInputIsRejectedWithoutDecoding() {
+    // The initial byte must open a definite map of under 24 entries;
+    // anything else is refused before the CBOR decoder runs, however large.
+    // A 32 MiB decode is about a second in debug, so the bound below shows
+    // none happened. The entry count itself is left to the decoder so that
+    // a later version with a different header can still say so.
+    let size = ExportContainer.maxContainerSize
+    let byteString: [UInt8] = [0x5a, 0x01, 0xff, 0xff, 0xfb] + [UInt8](repeating: 0, count: size - 5)
+    let array: [UInt8] = [0x9a, 0x01, 0xff, 0xff, 0xfb] + [UInt8](repeating: 0xf6, count: size - 5)
+    var wideMap: [UInt8] = [0xba, 0x00, 0x04, 0x00, 0x00]
+    for key in 0..<(1 << 18) {
+        wideMap += CBOR.unsigned(UInt64(key)).encoded
+        wideMap.append(0x00)
+    }
+    let cases: [(String, [UInt8])] = [
+        ("32 MiB byte string", byteString),
+        ("32 MiB array", array),
+        ("256K-entry map", wideMap),
+        ("24-entry map", [0xb8, 0x18] + sealed.dropFirst()),
+        ("indefinite map", [0xbf] + sealed.dropFirst() + [0xff]),
+        ("tagged", [0xd8, 0x2a] + sealed),
+        ("text", CBOR.text("hatband").encoded),
+        ("empty", []),
+    ]
+    let clock = ContinuousClock()
+    for (label, container) in cases {
+        let elapsed = clock.measure {
+            #expect(throws: ExportError.malformed, "\(label)") { try ExportContainer.open(container, passphrase: passphrase) }
+        }
+        #expect(elapsed < .milliseconds(50), "\(label) took \(elapsed)")
+    }
+    #expect(ExportContainer.mapInitialBytes == 0xa0...0xb7)
+    #expect(sealed.first == 0xa6)
 }
 
 @Test func everyTruncationIsMalformed() {

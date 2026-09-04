@@ -32,7 +32,8 @@ private func publicBytes(_ key: Curve25519.Signing.PrivateKey) -> [UInt8] {
     #expect(!CardSignature.verify(signature, for: [0], publicKey: publicBytes(key)))
 }
 
-@Test func signaturesAreRandomizedButAllVerify() throws {
+@Test func repeatedSignaturesAllVerify() throws {
+    // CryptoKit randomizes Ed25519, BoringSSL does not; neither is asserted.
     let key = Curve25519.Signing.PrivateKey()
     let a = try CardSignature.sign(message, with: key)
     let b = try CardSignature.sign(message, with: key)
@@ -140,4 +141,161 @@ func malformedSignatureLengthsFail(count: Int) throws {
         let bytes = (0..<Int.random(in: 0...40, using: &rng)).map { _ in UInt8.random(in: .min ... .max, using: &rng) }
         #expect(!CardSignature.verify(signature, for: bytes, publicKey: publicKey))
     }
+}
+
+// MARK: - Card signing
+
+private let personaID: [UInt8] = [1, 2, 3, 4, 5, 6, 7, 8]
+private let identity = try! Identity(seed: Array(UInt8(0)...31))
+
+/// Every field, no key or signature: what `signed(with:)` starts from.
+private func fullCard() -> Card {
+    var card = Card(personaID: personaID, issuedDay: 2438)
+    card.name = "Henry Flower"
+    card.company = "Freeman's Journal"
+    card.phone = "+353871234567"
+    card.email = "henry.flower@example.ie"
+    card.website = Website(address: "nnix.com/~bloom", insecure: true)
+    card.github = "lbloom"
+    card.linkedin = "leopold-bloom"
+    card.mastodon = "bloom@merveilles.town"
+    card.signal = .username([UInt8](repeating: 7, count: 48))
+    card.calendly = "bloom/coffee"
+    card.ssh = SSHKeyField(kind: 1, bytes: [UInt8](repeating: 9, count: 32))
+    card.gpgFingerprint = [UInt8](repeating: 0xab, count: 20)
+    card.custom = [CustomField(label: "Pub", value: "Davy Byrne's", kind: .text)]
+    card.color = 4
+    card.seq = 12
+    card.minReader = 1
+    card.photo = [0xff, 0xd8, 0xff, 0xe0]
+    card.gpgKey = [0x98, 0x33, 0x04]
+    return card
+}
+
+@Test func signedCardRoundTripsThroughAURL() throws {
+    let key = identity.personaSigningKey(index: 2)
+    var card = fullCard()
+    card.photo = nil
+    card.gpgKey = nil
+    let signed = try card.signed(with: key)
+    #expect(signed.isSigned && signed.signatureIsValid)
+    #expect(signed.publicKey == publicBytes(key))
+    let decoded = try HB1.decode(url: HB1.url(for: signed))
+    #expect(decoded == signed)
+    #expect(decoded.signatureIsValid)
+    #expect(decoded.signingBytes == signed.signingBytes)
+}
+
+@Test func signedCardRoundTripsThroughAFile() throws {
+    let key = identity.personaSigningKey(index: 2)
+    let signed = try fullCard().signed(with: key)
+    let decoded = try HB1.decode(file: HB1.fileBytes(for: signed))
+    #expect(decoded == signed)
+    #expect(decoded.signatureIsValid)
+    #expect(decoded.photo == signed.photo && decoded.gpgKey == signed.gpgKey, "heavy fields are under the signature")
+}
+
+@Test func tamperingWithAnyFieldInvalidatesTheSignature() throws {
+    let key = identity.personaSigningKey(index: 2)
+    let signed = try fullCard().signed(with: key)
+    let other = publicBytes(identity.personaSigningKey(index: 3))
+    let edits: [(String, (inout Card) -> Void)] = [
+        ("flags", { $0.flags.insert(.alias) }),
+        ("name", { $0.name = "Leopold Bloom" }),
+        ("name removed", { $0.name = nil }),
+        ("company", { $0.company = "Evening Telegraph" }),
+        ("phone", { $0.phone = "+353871234568" }),
+        ("email", { $0.email = "leopold.bloom@example.ie" }),
+        ("website address", { $0.website?.address = "nnix.com" }),
+        ("website scheme", { $0.website?.insecure = false }),
+        ("github", { $0.github = "hflower" }),
+        ("linkedin", { $0.linkedin = nil }),
+        ("mastodon", { $0.mastodon = "flower@merveilles.town" }),
+        ("signal", { $0.signal = .phone("+353871234567") }),
+        ("calendly", { $0.calendly = "flower/tea" }),
+        ("ssh kind", { $0.ssh?.kind = 2 }),
+        ("ssh bytes", { $0.ssh?.bytes[0] ^= 1 }),
+        ("gpg fingerprint", { $0.gpgFingerprint?[19] ^= 1 }),
+        ("custom value", { $0.custom[0].value = "Barney Kiernan's" }),
+        ("custom kind", { $0.custom[0].kind = .url }),
+        ("custom added", { $0.custom.append(CustomField(label: "Cat", value: "Pussens")) }),
+        ("public key", { $0.publicKey = other }),
+        ("signature", { $0.signature?[0] ^= 1 }),
+        ("persona id", { $0.personaID[7] ^= 1 }),
+        ("issued day", { $0.issuedDay += 1 }),
+        ("color", { $0.color = 5 }),
+        ("key fingerprint", { $0.keyFingerprint = [UInt8](repeating: 1, count: 8) }),
+        ("photo", { $0.photo?[3] ^= 1 }),
+        ("seq", { $0.seq += 1 }),
+        ("seq zeroed", { $0.seq = 0 }),
+        ("min reader", { $0.minReader = nil }),
+        ("gpg key", { $0.gpgKey?.append(0) }),
+    ]
+    for (label, edit) in edits {
+        var card = signed
+        edit(&card)
+        #expect(card != signed, "\(label)")
+        #expect(!card.signatureIsValid, "\(label)")
+        #expect(try card.signed(with: key).signatureIsValid, "\(label), re-signed")
+    }
+}
+
+@Test func compactTierFingerprintMatchesThePersonaKey() throws {
+    var profile = Profile()
+    profile.name = "Henry Flower"
+    profile.email = "henry.flower@example.ie"
+    let persona = Persona(id: personaID, label: "Flower", keyIndex: 5, channels: [.email], lockScreenChannels: [.email])
+    let publicKey = publicBytes(identity.personaSigningKey(index: persona.keyIndex))
+    let card = CardBuilder.card(profile: profile, persona: persona, form: .lockScreen, issuedDay: 2438)
+        .withKeyFingerprint(of: publicKey)
+    #expect(card.isCompact && !card.isSigned && !card.signatureIsValid)
+    let short = try #require(card.keyFingerprint)
+    #expect(short == KeyFingerprint(publicKey: publicKey)!.short)
+    #expect(short == Card.keyFingerprint(for: publicKey))
+    #expect(KeyFingerprint.matches(short: short, publicKey: publicKey))
+    #expect(!KeyFingerprint.matches(short: short, publicKey: publicBytes(identity.personaSigningKey(index: 6))))
+    let decoded = try HB1.decode(url: HB1.url(for: card))
+    #expect(decoded.keyFingerprint == short)
+    #expect(decoded.publicKey == nil && decoded.signature == nil)
+}
+
+@Test func keyFingerprintForRejectsEveryLengthButThirtyTwo() {
+    let publicKey = publicBytes(identity.personaSigningKey(index: 0))
+    #expect(Card.keyFingerprint(for: publicKey)?.count == 8)
+    for count in [0, 1, 8, 31, 33, 64] {
+        let bad = Array((publicKey + publicKey).prefix(count))
+        #expect(Card.keyFingerprint(for: bad) == nil, "\(count) bytes")
+        let cleared = fullCard().withKeyFingerprint(of: publicKey).withKeyFingerprint(of: bad)
+        #expect(cleared.keyFingerprint == nil, "\(count) bytes clears a stale fingerprint")
+    }
+}
+
+@Test func signedReplacesAStaleKeyAndSignature() throws {
+    let key = identity.personaSigningKey(index: 2)
+    var stale = try fullCard().signed(with: identity.personaSigningKey(index: 3))
+    stale.name = "Leopold Bloom"
+    #expect(!stale.signatureIsValid)
+    let signed = try stale.signed(with: key)
+    #expect(signed.publicKey == publicBytes(key))
+    #expect(signed.signatureIsValid)
+    #expect(try signed.signed(with: key).signatureIsValid, "signing a signed card is fine")
+}
+
+@Test func signatureIsValidNeedsBothKeyAndSignature() throws {
+    let key = identity.personaSigningKey(index: 2)
+    let signed = try fullCard().signed(with: key)
+    #expect(!fullCard().signatureIsValid)
+    var keyOnly = signed
+    keyOnly.signature = nil
+    #expect(!keyOnly.signatureIsValid && !keyOnly.isSigned)
+    var signatureOnly = signed
+    signatureOnly.publicKey = nil
+    #expect(!signatureOnly.signatureIsValid && !signatureOnly.isSigned)
+    var garbage = signed
+    garbage.signature = [UInt8](repeating: 3, count: 64)
+    #expect(garbage.isSigned && !garbage.signatureIsValid)
+    var smallOrder = signed
+    smallOrder.publicKey = [1] + [UInt8](repeating: 0, count: 31)
+    smallOrder.signature = [UInt8](repeating: 0, count: 64)
+    #expect(smallOrder.isSigned && !smallOrder.signatureIsValid)
 }

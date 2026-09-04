@@ -62,6 +62,26 @@ func rejectsSeedsThatAreNot32Bytes(count: Int) {
     #expect(identity == (try Identity(seed: seed)))
 }
 
+@Test func equalityIsExactInEveryBytePosition() throws {
+    // `==` is hand-written to run in constant time; it must still be `==`.
+    let a = try Identity(seed: seed)
+    #expect(a == (try Identity(seed: seed)))
+    #expect(!(a != (try Identity(seed: seed))))
+    for position in 0..<32 {
+        for mask: UInt8 in [0x01, 0x80] {
+            var other = seed
+            other[position] ^= mask
+            let b = try Identity(seed: other)
+            #expect(a != b, "position \(position)")
+            #expect(b != a, "position \(position)")
+        }
+    }
+    let zero = try Identity(seed: [UInt8](repeating: 0, count: 32))
+    #expect(zero == (try Identity(seed: [UInt8](repeating: 0, count: 32))))
+    #expect(zero != a)
+    #expect(Identity.generate() != Identity.generate())
+}
+
 @Test(arguments: signingVectors)
 func derivesSigningKeysMatchingIndependentVectors(index: UInt32, privateKey: String, publicKey: String) throws {
     let key = try Identity(seed: seed).personaSigningKey(index: index)

@@ -143,33 +143,78 @@ private let groupOrder = bytes("edd3f55c1a631258d69cf7a2def9de140000000000000000
     }
 }
 
-/// Canonical encodings of the identity and the points of order 2 and 4.
+/// The eight canonical encodings of the points whose order divides 8: the
+/// identity, the point of order 2, both of order 4 and the four of order 8.
+/// Derived in Tests/Fixtures/ed25519_small_order.py by multiplying a random
+/// curve point by L and enumerating the multiples of the result; they match
+/// libsodium's blocklist. Random keys there have order L, never dividing 8.
 private let smallOrderPoints: [[UInt8]] = [
     [1] + [UInt8](repeating: 0, count: 31),
     [0xec] + [UInt8](repeating: 0xff, count: 30) + [0x7f],
     [UInt8](repeating: 0, count: 32),
     [UInt8](repeating: 0, count: 31) + [0x80],
+    bytes("26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05"),
+    bytes("26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85"),
+    bytes("c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a"),
+    bytes("c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa"),
 ]
+private let zeroS = [UInt8](repeating: 0, count: 32)
 
-@Test func smallOrderPublicKeysAdmitUniversalForgeries() {
+@Test func smallOrderPublicKeysAreRejected() {
     // With A of small order and S = 0, [S]B = 0 = R + [k]A for some R in the
-    // same subgroup whatever the message, so anyone can "sign" for such a key.
-    // RFC 8032 does not require rejecting these keys and BoringSSL does not.
-    // Nobody is impersonated (the keys are nobody's), but a card carrying one
-    // would show as verified and anyone could issue signed updates for it.
-    // Known issue until `verify` rejects the eight small-order encodings.
-    let zeroS = [UInt8](repeating: 0, count: 32)
+    // same subgroup whatever the message, so anyone could "sign" for such a
+    // key: a card carrying one would show as verified and anyone could issue
+    // signed updates for it. RFC 8032 does not require rejecting these keys
+    // and BoringSSL does not; `verify` does, before the library sees the key,
+    // on every platform. Fingerprints stay indifferent: key 19 hashes bytes.
     let messages = [Array("Henry Flower".utf8), Array("Leopold Bloom".utf8), [], [0xff]]
-    withKnownIssue("swift-crypto accepts small-order public keys", isIntermittent: true) {
-        for publicKey in smallOrderPoints {
-            for message in messages {
-                let forgeries = smallOrderPoints.filter {
-                    CardSignature.verify($0 + zeroS, for: message, publicKey: publicKey)
-                }
-                #expect(forgeries.isEmpty, "key \(hex(publicKey.prefix(2))) forged with R \(forgeries.map { hex($0.prefix(2)) })")
+    for publicKey in smallOrderPoints {
+        #expect(!CardSignature.isAcceptablePublicKey(publicKey), "\(hex(publicKey))")
+        #expect(KeyFingerprint(publicKey: publicKey) != nil, "\(hex(publicKey))")
+        for message in messages {
+            let forgeries = smallOrderPoints.filter {
+                CardSignature.verify($0 + zeroS, for: message, publicKey: publicKey)
             }
+            #expect(forgeries.isEmpty, "key \(hex(publicKey.prefix(2))) forged with R \(forgeries.map { hex($0.prefix(2)) })")
         }
     }
+}
+
+@Test func nonCanonicalPublicKeysAreRejected() {
+    // RFC 8032 §5.1.3 step 1: y, the low 255 bits, must be below p. Values
+    // p...p + 18 and 2^255 - 1 still fit, and BoringSSL reduces rather than
+    // fails, so p + 1 would decode as the identity and p + 2 as y = 2.
+    let message = Array("Bloomsday".utf8)
+    for offset: UInt8 in 0...18 {
+        for sign: UInt8 in [0, 0x80] {
+            var key = CardSignature.fieldPrime
+            key[0] += offset
+            key[31] |= sign
+            #expect(!CardSignature.isAcceptablePublicKey(key), "\(hex(key))")
+            #expect(!CardSignature.verify(smallOrderPoints[0] + zeroS, for: message, publicKey: key), "\(hex(key))")
+        }
+    }
+    let top = [UInt8](repeating: 0xff, count: 31) + [0x7f]
+    #expect(!CardSignature.isAcceptablePublicKey(top))
+    #expect(!CardSignature.isAcceptablePublicKey(top.dropLast() + [0xff]))
+    #expect(CardSignature.fieldPrime == bytes("edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"))
+}
+
+@Test func honestPublicKeysAreAccepted() throws {
+    // The key check must never turn away a key anyone can actually hold.
+    let identity = try Identity(seed: seed)
+    for index: UInt32 in 0..<8 {
+        let publicKey = Array(identity.personaSigningKey(index: index).publicKey.rawRepresentation)
+        #expect(CardSignature.isAcceptablePublicKey(publicKey), "persona \(index)")
+    }
+    for _ in 0..<64 {
+        let key = Curve25519.Signing.PrivateKey()
+        let publicKey = Array(key.publicKey.rawRepresentation)
+        #expect(CardSignature.isAcceptablePublicKey(publicKey))
+        let signature = try CardSignature.sign([1, 2, 3], with: key)
+        #expect(CardSignature.verify(signature, for: [1, 2, 3], publicKey: publicKey))
+    }
+    #expect(CardSignature.isAcceptablePublicKey(referencePublicKey))
 }
 
 @Test func verifyRejectsEveryPublicKeyLengthButThirtyTwo() throws {
@@ -433,9 +478,15 @@ func matchesHashlibAtBoundaries(password: [UInt8], salt: [UInt8], iterations: In
     #expect(Passphrase.generate(words: 3, using: &both) == "abacus zoom abacus")
 }
 
-@Test func zeroWordsTraps() async {
+@Test func zeroWordsIsTheEmptyPassphrase() {
+    var rng = ScriptedRNG(values: [])
+    #expect(Passphrase.generate(words: 0, using: &rng) == "")
+    #expect(Passphrase.generate(words: 0) == "")
+}
+
+@Test func negativeWordsTrap() async {
     await #expect(processExitsWith: .failure) {
-        _ = Passphrase.generate(words: 0)
+        _ = Passphrase.generate(words: -1)
     }
 }
 
@@ -470,12 +521,18 @@ func matchesHashlibAtBoundaries(password: [UInt8], salt: [UInt8], iterations: In
 }
 
 @Test func signingBeforeSettingThePublicKeyDoesNotVerify() throws {
-    // `signingBytes` covers key 14 and `withSignature` sets it, so the key
-    // must be in the card before signing. Nothing enforces the order.
+    // `signingBytes` covers key 14 and `withSignature` sets it, so a card
+    // signed before it carried the key never verifies. `signed(with:)` fixes
+    // the order; `withSignature` only re-attaches a signature to the bytes
+    // it was made over.
     let key = try Identity(seed: seed).personaSigningKey(index: 2)
     let publicKey = Array(key.publicKey.rawRepresentation)
     let card = Card(personaID: [1, 2, 3, 4, 5, 6, 7, 8], issuedDay: 2438)
-    let signature = try CardSignature.sign(card.signingBytes, with: key)
-    let signed = card.withSignature(signature, publicKey: publicKey)
-    #expect(!CardSignature.verify(signature, for: signed.signingBytes, publicKey: publicKey))
+    let trap = card.withSignature(try CardSignature.sign(card.signingBytes, with: key), publicKey: publicKey)
+    #expect(!trap.signatureIsValid)
+    let signed = try card.signed(with: key)
+    #expect(signed.signatureIsValid)
+    #expect(signed.publicKey == publicKey)
+    #expect(signed.signingBytes != card.signingBytes, "the key is under the signature")
+    #expect(signed.withSignature(try #require(signed.signature), publicKey: publicKey) == signed)
 }

@@ -95,6 +95,19 @@ func rejectsKeysThatAreNot32Bytes(count: Int) {
     #expect(shorts.count == 256)
 }
 
+@Test func fingerprintsAreIndifferentToSmallOrderKeys() {
+    // Key 19 hashes whatever bytes it is given; whether a key can sign is
+    // `CardSignature.verify`'s business, and the two must not be coupled.
+    let identity = [1] + [UInt8](repeating: 0, count: 31)
+    let orderTwo = [0xec] + [UInt8](repeating: 0xff, count: 30) + [0x7f]
+    let orderFour = [UInt8](repeating: 0, count: 32)
+    for key in [identity, orderTwo, orderFour] {
+        #expect(KeyFingerprint(publicKey: key)?.full.count == 32)
+        #expect(KeyFingerprint.matches(short: KeyFingerprint(publicKey: key)!.short, publicKey: key))
+        #expect(!CardSignature.isAcceptablePublicKey(key))
+    }
+}
+
 @Test func personaFingerprintsAreStableAcrossDerivations() throws {
     let identity = try Identity(seed: Array(UInt8(0)...31))
     let a = KeyFingerprint(publicKey: identity.personaSigningKey(index: 5).publicKey)

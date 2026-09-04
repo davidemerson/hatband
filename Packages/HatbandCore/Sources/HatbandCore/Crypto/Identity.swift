@@ -44,6 +44,16 @@ public struct Identity: Sendable, Equatable {
 
     static let salt = Array("hatband".utf8)
 
+    /// Constant time: every byte is compared and the result accumulated, so
+    /// the time taken never depends on where two seeds first differ.
+    public static func == (lhs: Identity, rhs: Identity) -> Bool {
+        var difference: UInt8 = 0
+        for i in 0..<seedLength {
+            difference |= lhs.seed[i] ^ rhs.seed[i]
+        }
+        return difference == 0
+    }
+
     private init(validated seed: [UInt8]) {
         self.seed = seed
     }

@@ -7,10 +7,10 @@ public enum Passphrase {
     public static let defaultWords = 6
 
     /// `words` words joined by single spaces, each drawn uniformly from the
-    /// list (`Int.random` rejects rather than biases). `words` must be
-    /// positive.
+    /// list (`Int.random` rejects rather than biases). Zero words is the
+    /// empty string; a negative count is a programming error.
     public static func generate(words: Int = defaultWords, using rng: inout some RandomNumberGenerator) -> String {
-        precondition(words > 0, "a passphrase needs at least one word")
+        precondition(words >= 0, "a passphrase cannot have a negative number of words")
         var out: [String] = []
         out.reserveCapacity(words)
         for _ in 0..<words {

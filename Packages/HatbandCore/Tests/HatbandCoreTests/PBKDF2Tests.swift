@@ -101,14 +101,10 @@ func matchesPublishedVectors(password: String, salt: String, iterations: Int, ke
 }
 
 /// The export default. Measured here: 0.4 s optimized, 1.2 s debug alone,
-/// about 2 s debug with the rest of the suite running. Debug builds also run
-/// swift-crypto unoptimized, hence the slack.
-@Test func sixHundredThousandIterationsCompleteQuickly() {
-    #if DEBUG
-    let limit: Duration = .seconds(6)
-    #else
-    let limit: Duration = .seconds(3)
-    #endif
+/// about 2 s debug with the rest of the suite running. The figure is printed
+/// for the log; the ceiling only catches a runaway, since a shared CI core
+/// can be many times slower and a tight bound would flake.
+@Test func sixHundredThousandIterationsCompleteWithinTheCeiling() {
     let clock = ContinuousClock()
     var key: [UInt8] = []
     let elapsed = clock.measure {
@@ -117,5 +113,5 @@ func matchesPublishedVectors(password: String, salt: String, iterations: Int, ke
     }
     print("PBKDF2-HMAC-SHA256, 600000 iterations, 32 bytes: \(elapsed)")
     #expect(key.count == 32)
-    #expect(elapsed < limit)
+    #expect(elapsed < .seconds(30), "\(elapsed)")
 }
