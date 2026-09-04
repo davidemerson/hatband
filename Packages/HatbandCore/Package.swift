@@ -22,5 +22,10 @@ let package = Package(
             name: "HatbandCoreTests",
             dependencies: ["HatbandCore"]
         ),
+        // Writes spec/vectors/cards.json; run through scripts/gen-vectors.sh.
+        .executableTarget(
+            name: "hatband-vectors",
+            dependencies: ["HatbandCore"]
+        ),
     ]
 )
