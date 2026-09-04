@@ -13,7 +13,9 @@ jobs:
       - run: apt-get update -q && apt-get install -y -q zbar-tools
       - run: swift test --package-path Packages/HatbandCore
       - name: vectors are current
-        run: ./scripts/gen-vectors.sh && git diff --exit-code -- spec/vectors
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          ./scripts/gen-vectors.sh && git diff --exit-code -- spec/vectors
   macos:
     runs-on: macos-26
     steps:
