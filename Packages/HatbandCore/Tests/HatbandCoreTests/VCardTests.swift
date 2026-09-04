@@ -268,12 +268,56 @@ private let badVCards: [(String, VCard.Error)] = [
     ("BEGIN:VCARD\r\nVERSION:2.1\r\nFN:x\r\nEND:VCARD\r\n", .unsupportedVersion("2.1")),
     ("BEGIN:VCARD\r\nVERSION:4.0\r\nEND:VCARD\r\n", .unsupportedVersion("4.0")),
     ("BEGIN:VCARD\r\nVERSION:3.0\r\nno colon here\r\nEND:VCARD\r\n", .malformedLine("no colon here")),
-    ("BEGIN:VCARD\r\nVERSION:3.0\r\nPHOTO;ENCODING=b;TYPE=JPEG:not*base64\r\nEND:VCARD\r\n", .invalidPhoto),
+    ("BEGIN:VCARD\r\nVERSION:3.0\r\nFN;X=\"a:b\r\nEND:VCARD\r\n", .malformedLine("FN;X=\"a:b")),
 ]
 
 @Test(arguments: badVCards)
 func rejectsBadInput(text: String, error: VCard.Error) {
     #expect(throws: error) { try VCard.parseBasic(text) }
+}
+
+@Test func skipsPhotosThatAreNotInlineBase64() throws {
+    func card(_ photo: String) throws -> VCard {
+        try VCard.parseBasic("BEGIN:VCARD\r\nVERSION:3.0\r\nFN:x\r\n" + photo + "\r\nEND:VCARD\r\n")
+    }
+    // A reference, even one that happens to be base64, is not a photo.
+    #expect(try card("PHOTO;VALUE=uri:https://nnix.com/bloom.jpg").photoJPEG == nil)
+    #expect(try card("PHOTO;value=\"uri\";type=jpeg:AAAA").photoJPEG == nil)
+    #expect(try card("PHOTO;TYPE=JPEG;VALUE=URI:AAAA").photoJPEG == nil)
+    // Malformed data is skipped rather than refused; the rest of the card is read.
+    #expect(try card("PHOTO;ENCODING=b;TYPE=JPEG:not*base64").photoJPEG == nil)
+    #expect(try card("PHOTO;ENCODING=b:").photoJPEG == [])
+    #expect(try card("PHOTO;ENCODING=b;TYPE=JPEG:AAAA").photoJPEG == [0, 0, 0])
+    #expect(try card("PHOTO;VALUE=uri:https://nnix.com/bloom.jpg").formattedName == "x")
+}
+
+@Test func splitsAtTheFirstColonOutsideQuotes() throws {
+    // RFC 2426 §4: a quoted parameter value may hold a colon.
+    let text = "BEGIN:VCARD\r\nVERSION:3.0\r\nitem1.URL;X-Q=\"a:b\":https://nnix.com/a:b\r\nitem1.X-ABLabel:Web\r\n"
+        + "TEL;TYPE=\"cell:x\";TYPE=pref:+1\r\nFN;X-Q=\"\":Leopold\r\nEND:VCARD\r\n"
+    let card = try VCard.parseBasic(text)
+    #expect(card.links == [VCard.Link(label: "Web", url: "https://nnix.com/a:b")])
+    #expect(card.phone == "+1")
+    #expect(card.formattedName == "Leopold")
+    #expect(VCard.splitProperty("N;X=\"a:b\":c:d")?.head == "N;X=\"a:b\"")
+    #expect(VCard.splitProperty("N;X=\"a:b\":c:d")?.value == "c:d")
+    #expect(VCard.splitProperty("N:")?.head == "N")
+    #expect(VCard.splitProperty("N:")?.value == "")
+    #expect(VCard.splitProperty("FN;X=\"a:b") == nil)
+    #expect(VCard.splitProperty("no colon") == nil)
+}
+
+@Test func escapeDropsControlsButKeepsTabs() throws {
+    #expect(VCard.escape("a\u{0}b\u{1b}c\u{0b}d\u{0c}e\u{7f}f") == "abcdef")
+    #expect(VCard.escape("\u{1}\u{1f}") == "")
+    #expect(VCard.escape("a\tb c") == "a\tb c")
+    #expect(VCard.escape("a\u{1b}[31m,b\n") == "a[31m\\,b\\n")
+    var card = VCard(formattedName: "Leo\u{0}pold\u{1b}[0m Bloom")
+    card.note = "tab\tkept\u{7f}"
+    let parsed = try VCard.parseBasic(card.text)
+    #expect(parsed.formattedName == "Leopold[0m Bloom")
+    #expect(parsed.givenName == "Leopold[0m")
+    #expect(parsed.note == "tab\tkept")
 }
 
 @Test func unescapesLeniently() {

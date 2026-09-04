@@ -35,8 +35,9 @@ public enum CanonicalURI {
     }
 
     /// The WebFinger account URI and the profile page. Nil when the stored
-    /// form has no `@`.
+    /// form has no `@`; a leading `@` is tolerated.
     public static func mastodon(_ handle: String) -> (account: String, profile: String)? {
+        let handle = Substring(handle).droppingPrefix("@")
         guard let at = handle.lastIndex(of: "@"), at != handle.startIndex, handle.index(after: at) != handle.endIndex
         else { return nil }
         let user = handle[..<at]
@@ -135,11 +136,16 @@ public enum Normalize {
     }
 
     /// Bare host, `host/path`, or an http(s) URL. The scheme goes into the
-    /// flag, the host is lowercased, the path and query are kept as typed.
+    /// flag, the host is lowercased and may be an IDN, the port is 1 to 65535
+    /// without leading zeros. The path, query and fragment are kept as typed
+    /// but must be ASCII with the RFC 3986 delimiters that need
+    /// percent-encoding (space, `<>"\^{|}` and the backtick) already encoded.
+    /// Unicode format characters (U+200B, U+202E, U+FEFF and kin) are refused
+    /// anywhere.
     public static func website(_ input: String) throws -> (address: String, insecure: Bool) {
         let text = Substring(input.trimmed())
         guard !text.isEmpty else { throw Error.empty }
-        for ch in text where ch.isWhitespace || ch.isControl { throw Error.invalidCharacter(ch) }
+        for ch in text where ch.isWhitespace || ch.isControl || ch.isFormat { throw Error.invalidCharacter(ch) }
         let pasted = Pasted(text)
         var insecure = false
         switch pasted.scheme {
@@ -152,19 +158,22 @@ public enum Normalize {
         var port = ""
         if let colon = hostPart.lastIndex(of: ":") {
             let digits = hostPart[hostPart.index(after: colon)...]
-            guard !digits.isEmpty, digits.count <= 5, digits.allSatisfy(\.isASCIIDigit),
+            guard (1...5).contains(digits.count), digits.first != "0", digits.allSatisfy(\.isASCIIDigit),
                   let number = Int(digits), number <= 65535
             else { throw Error.invalidHost }
-            port = ":" + String(number)
+            port = ":" + digits
             hostPart = hostPart[..<colon]
         }
         guard let host = Hostname.normalized(hostPart) else { throw Error.invalidHost }
+        for ch in pasted.rest where !ch.isASCII || pathUnsafe.contains(ch) { throw Error.invalidCharacter(ch) }
         let rest = pasted.rest == "/" ? "" : pasted.rest
         return (host + port + rest, insecure)
     }
 
     /// `@user`, `user`, or a github.com profile URL. Usernames are 1 to 39
-    /// letters, digits and hyphens, not starting or ending with a hyphen.
+    /// letters, digits and single hyphens, not starting or ending with one.
+    /// A URL whose first segment is a reserved site path (`orgs`, `settings`,
+    /// `login`, ...) is not a profile.
     public static func github(_ input: String) throws -> String {
         let text = Substring(input.trimmed()).droppingPrefix("@")
         guard !text.isEmpty else { throw Error.empty }
@@ -172,17 +181,19 @@ public enum Normalize {
         if text.contains("/") || text.lowercased().contains("github.com") {
             let pasted = try Pasted(text, hosts: ["github.com", "www.github.com"])
             guard let first = pasted.pathSegments.first else { throw Error.invalidPath }
+            guard !githubReserved.contains(first.lowercased()) else { throw Error.invalidPath }
             user = first
         }
         guard user.count <= 39 else { throw Error.tooLong }
-        guard !user.isEmpty, user.first != "-", user.last != "-",
+        guard !user.isEmpty, user.first != "-", user.last != "-", !user.contains("--"),
               user.allSatisfy({ $0.isASCIIAlphanumeric || $0 == "-" })
         else { throw Error.invalidUsername }
         return String(user)
     }
 
     /// A slug, `in/<slug>`, `company/<slug>`, or any linkedin.com URL
-    /// including locale subdomains. Stored as the slug, or `company/<slug>`.
+    /// including locale subdomains and the mobile `mwlite/in/<slug>` path.
+    /// Stored as the slug, or `company/<slug>`.
     public static func linkedin(_ input: String) throws -> String {
         let text = Substring(input.trimmed()).droppingPrefix("@")
         guard !text.isEmpty else { throw Error.empty }
@@ -190,12 +201,13 @@ public enum Normalize {
         var slug = text
         let lower = text.lowercased()
         var segments: [Substring]?
-        if lower.hasPrefix("in/") || lower.hasPrefix("company/") {
+        if lower.hasPrefix("in/") || lower.hasPrefix("company/") || lower.hasPrefix("mwlite/") {
             segments = Pasted.segments(of: text)
         } else if text.contains("/") || lower.contains("linkedin.com") {
             segments = try Pasted(text, hosts: ["linkedin.com"], subdomains: true).pathSegments
         }
-        if let segments {
+        if var segments {
+            if segments.first?.lowercased() == "mwlite" { segments.removeFirst() }
             guard segments.count >= 2 else { throw Error.invalidPath }
             kind = segments[0].lowercased()
             guard kind == "in" || kind == "company" else { throw Error.invalidPath }
@@ -210,7 +222,8 @@ public enum Normalize {
     }
 
     /// `@user@instance`, `user@instance`, `https://instance/@user` or
-    /// `https://instance/users/user`. Stored as `user@instance`.
+    /// `https://instance/users/user`, with or without a trailing slash.
+    /// Stored as `user@instance`.
     public static func mastodon(_ input: String) throws -> String {
         let text = Substring(input.trimmed()).droppingPrefix("@")
         guard !text.isEmpty else { throw Error.empty }
@@ -260,8 +273,8 @@ public enum Normalize {
         return segments.joined(separator: "/")
     }
 
-    /// 40 hex digits (v4) or 64 (v5/v6), with any spaces or colons, and an
-    /// optional `0x` or `OPENPGP4FPR:` prefix.
+    /// 40 ASCII hex digits (v4) or 64 (v5/v6), with any spaces or colons, and
+    /// an optional `0x` or `OPENPGP4FPR:` prefix.
     public static func gpgFingerprint(_ input: String) throws -> GPGFingerprint {
         var text = Substring(input.trimmed())
         text = text.droppingPrefix("OPENPGP4FPR:", caseInsensitive: true).trimmed()
@@ -269,7 +282,8 @@ public enum Normalize {
         var nibbles: [UInt8] = []
         for ch in text {
             if ch.isWhitespace || ch == ":" { continue }
-            guard let value = ch.hexDigitValue else { throw Error.invalidCharacter(ch) }
+            // `hexDigitValue` also reads fullwidth forms; only ASCII counts.
+            guard ch.isASCII, let value = ch.hexDigitValue else { throw Error.invalidCharacter(ch) }
             nibbles.append(UInt8(value))
         }
         guard !nibbles.isEmpty else { throw Error.empty }
@@ -284,6 +298,15 @@ public enum Normalize {
 
     private static let phoneFormatting: Set<Character> = ["-", "\u{2010}", "\u{2011}", "\u{2012}", "\u{2013}", "\u{2014}", "\u{2212}", ".", "(", ")"]
     private static let atextSymbols: Set<Character> = ["!", "#", "$", "%", "&", "'", "*", "+", "-", "/", "=", "?", "^", "_", "`", "{", "|", "}", "~", "."]
+    /// Neither `pchar` nor a query/fragment character in RFC 3986 §3.3-3.5;
+    /// whitespace is refused earlier.
+    private static let pathUnsafe: Set<Character> = ["<", ">", "\"", "\\", "^", "`", "{", "|", "}"]
+    /// First path segments github.com uses for itself, not for profiles.
+    private static let githubReserved: Set<String> = [
+        "orgs", "settings", "login", "join", "marketplace", "explore", "topics", "features", "about", "pricing",
+        "apps", "sponsors", "notifications", "new", "site", "security", "enterprise", "team", "collections",
+        "events", "trending", "search", "issues", "pulls", "codespaces", "dashboard", "account", "sessions",
+    ]
 }
 
 // MARK: - Signal
@@ -433,10 +456,13 @@ struct Pasted {
             let tail = text[text.index(after: colon)...]
             let looksLikeScheme = head.first?.isLetter == true
                 && head.allSatisfy({ $0.isASCIIAlphanumeric || $0 == "+" || $0 == "-" || $0 == "." })
+            // `localhost:8080/x` is a host and port, not a scheme.
+            let port = tail.prefix { $0 != "/" && $0 != "?" && $0 != "#" }
+            let looksLikePort = !port.isEmpty && port.allSatisfy(\.isASCIIDigit)
             if looksLikeScheme, tail.hasPrefix("//") {
                 scheme = head.lowercased()
                 remainder = tail.dropFirst(2)
-            } else if looksLikeScheme, !head.contains("."), !tail.isEmpty, !tail.allSatisfy(\.isASCIIDigit) {
+            } else if looksLikeScheme, !head.contains("."), !tail.isEmpty, !looksLikePort {
                 scheme = head.lowercased()
                 remainder = tail
             }
@@ -504,6 +530,11 @@ extension Character {
     var isASCIIAlphanumeric: Bool { isASCII && (isLetter || isNumber) }
     var isControl: Bool {
         unicodeScalars.contains { $0.properties.generalCategory == .control }
+    }
+    /// Carries a Cf scalar: zero-width spaces, bidi overrides, a BOM, or a
+    /// joiner fused to the preceding letter.
+    var isFormat: Bool {
+        unicodeScalars.contains { $0.properties.generalCategory == .format }
     }
 }
 

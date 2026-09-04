@@ -66,6 +66,9 @@ public struct SSHPublicKey: Sendable, Hashable {
     public enum Error: Swift.Error, Equatable, Sendable {
         case malformedLine
         case invalidBase64
+        /// An authorized_keys options field precedes the type; options are
+        /// recognised the way sshd skips them, and refused.
+        case optionsNotSupported
         case unsupportedType(String)
         /// FIDO keys need the authenticator; a card cannot vouch for one.
         case securityKey(String)
@@ -91,8 +94,8 @@ public struct SSHPublicKey: Sendable, Hashable {
 
     // MARK: Parsing
 
-    /// An authorized_keys line: `<type> <base64> [comment]`. Options before
-    /// the type are not accepted.
+    /// An authorized_keys line: `<type> <base64> [comment]`. A leading
+    /// options field (`no-pty,command="..." ssh-ed25519 ...`) is refused.
     public init(line: String) throws {
         let text = line.trimmed()
         guard !text.isEmpty, !text.contains(where: \.isNewline) else { throw Error.malformedLine }
@@ -100,11 +103,34 @@ public struct SSHPublicKey: Sendable, Hashable {
         guard fields.count >= 2 else { throw Error.malformedLine }
         let typeName = String(fields[0])
         guard let kind = Kind(typeName: typeName) else {
-            throw typeName.hasPrefix("sk-") ? Error.securityKey(typeName) : Error.unsupportedType(typeName)
+            if typeName.hasPrefix("sk-") { throw Error.securityKey(typeName) }
+            throw Self.startsWithKeyType(Self.afterOptions(text)) ? Error.optionsNotSupported : Error.unsupportedType(typeName)
         }
         guard let blob = try? Base64.decode(fields[1]) else { throw Error.invalidBase64 }
         try self.init(blob: blob, comment: fields.count == 3 ? String(fields[2].trimmed()) : nil)
         guard self.kind == kind else { throw Error.typeMismatch }
+    }
+
+    /// What follows one options field, skipped as sshd does: up to
+    /// whitespace, except inside double quotes, where `\"` is a literal.
+    private static func afterOptions(_ text: Substring) -> Substring {
+        var quoted = false
+        var index = text.startIndex
+        while index < text.endIndex, quoted || !text[index].isWhitespace {
+            let next = text.index(after: index)
+            if text[index] == "\\", next < text.endIndex, text[next] == "\"" {
+                index = next
+            } else if text[index] == "\"" {
+                quoted.toggle()
+            }
+            index = text.index(after: index)
+        }
+        return text[index...].drop(while: \.isWhitespace)
+    }
+
+    private static func startsWithKeyType(_ text: Substring) -> Bool {
+        let name = text.prefix { !$0.isWhitespace }
+        return Kind(typeName: String(name)) != nil || name.hasPrefix("sk-")
     }
 
     /// Decodes a wire blob and checks the key material is well formed.
@@ -197,26 +223,32 @@ public struct SSHPublicKey: Sendable, Hashable {
         Base64.encode(blob)
     }
 
-    /// `<type> <base64> [comment]`. Control characters in the comment are
-    /// dropped so a hostile name cannot inject a second line.
+    /// `<type> <base64> [comment]`. Controls and line breaks in the comment
+    /// are dropped so a hostile name cannot inject a second line, and the
+    /// result always re-parses with `init(line:)`.
     public func authorizedKeysLine(comment: String? = nil) -> String {
         var line = kind.typeName + " " + base64
-        if let comment = (comment ?? self.comment).map(Self.stripControls), !comment.isEmpty {
+        if let comment = (comment ?? self.comment).map(Self.oneLine), !comment.isEmpty {
             line += " " + comment
         }
         return line
     }
 
     /// A git `gpg.ssh.allowedSignersFile` entry: the principal (an email),
-    /// the namespace restriction, and the key.
+    /// the namespace restriction, and the key. A principal with nothing left
+    /// after sanitising becomes `*`, the OpenSSH wildcard, so the line stays
+    /// well formed.
     public func allowedSignersLine(principal: String, namespace: String = "git") -> String {
-        let principal = Self.stripControls(principal).filter { !$0.isWhitespace && $0 != "," }
-        let namespace = Self.stripControls(namespace).filter { !$0.isWhitespace && $0 != "\"" }
+        var principal = Self.oneLine(principal).filter { !$0.isWhitespace && $0 != "," }
+        if principal.isEmpty { principal = "*" }
+        let namespace = Self.oneLine(namespace).filter { !$0.isWhitespace && $0 != "\"" }
         return "\(principal) namespaces=\"\(namespace)\" \(kind.typeName) \(base64)"
     }
 
-    private static func stripControls(_ text: String) -> String {
-        text.filter { !$0.isControl }
+    /// Drops controls and everything `isNewline` matches, including U+2028
+    /// and U+2029, which are not controls but which `init(line:)` refuses.
+    private static func oneLine(_ text: String) -> String {
+        text.filter { !$0.isControl && !$0.isNewline }
     }
 
     // MARK: Randomart
@@ -250,7 +282,9 @@ public struct SSHPublicKey: Sendable, Hashable {
         field[x][y] = symbols.count - 1
 
         func border(_ text: String) -> String {
-            let label = text.count <= width ? text : ""
+            // OpenSSH formats the label into a 17-byte buffer, so at most 16
+            // characters fit; a longer one is dropped.
+            let label = text.count < width ? text : ""
             let lead = (width - label.count) / 2
             return "+" + String(repeating: "-", count: lead) + label
                 + String(repeating: "-", count: width - lead - label.count) + "+"

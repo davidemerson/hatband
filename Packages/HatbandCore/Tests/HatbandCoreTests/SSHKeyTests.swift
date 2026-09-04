@@ -198,6 +198,10 @@ func inlineMaterialMatchesKind(index: Int) throws {
     #expect(key.allowedSignersLine(principal: "bloom@nnix.com", namespace: "file") == "bloom@nnix.com namespaces=\"file\" ssh-ed25519 \(base64)")
     // A hostile principal cannot add a second principal or break the line.
     #expect(key.allowedSignersLine(principal: "a@x.ie,*\n b@x.ie", namespace: "git\" x=\"y") == "a@x.ie*b@x.ie namespaces=\"gitx=y\" ssh-ed25519 \(base64)")
+    // Nothing left of the principal: the OpenSSH wildcard keeps the line well formed.
+    for principal in ["", ",", " \n\u{2028}", "\u{0}\u{7f}"] {
+        #expect(key.allowedSignersLine(principal: principal) == "* namespaces=\"git\" ssh-ed25519 \(base64)")
+    }
 }
 
 @Test func commentsCannotInjectLines() throws {
@@ -207,6 +211,11 @@ func inlineMaterialMatchesKind(index: Int) throws {
     #expect(key.authorizedKeysLine(comment: "x\nssh-rsa AAAA evil\r\u{0}") == "ssh-ed25519 \(base64) xssh-rsa AAAA evil")
     #expect(key.authorizedKeysLine(comment: "\n") == "ssh-ed25519 \(base64)")
     #expect(key.authorizedKeysLine(comment: "") == "ssh-ed25519 \(base64)")
+    // U+2028 and U+2029 are line breaks to `init(line:)` but not controls.
+    #expect(key.authorizedKeysLine(comment: "x\u{2028}y\u{2029}z\u{85}w") == "ssh-ed25519 \(base64) xyzw")
+    for comment in ["x\u{2028}y", "\u{2029}", "a\u{0b}b\u{0c}c", "\r\n"] {
+        #expect(try SSHPublicKey(line: key.authorizedKeysLine(comment: comment)).blob == key.blob)
+    }
 }
 
 private let badMalformedLines: [(String, SSHPublicKey.Error)] = [
@@ -215,7 +224,14 @@ private let badMalformedLines: [(String, SSHPublicKey.Error)] = [
     ("ssh-ed25519 not-base64! c", .invalidBase64), ("ssh-ed25519 AAAA=AAAA", .invalidBase64),
     ("ssh-dss AAAAB3NzaC1kc3MAAACBAP c", .unsupportedType("ssh-dss")),
     ("ssh-ed25519-cert-v01@openssh.com AAAA", .unsupportedType("ssh-ed25519-cert-v01@openssh.com")),
-    ("command=\"x\" " + ed25519.line, .unsupportedType("command=\"x\"")),
+    // An options field is skipped the way sshd does, quotes and `\"` included, then refused.
+    ("command=\"x\" " + ed25519.line, .optionsNotSupported),
+    ("no-pty " + ed25519.line, .optionsNotSupported),
+    ("command=\"echo a b\",no-pty " + ed25519.line, .optionsNotSupported),
+    ("command=\"say \\\"hi there\\\"\" " + ed25519.line, .optionsNotSupported),
+    ("restrict sk-ssh-ed25519@openssh.com AAAA", .optionsNotSupported),
+    ("no-pty ssh-dss AAAA", .unsupportedType("no-pty")),
+    ("command=\"unterminated " + ed25519.line, .unsupportedType("command=\"unterminated")),
     ("sk-ssh-ed25519@openssh.com AAAA", .securityKey("sk-ssh-ed25519@openssh.com")),
     ("sk-ecdsa-sha2-nistp256@openssh.com AAAA", .securityKey("sk-ecdsa-sha2-nistp256@openssh.com")),
     ("ssh-rsa " + ed25519.line.split(separator: " ")[1], .typeMismatch),
@@ -334,4 +350,8 @@ func rejectsMalformedLines(line: String, error: SSHPublicKey.Error) {
     #expect(long.hasSuffix("+------[MD5]------+"))
     // An empty fingerprint starts and ends in the centre; E is marked last, as in OpenSSH.
     #expect(long.split(separator: "\n")[5] == "|        E        |")
+    // Sixteen characters fill OpenSSH's title buffer; seventeen do not fit.
+    #expect(SSHPublicKey.randomart(fingerprint: [], title: "[ABCDEFGHIJKLMN]").hasPrefix("+[ABCDEFGHIJKLMN]-+\n"))
+    #expect(SSHPublicKey.randomart(fingerprint: [], title: "[ABCDEFGHIJKLMNO]").hasPrefix("+-----------------+\n"))
+    #expect(SSHPublicKey.randomart(fingerprint: [], title: "", footer: "[ABCDEFGHIJKLMNO]").hasSuffix("\n+-----------------+"))
 }

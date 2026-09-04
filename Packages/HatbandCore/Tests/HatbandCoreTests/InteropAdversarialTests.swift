@@ -473,9 +473,12 @@ func randomartAlwaysHasTheSameShape(length: Int) {
     #expect(throws: SSHPublicKey.Error.securityKey("sk-ecdsa-sha2-nistp256@openssh.com")) {
         try SSHPublicKey(blob: wireString("sk-ecdsa-sha2-nistp256@openssh.com") + wireString("nistp256"))
     }
-    // ssh-keygen skips a leading options field; we do not parse options.
-    #expect(throws: SSHPublicKey.Error.unsupportedType("no-pty,command=\"x\"")) {
+    // ssh-keygen skips a leading options field; we recognise it and refuse.
+    #expect(throws: SSHPublicKey.Error.optionsNotSupported) {
         try SSHPublicKey(line: "no-pty,command=\"x\" " + ed1.line)
+    }
+    #expect(throws: SSHPublicKey.Error.optionsNotSupported) {
+        try SSHPublicKey(line: "from=\"a b\",command=\"echo \\\"ssh-rsa\\\"\" " + ed1.line)
     }
     // A key whose base64 says one type and whose blob says another.
     #expect(throws: SSHPublicKey.Error.typeMismatch) {
@@ -552,16 +555,21 @@ func randomartAlwaysHasTheSameShape(length: Int) {
 @Test func emittedLinesSurviveHostileCommentsAndPrincipals() throws {
     let key = try SSHPublicKey(line: keygenFixtures[0].line)
     let base64 = keygenFixtures[0].line.split(separator: " ")[1]
-    // C0 and C1 controls and CRLF are dropped; what remains parses back.
-    for comment in ["a\u{0}b", "\u{1b}[31mred", "x\r\ny", "x\u{85}y", "\u{7f}", "tab\tkept", "nbsp\u{a0}kept", "水 🎩"] {
+    // C0 and C1 controls, CRLF and the Unicode line and paragraph separators
+    // are dropped; what remains parses back.
+    for comment in ["a\u{0}b", "\u{1b}[31mred", "x\r\ny", "x\u{85}y", "\u{7f}", "tab\tkept", "nbsp\u{a0}kept", "水 🎩",
+                    "x\u{2028}y", "x\u{2029}ssh-rsa AAAA", "\u{2028}", "\u{0b}\u{0c}"] {
         let line = key.authorizedKeysLine(comment: comment)
         #expect(!line.unicodeScalars.contains { $0.properties.generalCategory == .control })
+        #expect(!line.contains { $0.isNewline })
         #expect(line.hasPrefix("ssh-ed25519 \(base64)"))
         let back = try SSHPublicKey(line: line)
         #expect(back.blob == key.blob)
     }
-    // A principal cannot smuggle a second principal, an option, or a newline.
-    for principal in ["a@x.ie,b@x.ie", "a@x.ie cert-authority", "a@x.ie\nb@x.ie ssh-rsa AAAA", "a@x.ie\tvalid-before=\"0\"", "a@x.ie\u{2028}b"] {
+    // A principal cannot smuggle a second principal, an option, or a newline,
+    // and one with nothing left becomes the wildcard rather than a bad line.
+    for principal in ["a@x.ie,b@x.ie", "a@x.ie cert-authority", "a@x.ie\nb@x.ie ssh-rsa AAAA", "a@x.ie\tvalid-before=\"0\"", "a@x.ie\u{2028}b",
+                      "", ",,", "\n\u{2029}", "\u{0}"] {
         let line = key.allowedSignersLine(principal: principal)
         let fields = line.split(separator: " ")
         #expect(fields.count == 4, "\(line)")
@@ -570,6 +578,7 @@ func randomartAlwaysHasTheSameShape(length: Int) {
         #expect(fields[3] == base64)
         #expect(!fields[0].contains(","))
         #expect(!line.contains { $0.isNewline })
+        #expect(principal.contains("@") || fields[0] == "*", "\(line)")
     }
     #expect(key.allowedSignersLine(principal: "bloom@nnix.com", namespace: "git\"\nx").split(separator: " ")[1] == "namespaces=\"gitx\"")
 }
@@ -631,21 +640,40 @@ private let smuggledWebsites: [(String, Normalize.Error)] = [
     ("https://:@nnix.com", .userinfo),
     ("https://nnix.com\u{FF0F}evil.com", .invalidHost),
     ("https://nnix.com\u{2044}evil.com", .invalidHost),
-    ("https://nnix\u{200B}.com", .invalidHost),
-    ("https://nnix.com\u{202E}", .invalidHost),
     ("https://nnix.com..", .invalidHost),
     ("https://nnix.com:", .invalidHost),
     ("https://nnix.com:-1", .invalidHost),
     ("https://nnix.com:65536", .invalidHost),
     ("https://nnix.com:8080:80", .invalidHost),
+    ("https://nnix.com:0", .invalidHost),
+    ("https://nnix.com:0443", .invalidHost),
     ("https://[2001:db8::1]/", .invalidHost),
     ("https://0x7f.0.0.1", .invalidHost),
     ("https://2130706433", .invalidHost),
+    ("localhost:8080/x", .invalidHost),
+    ("localhost:8080?x", .invalidHost),
     ("https://nnix.com/\u{85}x", .invalidCharacter("\u{85}")),
     ("https://nnix.com/x\u{2028}y", .invalidCharacter("\u{2028}")),
     ("https://nnix.com/x\u{7f}y", .invalidCharacter("\u{7f}")),
     ("https://nnix.com/x\u{a0}y", .invalidCharacter("\u{a0}")),
-    ("\u{FEFF}nnix.com", .invalidHost),
+    // Format characters are named wherever they sit; a ZWJ is fused to its letter.
+    ("https://nnix\u{200B}.com", .invalidCharacter("\u{200B}")),
+    ("https://nnix.com\u{202E}", .invalidCharacter("\u{202E}")),
+    ("\u{FEFF}nnix.com", .invalidCharacter("\u{FEFF}")),
+    ("https://nnix.com/x\u{200B}y", .invalidCharacter("\u{200B}")),
+    ("https://nnix.com/x\u{200D}y", .invalidCharacter("x\u{200D}")),
+    ("https://nnix.com/?q=\u{2066}x\u{2069}", .invalidCharacter("\u{2066}")),
+    // RFC 3986: what a browser would percent-encode is refused, not encoded.
+    ("https://nnix.com/<script>", .invalidCharacter("<")),
+    ("https://nnix.com/x?y=\"z\"", .invalidCharacter("\"")),
+    ("https://nnix.com/x\\y", .invalidCharacter("\\")),
+    ("https://nnix.com/{x}", .invalidCharacter("{")),
+    ("https://nnix.com/x|y", .invalidCharacter("|")),
+    ("https://nnix.com/`x`", .invalidCharacter("`")),
+    ("https://nnix.com/^", .invalidCharacter("^")),
+    ("https://nnix.com/Straße", .invalidCharacter("ß")),
+    ("https://nnix.com/\u{FF0F}evil.com", .invalidCharacter("\u{FF0F}")),
+    ("https://nnix.com/#\u{2044}", .invalidCharacter("\u{2044}")),
 ]
 
 @Test(arguments: smuggledWebsites)
@@ -664,6 +692,11 @@ private let spoofedHandles: [(String, Normalize.Error)] = [
     ("https://github.com/\u{FF42}loom", .invalidUsername),
     ("blo\u{a0}om", .invalidUsername),
     ("@\u{200B}bloom", .invalidUsername),
+    ("blo--om", .invalidUsername),
+    ("https://github.com/blo--om", .invalidUsername),
+    ("https://github.com/orgs/bloom", .invalidPath),
+    ("https://github.com/Settings", .invalidPath),
+    ("github.com/login?return_to=/bloom", .invalidPath),
 ]
 
 @Test(arguments: spoofedHandles)
@@ -799,7 +832,9 @@ func emailRejectsSpoofing(input: String, error: Normalize.Error) {
             let authority = site.address.prefix { $0 != "/" && $0 != "?" && $0 != "#" }
             #expect(!authority.contains(":") || authority.split(separator: ":").count == 2)
             #expect(!authority.contains("@") && !site.address.hasPrefix("//"))
-            #expect(!site.address.contains { $0.isWhitespace || $0.isControl })
+            #expect(!site.address.contains { $0.isWhitespace || $0.isControl || $0.isFormat })
+            // Only the host may be non-ASCII; the rest is already percent-encoded.
+            #expect(site.address[authority.endIndex...].allSatisfy { $0.isASCII && !"<>\"\\^`{|}".contains($0) })
         }
         if let user = try? Normalize.github(s) {
             seen["github", default: 0] += 1
@@ -851,8 +886,13 @@ func emailRejectsSpoofing(input: String, error: Normalize.Error) {
         #expect(try Normalize.mastodon(handle) == handle)
         let canonical = try #require(CanonicalURI.mastodon(handle))
         #expect(try Normalize.mastodon(canonical.profile) == handle)
+        #expect(try Normalize.mastodon(canonical.profile + "/") == handle)
         #expect(try Normalize.mastodon("@" + handle) == handle)
         #expect(try Normalize.mastodon(canonical.profile.replacingOccurrences(of: "/@", with: "/users/")) == handle)
+        #expect(try Normalize.mastodon(canonical.profile.replacingOccurrences(of: "/@", with: "/users/") + "/") == handle)
+        // The `@user@instance` spelling people paste is not a different account.
+        let prefixed = try #require(CanonicalURI.mastodon("@" + handle))
+        #expect(prefixed.account == canonical.account && prefixed.profile == canonical.profile)
     }
 }
 
@@ -915,6 +955,10 @@ func emailRejectsSpoofing(input: String, error: Normalize.Error) {
     #expect(throws: Normalize.Error.invalidCharacter("O")) { try Normalize.gpgFingerprint("OPENPGP4FPR:OPENPGP4FPR:" + torV4) }
     #expect(throws: Normalize.Error.invalidCharacter("\u{200B}")) { try Normalize.gpgFingerprint(torV4.prefix(20) + "\u{200B}" + torV4.dropFirst(20)) }
     #expect(throws: Normalize.Error.invalidCharacter("-")) { try Normalize.gpgFingerprint(torV4.prefix(20) + "-" + torV4.dropFirst(20)) }
+    // Fullwidth digits and letters satisfy `hexDigitValue` but are not hex.
+    for wide in ["\u{FF10}", "\u{FF19}", "\u{FF21}", "\u{FF26}", "\u{FF41}", "\u{FF46}"] {
+        #expect(throws: Normalize.Error.invalidCharacter(Character(wide))) { try Normalize.gpgFingerprint(torV4.prefix(20) + wide + torV4.dropFirst(21)) }
+    }
 }
 
 // MARK: - Signal
@@ -968,22 +1012,28 @@ private extension String {
 
 // MARK: - vCard
 
-/// What `escape` turns into `\n` and `parseBasic` reads back as LF.
-private func lineBreaksNormalized(_ s: String) -> String {
-    String(s.map { ["\r\n", "\n", "\r", "\u{85}", "\u{2028}", "\u{2029}"].contains($0) ? "\n" : $0 })
+/// What a value looks like after `escape` and `parseBasic`: line breaks
+/// become LF, and C0 controls other than HTAB, and DEL, are gone.
+private func valueAfterEscape(_ s: String) -> String {
+    var out = ""
+    for ch in s {
+        if ["\r\n", "\n", "\r", "\u{85}", "\u{2028}", "\u{2029}"].contains(ch) {
+            out.append("\n")
+        } else {
+            out.unicodeScalars.append(contentsOf: ch.unicodeScalars.filter { ($0.value >= 0x20 || $0.value == 0x09) && $0.value != 0x7f })
+        }
+    }
+    return out
 }
 
 private func physical(_ text: String) -> [Substring] {
     text.split(separator: "\r\n", omittingEmptySubsequences: false).dropLast()
 }
 
-/// Fragments without grapheme extenders: a fold that lands in front of a
-/// combining mark is a separate, known failure (see
-/// vCardUnfoldsBeforeCombiningMarks) and would otherwise mask everything else.
-private let vCardFragments = fragments.filter { !$0.unicodeScalars.contains { $0.properties.isGraphemeExtend } }
-
+/// The full alphabet, grapheme extenders included: a fold that lands in front
+/// of a combining mark must unfold cleanly (see vCardUnfoldsBeforeCombiningMarks).
 private func vCardFuzzString(_ rng: inout Xorshift, maxFragments: Int = 12) -> String {
-    (0..<rng.below(maxFragments)).map { _ in vCardFragments[rng.below(vCardFragments.count)] }.joined()
+    fuzzString(&rng, maxFragments: maxFragments)
 }
 
 @Test func vCardRoundTripsUnderFuzz() throws {
@@ -1022,13 +1072,15 @@ private func vCardFuzzString(_ rng: inout Xorshift, maxFragments: Int = 12) -> S
         #expect(logical.allSatisfy { $0.contains(":") })
         #expect(!lines.contains { $0.unicodeScalars.count == 1 && $0.unicodeScalars.first == " " })
         var expected = card
-        expected.formattedName = lineBreaksNormalized(card.formattedName)
-        expected.organization = card.organization.map(lineBreaksNormalized)
-        expected.phone = card.phone.map(lineBreaksNormalized)
-        expected.email = card.email.map(lineBreaksNormalized)
-        expected.note = card.note.map(lineBreaksNormalized)
-        expected.links = card.links.map { VCard.Link(label: lineBreaksNormalized($0.label), url: lineBreaksNormalized($0.url)) }
-        expected.extensions = card.extensions.map { VCard.Extension(name: $0.name, value: lineBreaksNormalized($0.value)) }
+        expected.formattedName = valueAfterEscape(card.formattedName)
+        expected.familyName = valueAfterEscape(card.familyName)
+        expected.givenName = valueAfterEscape(card.givenName)
+        expected.organization = card.organization.map(valueAfterEscape)
+        expected.phone = card.phone.map(valueAfterEscape)
+        expected.email = card.email.map(valueAfterEscape)
+        expected.note = card.note.map(valueAfterEscape)
+        expected.links = card.links.map { VCard.Link(label: valueAfterEscape($0.label), url: valueAfterEscape($0.url)) }
+        expected.extensions = card.extensions.map { VCard.Extension(name: $0.name, value: valueAfterEscape($0.value)) }
         let parsed = try VCard.parseBasic(text)
         #expect(parsed == expected)
         #expect(try VCard.parseBasic(text.replacingOccurrences(of: "\r\n", with: "\n")) == expected)
@@ -1038,9 +1090,10 @@ private func vCardFuzzString(_ rng: inout Xorshift, maxFragments: Int = 12) -> S
 
 /// RFC 2425 §5.8.1 folds between any two characters and unfolds by removing
 /// CRLF plus one whitespace octet. `fold` works on scalars, so a fold may land
-/// in front of a combining mark; `parseBasic` then sees a first *grapheme* of
-/// space-plus-mark, not a space, and reads the continuation as a new property.
-/// Decomposed accents and emoji with variation selectors or ZWJ trigger it.
+/// in front of a combining mark; `parseBasic` must unfold on scalars too, or
+/// it would see a first *grapheme* of space-plus-mark, not a space, and read
+/// the continuation as a new property. Decomposed accents and emoji with
+/// variation selectors or ZWJ exercise it.
 @Test func vCardUnfoldsBeforeCombiningMarks() throws {
     let cases: [(String, String)] = [
         // NOTE: + 69 a + e = 75 octets; U+0301 starts the continuation.
@@ -1156,7 +1209,7 @@ private func vCardFuzzString(_ rng: inout Xorshift, maxFragments: Int = 12) -> S
     #expect(text.utf8.count < 32_768)
     #expect(physical(text).allSatisfy { $0.utf8.count <= 75 })
     var expected = card
-    expected.note = lineBreaksNormalized(card.note!)
+    expected.note = valueAfterEscape(card.note!)
     #expect(try VCard.parseBasic(text) == expected)
 }
 
@@ -1186,6 +1239,7 @@ private func vCardFuzzString(_ rng: inout Xorshift, maxFragments: Int = 12) -> S
         _ = CanonicalURI.email(s)
         _ = CanonicalURI.mastodon(s)
         _ = VCard.fold(VCard.escape(s))
+        _ = VCard.splitProperty(s)
         _ = VCard.splitComponents(s).map(VCard.unescape)
         _ = VCard(formattedName: s).text
     }

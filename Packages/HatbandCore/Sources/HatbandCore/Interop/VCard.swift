@@ -28,7 +28,6 @@ public struct VCard: Sendable, Hashable {
         case notAVCard
         case unsupportedVersion(String)
         case malformedLine(String)
-        case invalidPhoto
     }
 
     public var formattedName: String
@@ -70,6 +69,9 @@ public struct VCard: Sendable, Hashable {
         if let phone { lines.append("TEL;TYPE=CELL:" + Self.escape(phone)) }
         if let email { lines.append("EMAIL;TYPE=INTERNET:" + Self.escape(email)) }
         for (index, link) in links.enumerated() {
+            // URL is a `uri` value, which RFC 2426 §3.6.8 does not
+            // backslash-escape. Escaping anyway is harmless to readers that
+            // unescape, and it is what maps a line break to `\n` here.
             lines.append("item\(index + 1).URL:" + Self.escape(link.url))
             lines.append("item\(index + 1).X-ABLabel:" + Self.escape(link.label))
         }
@@ -84,8 +86,10 @@ public struct VCard: Sendable, Hashable {
 
     public static let foldWidth = 75
 
-    /// RFC 2426 §2.4.2: backslash, comma and semicolon get a backslash;
-    /// a newline becomes the two characters `\n`; a bare CR is dropped.
+    /// RFC 2426 §2.4.2: backslash, comma and semicolon get a backslash and
+    /// a line break becomes the two characters `\n`. The other C0 controls
+    /// except HTAB, and DEL, are dropped: they are not VALUE-CHARs and some
+    /// readers treat them as line breaks.
     static func escape(_ value: String) -> String {
         var out = ""
         out.reserveCapacity(value.utf8.count)
@@ -95,10 +99,15 @@ public struct VCard: Sendable, Hashable {
             case ",": out += "\\,"
             case ";": out += "\\;"
             case "\r\n", "\n", "\r", "\u{85}", "\u{2028}", "\u{2029}": out += "\\n"
-            default: out.append(ch)
+            default:
+                for scalar in ch.unicodeScalars where !Self.isDropped(scalar) { out.unicodeScalars.append(scalar) }
             }
         }
         return out
+    }
+
+    private static func isDropped(_ scalar: Unicode.Scalar) -> Bool {
+        (scalar.value < 0x20 && scalar.value != 0x09) || scalar.value == 0x7f
     }
 
     /// RFC 2425 §5.8.1: continuation lines start with a single space, and a
@@ -128,8 +137,9 @@ public struct VCard: Sendable, Hashable {
     // MARK: Parsing
 
     /// Reads back what `text` writes: N, FN, ORG, the first TEL and EMAIL,
-    /// labelled URLs, NOTE, an inline photo and X-HATBAND lines. Anything
-    /// else is skipped. Accepts LF as well as CRLF and unfolds continuations.
+    /// labelled URLs, NOTE, a base64 photo and X-HATBAND lines. Anything
+    /// else, including a `VALUE=uri` photo, is skipped. Accepts LF as well
+    /// as CRLF and unfolds continuations.
     public static func parseBasic(_ text: String) throws -> VCard {
         var logical: [String] = []
         for raw in text.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\r\n" || $0 == "\n" }) {
@@ -147,9 +157,7 @@ public struct VCard: Sendable, Hashable {
         var labels: [String: String] = [:]
         var urls: [(group: String, url: String)] = []
         for line in logical.dropFirst().dropLast() {
-            guard let colon = line.firstIndex(of: ":") else { throw Error.malformedLine(line) }
-            let head = line[..<colon]
-            let value = String(line[line.index(after: colon)...])
+            guard case let (head, value)? = splitProperty(line) else { throw Error.malformedLine(line) }
             let nameAndParams = head.split(separator: ";", maxSplits: 1, omittingEmptySubsequences: false)
             var name = nameAndParams[0].uppercased()
             var group = ""
@@ -172,7 +180,10 @@ public struct VCard: Sendable, Hashable {
             case "X-ABLABEL": labels[group] = unescape(value)
             case "NOTE": card.note = unescape(value)
             case "PHOTO":
-                guard let bytes = try? Base64.decode(value.filter { !$0.isWhitespace }) else { throw Error.invalidPhoto }
+                // `VALUE=uri` is a reference, not data; that and anything
+                // else that is not base64 is skipped rather than refused.
+                let params = head.split(separator: ";").dropFirst().map { $0.uppercased().filter { $0 != "\"" } }
+                guard !params.contains("VALUE=URI"), let bytes = try? Base64.decode(value.filter { !$0.isWhitespace }) else { break }
                 card.photoJPEG = bytes
             default:
                 if name.hasPrefix("X-HATBAND-") {
@@ -182,6 +193,21 @@ public struct VCard: Sendable, Hashable {
         }
         card.links = urls.map { Link(label: labels[$0.group] ?? "", url: $0.url) }
         return card
+    }
+
+    /// Name and parameters, then the value: split at the first colon outside
+    /// a double-quoted parameter value (RFC 2426 §4 `quoted-string`). Nil
+    /// when there is no such colon.
+    static func splitProperty(_ line: String) -> (head: Substring, value: String)? {
+        var quoted = false
+        for index in line.indices {
+            switch line[index] {
+            case "\"": quoted.toggle()
+            case ":" where !quoted: return (line[..<index], String(line[line.index(after: index)...]))
+            default: break
+            }
+        }
+        return nil
     }
 
     /// Splits on unescaped semicolons, then unescapes each component.

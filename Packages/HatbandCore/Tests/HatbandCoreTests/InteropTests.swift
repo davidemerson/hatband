@@ -180,10 +180,14 @@ private let goodWebsites: [(String, String, Bool)] = [
     ("https://example.com?q=1", "example.com?q=1", false),
     ("https://example.com/#top", "example.com/#top", false),
     ("müller.de", "müller.de", false),
-    ("MÜLLER.de/Straße", "müller.de/Straße", false),
+    ("MÜLLER.de/Strasse", "müller.de/Strasse", false),
+    ("müller.de/Stra%C3%9Fe?q=%E6%B0%B4", "müller.de/Stra%C3%9Fe?q=%E6%B0%B4", false),
     ("  nnix.com  ", "nnix.com", false),
     ("nnix.com.", "nnix.com", false),
     ("a.b.c.d.example.museum/x", "a.b.c.d.example.museum/x", false),
+    ("example.com:1", "example.com:1", false),
+    ("example.com:65535/x", "example.com:65535/x", false),
+    ("example.com/a!$&'()*+,;=:@[]~-._%20", "example.com/a!$&'()*+,;=:@[]~-._%20", false),
 ]
 
 @Test(arguments: goodWebsites)
@@ -202,11 +206,28 @@ private let badWebsites: [(String, Normalize.Error)] = [
     ("FILE:///etc/passwd", .unsupportedScheme("file")), ("hatband:x", .unsupportedScheme("hatband")),
     ("https://user:pw@example.com", .userinfo), ("https://user@example.com", .userinfo), ("user@example.com", .userinfo),
     ("example", .invalidHost), ("localhost:8080", .invalidHost), ("https://", .invalidHost), ("https:///path", .invalidHost),
+    ("localhost:8080/x", .invalidHost), ("localhost:8080?x", .invalidHost), ("a:1/x", .invalidHost),
     ("example.com:99999", .invalidHost), ("example.com:abc", .invalidHost), ("example.com:", .invalidHost),
+    ("example.com:0", .invalidHost), ("example.com:00", .invalidHost), ("example.com:080", .invalidHost),
+    ("example.com:65536", .invalidHost), ("example.com:+80", .invalidHost),
     ("192.168.0.1", .invalidHost), ("[::1]", .invalidHost), ("-example.com", .invalidHost), ("example..com", .invalidHost),
     ("exam_ple.com", .invalidHost), (".example.com", .invalidHost), ("/path/only", .invalidHost),
     ("exa mple.com", .invalidCharacter(" ")), ("example.com/pa th", .invalidCharacter(" ")),
     ("exam\u{0}ple.com", .invalidCharacter("\u{0}")), ("example.com/\r\nx", .invalidCharacter("\r\n")),
+    // Unicode format characters, anywhere; a ZWJ fuses with the letter before it.
+    ("exam\u{200B}ple.com", .invalidCharacter("\u{200B}")), ("example.com/\u{202E}", .invalidCharacter("\u{202E}")),
+    ("\u{FEFF}example.com", .invalidCharacter("\u{FEFF}")), ("example.com?q=\u{AD}", .invalidCharacter("\u{AD}")),
+    ("example.com/x\u{200D}y", .invalidCharacter("x\u{200D}")),
+    // RFC 3986 delimiters that must be percent-encoded outside the host.
+    ("example.com/<x", .invalidCharacter("<")), ("example.com/x>", .invalidCharacter(">")),
+    ("example.com/\"x\"", .invalidCharacter("\"")), ("example.com/a\\b", .invalidCharacter("\\")),
+    ("example.com/^", .invalidCharacter("^")), ("example.com/`x`", .invalidCharacter("`")),
+    ("example.com/{x}", .invalidCharacter("{")), ("example.com/x|y", .invalidCharacter("|")),
+    ("example.com?a=}", .invalidCharacter("}")), ("example.com/#<", .invalidCharacter("<")),
+    // Non-ASCII stays in the host; the rest must already be encoded.
+    ("MÜLLER.de/Straße", .invalidCharacter("ß")), ("example.com/水", .invalidCharacter("水")),
+    ("example.com?q=é", .invalidCharacter("é")), ("example.com/#✓", .invalidCharacter("✓")),
+    ("example.com/\u{FF0F}", .invalidCharacter("\u{FF0F}")),
 ]
 
 @Test(arguments: badWebsites)
@@ -235,10 +256,15 @@ private let badGitHub: [(String, Normalize.Error)] = [
     ("", .empty), ("@", .empty), ("  ", .empty),
     ("-bloom", .invalidUsername), ("bloom-", .invalidUsername), ("bl_oom", .invalidUsername), ("bloom!", .invalidUsername),
     ("blöom", .invalidUsername), ("bl oom", .invalidUsername), ("@-", .invalidUsername),
+    ("blo--om", .invalidUsername), ("a--", .invalidUsername), ("https://github.com/blo--om", .invalidUsername),
     (String(repeating: "a", count: 40), .tooLong),
     ("https://gitlab.com/bloom", .wrongHost("gitlab.com")), ("https://github.com.evil.io/bloom", .wrongHost("github.com.evil.io")),
     ("bloom/hatband", .wrongHost("bloom")), ("https://gist.github.com/bloom", .wrongHost("gist.github.com")),
     ("https://github.com/", .invalidPath), ("https://github.com", .invalidPath),
+    // Site paths, not profiles.
+    ("https://github.com/orgs/freemans-journal", .invalidPath), ("github.com/settings/profile", .invalidPath),
+    ("https://github.com/Login", .invalidPath), ("https://www.github.com/sponsors/bloom", .invalidPath),
+    ("github.com/new", .invalidPath), ("GITHUB.COM/Explore", .invalidPath), ("github.com/sessions/two-factor", .invalidPath),
     ("ftp://github.com/bloom", .unsupportedScheme("ftp")), ("https://bloom@github.com/bloom", .userinfo),
 ]
 
@@ -262,6 +288,9 @@ private let goodLinkedIn: [(String, String)] = [
     ("company/freemans-journal", "company/freemans-journal"),
     ("https://www.linkedin.com/in/%C3%A9amonn-de-valera", "éamonn-de-valera"),
     ("https://www.linkedin.com/in/李四-1a2b", "李四-1a2b"),
+    ("https://www.linkedin.com/mwlite/in/leopold-bloom", "leopold-bloom"),
+    ("linkedin.com/MWLITE/in/leopold-bloom/?trk=x", "leopold-bloom"),
+    ("mwlite/in/leopold-bloom", "leopold-bloom"),
     ("abc", "abc"),
     (String(repeating: "a", count: 100), String(repeating: "a", count: 100)),
 ]
@@ -280,6 +309,8 @@ private let badLinkedIn: [(String, Normalize.Error)] = [
     (String(repeating: "a", count: 101), .tooLong),
     ("https://www.linkedin.com/pub/leopold-bloom", .invalidPath), ("https://www.linkedin.com/in/", .invalidPath),
     ("https://www.linkedin.com/", .invalidPath), ("https://www.linkedin.com/school/ucd", .invalidPath),
+    ("https://www.linkedin.com/mwlite/", .invalidPath), ("https://www.linkedin.com/mwlite/in/", .invalidPath),
+    ("https://www.linkedin.com/mwlite/leopold-bloom", .invalidPath), ("mwlite/in/ab", .invalidUsername),
     ("https://lnkd.in/abc", .wrongHost("lnkd.in")), ("https://linkedin.com.evil.com/in/bloom", .wrongHost("linkedin.com.evil.com")),
     ("https://notlinkedin.com/in/bloom", .wrongHost("notlinkedin.com")),
     ("https://www.linkedin.com/in/%ZZ", .invalidPath), ("https://www.linkedin.com/in/%C3%28", .invalidPath),
@@ -298,6 +329,8 @@ private let goodMastodon: [(String, String)] = [
     ("@bloom@Merveilles.Town", "bloom@merveilles.town"), (" bloom@merveilles.town ", "bloom@merveilles.town"),
     ("https://merveilles.town/@bloom", "bloom@merveilles.town"), ("https://merveilles.town/@bloom/", "bloom@merveilles.town"),
     ("https://merveilles.town/users/bloom", "bloom@merveilles.town"), ("merveilles.town/@bloom", "bloom@merveilles.town"),
+    ("https://merveilles.town/users/bloom/", "bloom@merveilles.town"), ("merveilles.town/@bloom/", "bloom@merveilles.town"),
+    ("https://merveilles.town/@bloom/?x=1#y", "bloom@merveilles.town"),
     ("http://MERVEILLES.town/@bloom?x=1", "bloom@merveilles.town"),
     ("Bloom_1@mastodon.social", "Bloom_1@mastodon.social"),
     (String(repeating: "a", count: 30) + "@m.social", String(repeating: "a", count: 30) + "@m.social"),
@@ -407,6 +440,10 @@ private let badFingerprints: [(String, Normalize.Error)] = [
     ("4E2C6E8793298290", .wrongLength(8)), (rfcV6Hex + "00", .wrongLength(33)),
     (String(torV4Hex.dropLast()) + "G", .invalidCharacter("G")), ("0x" + torV4Hex + "x", .invalidCharacter("x")),
     (torV4 + "!", .invalidCharacter("!")), ("OPENPGP4FPR:" + torV4Hex + ";", .invalidCharacter(";")),
+    // Fullwidth digits and letters have a `hexDigitValue` but are not hex.
+    (String(torV4Hex.dropLast()) + "\u{FF25}", .invalidCharacter("\u{FF25}")),
+    ("\u{FF10}" + torV4Hex.dropFirst(), .invalidCharacter("\u{FF10}")),
+    (String(torV4Hex.prefix(10)) + "\u{FF41}" + torV4Hex.dropFirst(11), .invalidCharacter("\u{FF41}")),
 ]
 
 @Test(arguments: badFingerprints)
@@ -439,6 +476,12 @@ func fingerprintRequiresTwentyOrThirtyTwoBytes(count: Int) {
     #expect(CanonicalURI.mastodon("bloom") == nil)
     #expect(CanonicalURI.mastodon("@merveilles.town") == nil)
     #expect(CanonicalURI.mastodon("bloom@") == nil)
+    // A leading `@` is tolerated, not doubled into the profile path.
+    let prefixed = CanonicalURI.mastodon("@bloom@merveilles.town")
+    #expect(prefixed?.account == "acct:bloom@merveilles.town")
+    #expect(prefixed?.profile == "https://merveilles.town/@bloom")
+    #expect(CanonicalURI.mastodon("@") == nil)
+    #expect(CanonicalURI.mastodon("@@merveilles.town") == nil)
 }
 
 // MARK: - Signal
