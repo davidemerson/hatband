@@ -380,8 +380,8 @@ func everyUnicodeSpaceIsWhitespaceInAURL(value: UInt32) {
     ("mailto:a@b?subject=", .ok),
     ("mailto:a@b?subject=x&subject=y", .ok),
     ("mailto:A@B?SUBJECT=x", .ok),
-    ("mailto:a%40b@c", .ok),                                                  // `%` is atext; the address is a%40b
-    ("mailto:!#$%&'*+-=^_`{|}~@c", .ok),                                      // every atext byte but `/`
+    ("mailto:a%40b@c", .reject("not an email address")),                      // decoded, the local part a@b needs quoting
+    ("mailto:!#$%25&'*+-=^_`{|}~@c", .ok),                                    // every atext byte but `/`, the `%` as its triplet
     ("mailto:a/b@c", .reject("not an email address")),
     ("MAILTO:", .reject("not an email address")),
     ("mailto:a@b#frag", .reject("invalid host label")),
@@ -761,7 +761,8 @@ private func percentEncoded(_ s: String) -> String {
 }
 
 /// A value with no visible base character is empty to the eye: marks alone
-/// read "empty", and a selector or filler alone is the invisible it is.
+/// read "empty", and a selector or filler alone, or on a mark, is the
+/// invisible it is.
 @Test(arguments: [
     ("\u{FE0F}", Verdict.reject("invisible character")),
     ("\u{E0100}", .reject("invisible character")),
@@ -769,7 +770,7 @@ private func percentEncoded(_ s: String) -> String {
     ("\u{3164}", .reject("invisible character")),
     ("\u{301}", .reject("empty")),
     ("\u{20DD}\u{20DD}", .reject("empty")),
-    ("\u{301}\u{FE0F}", .reject("empty")),
+    ("\u{301}\u{FE0F}", .reject("invisible character")),
     (" \u{94B} ", .reject("empty")),                                              // a spacing mark
 ])
 func rejectsValuesWithNoVisibleBase(s: String, verdict: Verdict) {
@@ -829,11 +830,11 @@ func rejectsPercentEncodedControls(url: String, reason: String) {
     #expect(URLPolicy.verdict(for: url) == .reject(reason))
 }
 
-/// Encoded text that is fine raw is fine encoded: UTF-8, a space, a selector
-/// after the `/`, and bytes that are not UTF-8 at all (they decode to
+/// Encoded text that is fine raw is fine encoded: UTF-8, a space, an emoji
+/// with its selector, and bytes that are not UTF-8 at all (they decode to
 /// U+FFFD, a plain symbol).
 @Test(arguments: ["https://example.com/%C3%A9", "https://example.com/%FF%FE", "https://example.com/%20%2F%25", "https://example.com/%7e/%2e%2e",
-                  "https://example.com/%EF%B8%8F", "mailto:a@b?subject=%F0%9F%98%80&body=%20x"])
+                  "https://example.com/%E2%9C%88%EF%B8%8F", "mailto:a@b?subject=%F0%9F%98%80&body=%20x"])
 func acceptsPercentEncodedText(url: String) {
     #expect(URLPolicy.verdict(for: url) == .ok)
 }

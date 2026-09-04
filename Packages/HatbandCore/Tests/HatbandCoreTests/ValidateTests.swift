@@ -84,7 +84,7 @@ private func scalar(_ value: UInt32) -> String {
     ("👨🏽\u{200D}👩🏽\u{200D}👧", .ok),                          // skin tones are pictographs too
     ("❤\u{FE0F}\u{200D}🔥", .ok),
     ("1\u{FE0F}\u{20E3}", .ok),                                 // keycap
-    ("e\u{301}\u{FE0F}", .ok),
+    ("e\u{301}\u{FE0F}", .reject("invisible character")),      // a selector needs a base it has a sequence with
     ("می\u{200C}خواهم", .ok),                                  // ZWNJ between two Arabic letters, as Persian is written
     ("\u{645}\u{650}\u{200C}\u{62E}", .ok),                     // a vowel mark keeps the letter before it
     ("a\u{200D}b", .reject("invisible character")),            // joiners anywhere else are hidden
@@ -201,7 +201,9 @@ func rejectsEachUnassignedOrPrivate(value: UInt32) {
 /// assigned, ignorable and emoji. It exists to make a table change visible:
 /// when a toolchain update moves it, the counts above move with it, and a
 /// name with a newly assigned emoji that this writer accepts is refused by
-/// a reader built on the older tables.
+/// a reader built on the older tables. On Apple platforms the stdlib comes
+/// from the OS, not the toolchain, so the pinned version can differ from
+/// the toolchain's, and a phone on an older OS reads by older tables.
 @Test func unicodeTablesVersion() {
     let sentinel = Unicode.Scalar(0x1FA8A)!  // assigned in Unicode 17.0
     #expect(sentinel.properties.age.map { [$0.major, $0.minor] } == [17, 0])

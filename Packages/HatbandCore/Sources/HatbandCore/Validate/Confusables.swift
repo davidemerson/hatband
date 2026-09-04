@@ -44,23 +44,22 @@ public enum Confusables {
     /// A host fit to show as a tappable link: ASCII labels per RFC 1123
     /// (1–63 of `a-z`, `0-9`, `-`, hyphen not at either end), at most 253
     /// bytes in all, any letter case (the canonical form is lowercase).
-    /// Non-ASCII hosts are rejected outright; the message names the ASCII
-    /// host they resemble so the user reads "looks like github.com", never
-    /// punycode. An IP address is rejected in every spelling: RFC 3696 §2
-    /// (a top-level label is never all digits) plus the WHATWG URL "ends in
-    /// a number" rule catch `127.0.0.1`, `2130706433`, `0x7f000001` and
-    /// `0177.0.0.1` alike. An `xn--` label is decoded (RFC 3492) and judged
-    /// as the text it spells: a look-alike is refused the way the raw form
-    /// is; an honest IDN is accepted with a warning, since a browser may
-    /// render it as something else.
+    /// Non-ASCII hosts are rejected outright; when a label is a homograph
+    /// (see `homographSkeleton`) the message names the ASCII host it
+    /// resembles, so the user reads "looks like github.com", never punycode.
+    /// An IP address is rejected in every spelling: RFC 3696 §2 (a top-level
+    /// label is never all digits) plus the WHATWG URL "ends in a number"
+    /// rule catch `127.0.0.1`, `2130706433`, `0x7f000001` and `0177.0.0.1`
+    /// alike. An `xn--` label is decoded (RFC 3492) and judged as the text
+    /// it spells: a homograph is refused the way the raw form is, a label
+    /// mixing scripts too; an honest IDN is accepted with a warning, since a
+    /// browser may render it as something else.
     public static func domainVerdict(_ host: String) -> Verdict {
         guard !host.isEmpty else { return .reject("empty host") }
         guard host.utf8.count <= 253 else { return .reject("host over 253 bytes") }
         if let problem = TextCheck.problem(in: host) { return .reject(problem) }
         guard host.utf8.allSatisfy({ $0 < 0x80 }) else {
-            if let skeleton = looksLikeASCII(host) {
-                return .reject("non-ASCII host, looks like “\(skeleton)”")
-            }
+            if let skeleton = homographSkeleton(host) { return .reject("non-ASCII host, looks like “\(skeleton)”") }
             return .reject("non-ASCII host")
         }
         let labels = host.utf8.split(separator: UInt8(ascii: "."), omittingEmptySubsequences: false)
@@ -85,9 +84,25 @@ public enum Confusables {
         }
         let unicode = spelled.joined(separator: ".")
         if let problem = TextCheck.problem(in: unicode) { return .reject(problem) }
-        if let skeleton = looksLikeASCII(unicode) { return .reject("non-ASCII host, looks like “\(skeleton)”") }
+        if let skeleton = homographSkeleton(unicode) { return .reject("non-ASCII host, looks like “\(skeleton)”") }
         if mixedScripts(in: unicode) { return .reject("mixed scripts in punycode label") }
         return .warning("punycode host label")
+    }
+
+    /// The host with each homograph label replaced by the ASCII it
+    /// imitates, or nil when no label is one. A label is a homograph when
+    /// every scalar in it is ASCII or has an ASCII twin (`аpple`, `gіthub`,
+    /// `ｇｉｔｈｕｂ`); one that keeps a letter no ASCII host has (`москва`,
+    /// `ελλάδα`, `münchen`) resembles no ASCII host and is left as it is
+    /// (UTS #39 §4, whole-script confusables).
+    static func homographSkeleton(_ host: String) -> String? {
+        var found = false
+        let labels = host.split(separator: ".", omittingEmptySubsequences: false).map { label -> String in
+            guard let skeleton = looksLikeASCII(String(label)), skeleton.utf8.allSatisfy({ $0 < 0x80 }) else { return String(label) }
+            found = true
+            return skeleton
+        }
+        return found ? labels.joined(separator: ".") : nil
     }
 
     /// `xn--` and something after it, in any case.

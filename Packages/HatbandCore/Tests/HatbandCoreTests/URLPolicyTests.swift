@@ -94,6 +94,7 @@ func rejectsHiddenCharacters(url: String, verdict: Verdict) {
     ("https:example.com", .reject("malformed URL")),
     ("https:/example.com", .reject("malformed URL")),
     ("https:", .reject("malformed URL")),
+    ("https:443", .reject("malformed URL")),
     ("https://g\u{456}thub.com", .reject("non-ASCII host, looks like “github.com”")),
     ("https://\u{430}pple.com/", .reject("non-ASCII host, looks like “apple.com”")),
     ("https://münchen.de", .reject("non-ASCII host")),
@@ -147,6 +148,7 @@ func rejectsBadPaths(url: String, verdict: Verdict) {
     ("mailto:a@xn--mnchen-3ya.de", .warning("punycode host label")),
     ("mailto:a@b?subject=x y", .reject("whitespace")),
     ("mailto:a", .reject("not an email address")),
+    ("mailto:12345", .reject("not an email address")),
     ("mailto:", .reject("not an email address")),
     ("mailto:a@b@c", .reject("not an email address")),
     ("mailto:@b", .reject("not an email address")),
@@ -190,6 +192,7 @@ func judgesMailto(url: String, verdict: Verdict) {
     ("tel:+12", .ok),
     ("tel:+1 555", .reject("whitespace")),
     ("tel:5551234", .reject("not an E.164 number")),
+    ("tel:555", .reject("not an E.164 number")),                    // a known scheme, not a host and port
     ("tel:+0123", .reject("not an E.164 number")),
     ("tel:+1", .reject("not an E.164 number")),
     ("tel:+1234567890123456", .reject("not an E.164 number")),
@@ -276,6 +279,10 @@ func decidesTappability(url: String, tappable: Bool) {
     #expect(URLPolicy.scheme(of: Array("example.com:80/x".utf8)) == nil)
     #expect(URLPolicy.scheme(of: Array("example.com:123456".utf8)) == "example.com", "six digits are no port")
     #expect(URLPolicy.scheme(of: Array("tel:5551234".utf8)) == "tel")
+    #expect(URLPolicy.scheme(of: Array("tel:555".utf8)) == "tel", "a known scheme, whatever follows")
+    #expect(URLPolicy.scheme(of: Array("mailto:12345".utf8)) == "mailto")
+    #expect(URLPolicy.scheme(of: Array("ACCT:1".utf8)) == "acct")
+    #expect(URLPolicy.scheme(of: Array("https:443".utf8)) == "https")
     #expect(URLPolicy.scheme(of: Array("https://host:443".utf8)) == "https")
     let long = String(repeating: "z", count: 100) + ":"
     #expect(URLPolicy.verdict(for: long) == .reject("scheme not allowed: " + String(repeating: "z", count: 32)))

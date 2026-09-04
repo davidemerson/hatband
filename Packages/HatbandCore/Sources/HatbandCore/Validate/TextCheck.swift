@@ -69,8 +69,8 @@ public enum TextCheck {
     }
 
     /// The first problem in `s`, or nil. Three invisibles are allowed where
-    /// they do their job and nowhere else: a variation selector (U+FE00–FE0F,
-    /// U+E0100–E01EF) right after a scalar that is not itself ignorable, a
+    /// they do their job and nowhere else: a variation selector right after
+    /// a base it has a standardized sequence with (`isVariationSequence`), a
     /// ZWJ between two pictographs (the rainbow flag, a family), and a ZWNJ
     /// between two Arabic letters (Persian and Urdu spell with it; RFC 5892
     /// Appendix A.1 allows the same).
@@ -86,7 +86,7 @@ public enum TextCheck {
             let allowed: Bool
             switch scalar.value {
             case 0xFE00...0xFE0F, 0xE0100...0xE01EF:
-                allowed = previous.map { !$0.properties.isDefaultIgnorableCodePoint } ?? false
+                allowed = previous.map { isVariationSequence(base: $0, selector: scalar) } ?? false
             case 0x200D:
                 allowed = base.map(isPictograph) == true && next.map(isPictograph) == true
             case 0x200C:
@@ -107,6 +107,28 @@ public enum TextCheck {
         switch scalar.value {
         case 0xFE00...0xFE0F, 0xE0100...0xE01EF: return true
         default: return scalar.properties.generalCategory == .nonspacingMark
+        }
+    }
+
+    /// Whether `base` followed by `selector` is a standardized variation
+    /// sequence (StandardizedVariants.txt, emoji-variation-sequences.txt,
+    /// the Ideographic Variation Database), near enough: U+FE0E and U+FE0F
+    /// after an emoji, the keycap bases `#`, `*` and the digits included;
+    /// the rest of U+FE00–FE0F after a CJK ideograph, a Mongolian or
+    /// Phags-pa letter or a mathematical operator; U+E0100–E01EF after an
+    /// ideograph only. Any other pairing is a hidden byte on a visible
+    /// letter, 256 values deep.
+    private static func isVariationSequence(base: Unicode.Scalar, selector: Unicode.Scalar) -> Bool {
+        switch selector.value {
+        case 0xFE0E, 0xFE0F:
+            return base.properties.isEmoji
+        case 0xFE00...0xFE0D:
+            switch base.value {
+            case 0x1800...0x18AF, 0xA840...0xA87F, 0x2200...0x22FF: return true
+            default: return base.properties.isIdeographic
+            }
+        default:
+            return base.properties.isIdeographic
         }
     }
 

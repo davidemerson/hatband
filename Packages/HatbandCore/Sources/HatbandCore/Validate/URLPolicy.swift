@@ -9,6 +9,9 @@ public enum URLPolicy {
     /// for display only.
     static let tappableSchemes: Set<String> = ["https", "http", "mailto", "tel"]
 
+    /// Every scheme `verdict(for:)` judges on its own terms.
+    static let knownSchemes: Set<String> = tappableSchemes.union(["acct", "openpgp4fpr"])
+
     /// RFC 6068 header fields a link may prefill. `to`, `cc` and `bcc` add
     /// recipients the card never showed (§3); the rest are for mail clients
     /// to ignore.
@@ -30,7 +33,7 @@ public enum URLPolicy {
         case "http": return web(rest).merged(with: .warning("not encrypted"))
         case "mailto": return mailto(rest)
         case "tel": return isE164(rest.filter { !visualSeparators.contains($0) }) ? .ok : .reject("not an E.164 number")
-        case "acct": return address(rest, or: "not an acct address")
+        case "acct": return encodedAddress(rest, or: "not an acct address")
         case "openpgp4fpr": return isFingerprint(rest) ? .ok : .reject("not an OpenPGP fingerprint")
         default: return .reject("scheme not allowed: \(scheme.prefix(32))")
         }
@@ -44,14 +47,16 @@ public enum URLPolicy {
 
     /// RFC 3986 §3.1, lowercased. Nil when the text does not start with one,
     /// or when a port follows the colon: by the grammar `example.com:80` has
-    /// scheme `example.com`, but nobody means that.
+    /// scheme `example.com`, but nobody means that. A known scheme is one
+    /// whatever follows, so `tel:555` is a bad number, not a missing scheme.
     static func scheme(of bytes: [UInt8]) -> String? {
         guard let colon = bytes.firstIndex(of: UInt8(ascii: ":")), colon > 0,
               isASCIILetter(bytes[0]), bytes[..<colon].allSatisfy(isSchemeByte)
         else { return nil }
+        let name = String(decoding: bytes[..<colon], as: UTF8.self).lowercased()
         let port = bytes[(colon + 1)...].prefix { !"/?#".utf8.contains($0) }
-        guard !((1...5).contains(port.count) && port.allSatisfy(isDigit)) else { return nil }
-        return String(decoding: bytes[..<colon], as: UTF8.self).lowercased()
+        guard knownSchemes.contains(name) || !((1...5).contains(port.count) && port.allSatisfy(isDigit)) else { return nil }
+        return name
     }
 
     /// `//host[:port][/path][?query][#fragment]`. The host must pass
@@ -79,22 +84,35 @@ public enum URLPolicy {
     /// `mailtoHeaders` (any case, percent-encoded or not).
     private static func mailto(_ rest: ArraySlice<UInt8>) -> Verdict {
         let end = rest.firstIndex(of: UInt8(ascii: "?")) ?? rest.endIndex
-        let verdict = address(rest[..<end], or: "not an email address")
+        let verdict = encodedAddress(rest[..<end], or: "not an email address")
         guard verdict.isAccepted else { return verdict }
         let tailVerdict = tail(rest[end...])
         guard tailVerdict.isAccepted else { return tailVerdict }
         for field in rest[end...].dropFirst().split(separator: UInt8(ascii: "&")) {
-            let name = percentDecoded(field.prefix { $0 != UInt8(ascii: "=") })
-            guard mailtoHeaders.contains(String(decoding: name, as: UTF8.self).lowercased()) else {
-                return .reject("mailto header not allowed")
-            }
+            guard let name = percentDecoded(field.prefix { $0 != UInt8(ascii: "=") }),
+                  mailtoHeaders.contains(String(decoding: name, as: UTF8.self).lowercased())
+            else { return .reject("mailto header not allowed") }
         }
         return verdict.merged(with: tailVerdict)
     }
 
-    /// `local@host`: an RFC 5322 dot-atom of at most 64 bytes and a host
-    /// that passes `domainVerdict`. Non-ASCII (RFC 6531) is rejected: it
-    /// cannot be shown as a tappable link without an IDNA step we do not do.
+    /// RFC 6068 §2 and RFC 7565 §7: the address in a `mailto` or `acct` is
+    /// percent-encoded, so `first%2Blast@x.ie` is `first+last@x.ie` and
+    /// `a%0D%0A@b` hides a CRLF. Decoded, it gets the scan the raw text
+    /// had, then is judged as the address it spells; a `%` outside a
+    /// triplet is refused.
+    private static func encodedAddress(_ bytes: ArraySlice<UInt8>, or failure: String) -> Verdict {
+        guard let decoded = percentDecoded(bytes) else { return .reject("bad percent-encoding") }
+        let text = String(decoding: decoded, as: UTF8.self)
+        if let problem = TextCheck.problem(in: text) { return .reject(problem) }
+        guard !text.unicodeScalars.contains(where: { $0.properties.isWhitespace }) else { return .reject("whitespace") }
+        return address(decoded[...], or: failure)
+    }
+
+    /// `local@host` as a card stores it: an RFC 5322 dot-atom of at most 64
+    /// bytes and a host that passes `domainVerdict`. Non-ASCII (RFC 6531)
+    /// is rejected: it cannot be shown as a tappable link without an IDNA
+    /// step we do not do.
     static func address(_ bytes: ArraySlice<UInt8>, or failure: String) -> Verdict {
         guard let at = bytes.firstIndex(of: UInt8(ascii: "@")), bytes.lastIndex(of: UInt8(ascii: "@")) == at
         else { return .reject(failure) }
@@ -131,25 +149,27 @@ public enum URLPolicy {
             guard b >= 0x80 || isTailByte(b) else { return .reject("invalid character in URL") }
             index += 1
         }
-        if let problem = TextCheck.problem(in: String(decoding: percentDecoded(bytes), as: UTF8.self)) {
+        if let decoded = percentDecoded(bytes), let problem = TextCheck.problem(in: String(decoding: decoded, as: UTF8.self)) {
             return .reject(problem)
         }
         return .ok
     }
 
-    /// Each `%XX` replaced by its octet; `tail` has vetted every triplet.
-    private static func percentDecoded(_ bytes: ArraySlice<UInt8>) -> [UInt8] {
+    /// Each `%XX` replaced by its octet, or nil when a `%` is not one.
+    private static func percentDecoded(_ bytes: ArraySlice<UInt8>) -> [UInt8]? {
         var out: [UInt8] = []
         var index = bytes.startIndex
         while index < bytes.endIndex {
-            if bytes[index] == UInt8(ascii: "%"), bytes.distance(from: index, to: bytes.endIndex) >= 3,
-               let high = hexValue(bytes[index + 1]), let low = hexValue(bytes[index + 2]) {
-                out.append(high << 4 | low)
-                index += 3
-            } else {
+            guard bytes[index] == UInt8(ascii: "%") else {
                 out.append(bytes[index])
                 index += 1
+                continue
             }
+            guard bytes.distance(from: index, to: bytes.endIndex) >= 3,
+                  let high = hexValue(bytes[index + 1]), let low = hexValue(bytes[index + 2])
+            else { return nil }
+            out.append(high << 4 | low)
+            index += 3
         }
         return out
     }

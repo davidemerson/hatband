@@ -2,10 +2,10 @@ import Testing
 @testable import HatbandCore
 
 // Review of the Validate hardening in 641f8b3. The RFC 3492 decoder is
-// checked against Python's `punycode` codec; what the fixes still let
-// through is kept under `withKnownIssue`; and one table fails on purpose:
-// honest Cyrillic and Greek IDNs, accepted with a warning before the
-// change, are refused by it.
+// checked against Python's `punycode` codec, and the gaps the review found
+// are pinned closed: an honest Cyrillic or Greek IDN keeps its warning, a
+// percent-encoded address is judged as what it decodes to, and a variation
+// selector needs a base it has a sequence with.
 
 private let qr = Limits.qr
 
@@ -74,11 +74,10 @@ func decodesOrRefusesLikePython(encoded: String, decoded: String?) {
 
 /// A host wholly in Cyrillic or Greek is no homograph: its skeleton keeps
 /// letters no ASCII host has, so no ASCII host looks like it (UTS #39 §4,
-/// whole-script confusables). Before 641f8b3 each of these was accepted
-/// with the punycode warning; now `domainVerdict` refuses the label the
-/// moment one letter has an ASCII twin, true of nearly every Cyrillic and
-/// Greek word, and names a "look-alike" that is not ASCII. Fails until the
-/// skeleton test asks for an all-ASCII label.
+/// whole-script confusables). A label is refused as a look-alike only when
+/// every scalar in it is ASCII or has an ASCII twin; one that keeps a letter
+/// with no twin, true of nearly every Cyrillic and Greek word, is honest
+/// and keeps the punycode warning.
 @Test(arguments: [
     ("xn--d1abbgf6aiiy.xn--p1ai", "президент.рф"),
     ("xn--80adxhks.xn--p1ai", "москва.рф"),
@@ -125,27 +124,85 @@ func idnsWithoutLookalikesWarn(host: String) {
     #expect(URLPolicy.verdict(for: "mailto:a@b?SUBJECT%00=x") == .reject("control character"))
 }
 
-// MARK: - Known gaps
+// MARK: - Closed gaps
 
 /// RFC 6068 §2: the address in a `mailto` is percent-encoded, so `%0D%0A`
-/// or `%E2%80%AE` in the local part reach the mail client as CRLF or an
-/// RLO. The tail scan decodes what follows `?`; the address keeps `%` as
-/// atext, which no real address carries. `acct` (RFC 7565) is encoded the
-/// same way.
-@Test(arguments: ["mailto:a%00@b", "mailto:a%0D%0A@b", "mailto:a%E2%80%AE@b", "mailto:a%E2%80%8B@b", "acct:a%0D%0A@b"])
-func knownGapPercentEncodedAddressLocalPart(url: String) {
-    withKnownIssue("a percent-encoded control in the address passes") {
-        #expect(!URLPolicy.verdict(for: url).isAccepted)
-    }
+/// or `%E2%80%AE` in the local part would reach the mail client as CRLF or
+/// an RLO. The address is decoded and scanned as the raw text is, then
+/// judged as what it spells; `acct` (RFC 7565) is encoded the same way. A
+/// `%` outside a triplet is refused, and a decoded `@` or `/` is the
+/// character it is, not atext.
+@Test(arguments: [
+    ("mailto:a%00@b", Verdict.reject("control character")),
+    ("mailto:a%0D%0A@b", .reject("control character")),
+    ("mailto:a%E2%80%AE@b", .reject("bidirectional control character")),
+    ("mailto:a%E2%80%8B@b", .reject("invisible character")),
+    ("mailto:a@b%E2%80%8B", .reject("invisible character")),
+    ("acct:a%0D%0A@b", .reject("control character")),
+    ("acct:a%E2%80%AE@b", .reject("bidirectional control character")),
+    ("mailto:a%20b@c", .reject("whitespace")),
+    ("mailto:%C3%BC@b", .reject("non-ASCII character")),
+    ("mailto:a@m%C3%BCnchen.de", .reject("non-ASCII host")),
+    ("mailto:a@g%D1%96thub.com", .reject("non-ASCII host, looks like “github.com”")),
+    ("mailto:a%40b@c", .reject("not an email address")),                      // the local part a@b needs quoting
+    ("mailto:a%2Fb@c", .reject("not an email address")),
+    ("mailto:a%b@c", .reject("bad percent-encoding")),
+    ("mailto:a%@b", .reject("bad percent-encoding")),
+    ("mailto:a%2@b", .reject("bad percent-encoding")),
+    ("mailto:a@b%", .reject("bad percent-encoding")),
+    ("acct:a%zz@b", .reject("bad percent-encoding")),
+    ("mailto:first%2Blast@x.ie", .ok),
+    ("mailto:first%2blast@x.ie", .ok),
+    ("mailto:a%2Eb@c", .ok),
+    ("mailto:a@x%2Eie", .ok),
+    ("mailto:a%25b@c", .ok),                                                  // a literal `%`, atext in the address
+    ("mailto:first%2Blast@x.ie?subject=%2B", .ok),
+    ("acct:first%2Blast@x.ie", .ok),
+])
+func percentEncodedAddressIsJudgedDecoded(url: String, verdict: Verdict) {
+    #expect(URLPolicy.verdict(for: url) == verdict)
 }
 
-/// Rule 1a lets one selector follow any base, a Latin letter included,
-/// though no standardized variation sequence (StandardizedVariants.txt,
-/// the IVD) has one: with 256 selectors to choose from that is a hidden
-/// byte per visible letter, three or four bytes of the cap each.
-@Test func knownGapSelectorsCarryHiddenBytes() {
-    let name = "J\u{E0100}o\u{E0148}h\u{E01EF}n\u{FE03}"
-    withKnownIssue("a selector after a letter with no variation sequence passes") {
-        #expect(!TextCheck.check(name, maxBytes: 64).isAccepted)
+/// A variation selector is allowed only after a base it has a standardized
+/// sequence with: U+FE0E and U+FE0F after an emoji (the keycap bases too),
+/// the rest of U+FE00–FE0F after an ideograph, a Mongolian or Phags-pa
+/// letter or a mathematical operator, and the IVD's U+E0100–E01EF after an
+/// ideograph. Anywhere else, a Latin letter above all, it is a hidden byte
+/// with 256 values, three or four bytes of the cap each.
+@Test(arguments: [
+    ("\u{263A}\u{FE0E}", Verdict.ok),                                            // ☺︎ text style
+    ("\u{263A}\u{FE0F}", .ok),                                                   // ☺️ emoji style
+    ("\u{2708}\u{FE0F}", .ok),                                                   // ✈️
+    ("1\u{FE0F}\u{20E3}", .ok),                                                  // 1️⃣
+    ("#\u{FE0F}\u{20E3}", .ok),
+    ("\u{908A}\u{E0100}", .ok),                                                  // 邊󠄀, an IVD sequence
+    ("\u{908A}\u{FE00}", .ok),
+    ("\u{2205}\u{FE00}", .ok),                                                   // ∅︀, a standardized variant
+    ("\u{1820}\u{FE00}", .ok),
+    ("\u{A856}\u{FE00}", .ok),
+    ("J\u{E0100}o\u{E0148}h\u{E01EF}n\u{FE03}", .reject("invisible character")),
+    ("a\u{FE0F}", .reject("invisible character")),
+    ("a\u{FE00}", .reject("invisible character")),
+    ("a\u{E0100}", .reject("invisible character")),
+    ("e\u{301}\u{FE0F}", .reject("invisible character")),                       // a mark is no base
+    ("\u{908A}\u{FE0F}", .reject("invisible character")),                       // an ideograph has no emoji style
+    ("\u{263A}\u{FE00}", .reject("invisible character")),                       // nor an emoji a text variant
+    ("\u{263A}\u{E0100}", .reject("invisible character")),
+    ("1\u{E0100}", .reject("invisible character")),
+    ("\u{430}\u{FE0F}", .reject("invisible character")),                        // Cyrillic
+    ("\u{627}\u{FE00}", .reject("invisible character")),                        // Arabic
+])
+func selectorsNeedAStandardizedSequence(s: String, verdict: Verdict) {
+    #expect(TextCheck.check(s, maxBytes: 64) == verdict)
+    #expect(FieldValidator.customValue(s, kind: .text, limits: qr) == verdict)
+    #expect(URLPolicy.verdict(for: "https://example.com/" + s) == verdict, "in a path")
+}
+
+/// No Latin letter has a variation sequence, so every selector after one
+/// is refused.
+@Test func latinLettersTakeNoSelector() {
+    for value in Array(UInt32(0xFE00)...0xFE0F) + Array(UInt32(0xE0100)...0xE01EF) {
+        let name = "Jo" + String(Unicode.Scalar(value)!) + "hn"
+        #expect(TextCheck.check(name, maxBytes: 64) == .reject("invisible character"), "\(String(value, radix: 16))")
     }
 }
