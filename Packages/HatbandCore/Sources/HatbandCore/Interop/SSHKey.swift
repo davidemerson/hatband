@@ -246,8 +246,8 @@ public struct SSHPublicKey: Sendable, Hashable {
                 input >>= 2
             }
         }
-        field[x][y] = symbols.count - 1
         field[width / 2][height / 2] = symbols.count - 2
+        field[x][y] = symbols.count - 1
 
         func border(_ text: String) -> String {
             let label = text.count <= width ? text : ""

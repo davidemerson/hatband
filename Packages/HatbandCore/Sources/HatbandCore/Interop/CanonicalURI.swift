@@ -113,7 +113,13 @@ public enum Normalize {
         if text.last == ">", let open = text.lastIndex(of: "<") {
             text = text[text.index(after: open)..<text.index(before: text.endIndex)].trimmed()
         }
+        let hadScheme = text.lowercased().hasPrefix("mailto:")
         text = text.droppingPrefix("mailto:", caseInsensitive: true)
+        if hadScheme {
+            if let query = text.firstIndex(of: "?") { text = text[..<query] }
+            guard let decoded = PercentEncoding.decode(text) else { throw Error.invalidCharacter("%") }
+            text = Substring(decoded)
+        }
         guard !text.isEmpty else { throw Error.empty }
         for ch in text where !ch.isASCII || ch.isControl || ch == " " { throw Error.invalidCharacter(ch) }
         guard text.count <= 254 else { throw Error.tooLong }

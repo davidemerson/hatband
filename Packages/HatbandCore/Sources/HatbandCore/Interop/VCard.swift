@@ -133,8 +133,9 @@ public struct VCard: Sendable, Hashable {
     public static func parseBasic(_ text: String) throws -> VCard {
         var logical: [String] = []
         for raw in text.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\r\n" || $0 == "\n" }) {
-            if let first = raw.first, first == " " || first == "\t", !logical.isEmpty {
-                logical[logical.count - 1] += raw.dropFirst()
+            // Scalars, not graphemes: a fold may land before a combining mark.
+            if let first = raw.unicodeScalars.first, first == " " || first == "\t", !logical.isEmpty {
+                logical[logical.count - 1] += String(Substring(raw.unicodeScalars.dropFirst()))
             } else if !raw.isEmpty {
                 logical.append(String(raw))
             }

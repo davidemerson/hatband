@@ -332,6 +332,6 @@ func rejectsMalformedLines(line: String, error: SSHPublicKey.Error) {
     let long = SSHPublicKey.randomart(fingerprint: [], title: "[A TITLE THAT IS TOO LONG]", footer: "[MD5]")
     #expect(long.hasPrefix("+-----------------+\n"))
     #expect(long.hasSuffix("+------[MD5]------+"))
-    // An empty fingerprint starts and ends in the centre; S is marked last.
-    #expect(long.split(separator: "\n")[5] == "|        S        |")
+    // An empty fingerprint starts and ends in the centre; E is marked last, as in OpenSSH.
+    #expect(long.split(separator: "\n")[5] == "|        E        |")
 }
