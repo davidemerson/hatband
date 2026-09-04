@@ -115,6 +115,6 @@ func rejectsMalformed(encoded: String, error: CBORError) {
     #expect(value[5] == .null)
     #expect(value[6] == nil)
     #expect(CBOR.unsigned(UInt64(Int.max) + 1).intValue == nil)
-    #expect(CBOR.negative(UInt64(Int.max)).intValue == nil)
+    #expect(CBOR.negative(UInt64(Int.max)).intValue == Int.min)
     #expect(CBOR.negative(UInt64(Int.max) - 1).intValue == Int.min + 1)
 }

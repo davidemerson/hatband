@@ -1,7 +1,7 @@
 /// A CBOR value (RFC 8949) limited to what HB1 needs: integers, byte and text
 /// strings, arrays, maps, booleans and null. Encoding is deterministic per
 /// RFC 8949 §4.2.1 and decoding rejects anything that is not.
-public indirect enum CBOR: Hashable, Sendable {
+public indirect enum CBOR: Sendable {
     case unsigned(UInt64)
     /// Encodes the integer `-1 - value`.
     case negative(UInt64)
@@ -11,6 +11,37 @@ public indirect enum CBOR: Hashable, Sendable {
     case map([CBOR: CBOR])
     case bool(Bool)
     case null
+}
+
+/// Equality and hashing follow the wire form: text compares by UTF-8 bytes,
+/// not by Unicode canonical equivalence (RFC 8949 §5.6.1).
+extension CBOR: Hashable {
+    public static func == (lhs: CBOR, rhs: CBOR) -> Bool {
+        switch (lhs, rhs) {
+        case (.unsigned(let a), .unsigned(let b)): return a == b
+        case (.negative(let a), .negative(let b)): return a == b
+        case (.bytes(let a), .bytes(let b)): return a == b
+        case (.text(let a), .text(let b)): return a.utf8.elementsEqual(b.utf8)
+        case (.array(let a), .array(let b)): return a == b
+        case (.map(let a), .map(let b)): return a == b
+        case (.bool(let a), .bool(let b)): return a == b
+        case (.null, .null): return true
+        default: return false
+        }
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        switch self {
+        case .unsigned(let v): hasher.combine(0 as UInt8); hasher.combine(v)
+        case .negative(let v): hasher.combine(1 as UInt8); hasher.combine(v)
+        case .bytes(let v): hasher.combine(2 as UInt8); hasher.combine(v)
+        case .text(let v): hasher.combine(3 as UInt8); hasher.combine(v.utf8.count); for b in v.utf8 { hasher.combine(b) }
+        case .array(let v): hasher.combine(4 as UInt8); hasher.combine(v)
+        case .map(let v): hasher.combine(5 as UInt8); hasher.combine(v)
+        case .bool(let v): hasher.combine(7 as UInt8); hasher.combine(v)
+        case .null: hasher.combine(8 as UInt8)
+        }
+    }
 }
 
 public enum CBORError: Error, Equatable, Sendable {
@@ -97,7 +128,8 @@ extension CBOR {
 // MARK: - Decoding
 
 extension CBOR {
-    /// Nesting deeper than this is rejected; HB1 never exceeds three levels.
+    /// Containers may nest this deep; the next level is rejected on decode.
+    /// HB1 never exceeds three levels. The encoder does not check depth.
     public static let maxDepth = 32
 
     /// Strict decoding. Fails on non-shortest integers, indefinite lengths,
@@ -169,7 +201,6 @@ extension CBOR {
         }
 
         mutating func item(depth: Int) throws -> CBOR {
-            guard depth <= CBOR.maxDepth else { throw CBORError.tooDeep }
             let initial = try byte()
             let major = initial >> 5
             let info = initial & 0x1f
@@ -188,13 +219,17 @@ extension CBOR {
                 }
                 return .text(s)
             case 4:
+                guard depth < CBOR.maxDepth else { throw CBORError.tooDeep }
                 let n = try length(major: major, info: info)
                 var array: [CBOR] = []
                 array.reserveCapacity(n)
                 for _ in 0..<n { array.append(try item(depth: depth + 1)) }
                 return .array(array)
             case 5:
+                guard depth < CBOR.maxDepth else { throw CBORError.tooDeep }
                 let n = try length(major: major, info: info)
+                // A pair needs at least two bytes; bound the reservation by that.
+                guard n <= remaining / 2 else { throw CBORError.truncated }
                 var map: [CBOR: CBOR] = [:]
                 map.reserveCapacity(n)
                 var previousKey: ArraySlice<UInt8>?
@@ -206,7 +241,11 @@ extension CBOR {
                         throw CBORError.mapKeysNotOrdered
                     }
                     previousKey = keyBytes
-                    map[key] = try item(depth: depth + 1)
+                    // Distinct on the wire but equal to Swift: text keys compare by
+                    // canonical equivalence, not bytes. Fail rather than drop one.
+                    guard map.updateValue(try item(depth: depth + 1), forKey: key) == nil else {
+                        throw CBORError.mapKeysNotOrdered
+                    }
                 }
                 return .map(map)
             case 7:
@@ -262,7 +301,7 @@ extension CBOR {
     public var intValue: Int? {
         switch self {
         case .unsigned(let v): return Int(exactly: v)
-        case .negative(let v): return v < UInt64(Int.max) ? -1 - Int(v) : nil
+        case .negative(let v): return v <= UInt64(Int.max) ? -1 - Int(v) : nil
         default: return nil
         }
     }

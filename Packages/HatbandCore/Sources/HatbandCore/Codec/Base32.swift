@@ -29,9 +29,10 @@ public enum Base32 {
         return String(decoding: out, as: UTF8.self)
     }
 
-    /// Accepts either case and tolerates trailing `=` padding. Rejects any
-    /// other character, impossible lengths, and non-zero trailing bits, so a
-    /// given byte string has exactly one accepted spelling per case.
+    /// Accepts either case and tolerates any run of trailing `=`. Rejects any
+    /// other character, impossible lengths, and non-zero trailing bits, so
+    /// every accepted spelling re-encodes to itself once upper-cased and
+    /// stripped of padding.
     public static func decode(_ text: some StringProtocol) throws -> [UInt8] {
         var chars = Array(text.utf8)
         while chars.last == UInt8(ascii: "=") { chars.removeLast() }
