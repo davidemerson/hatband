@@ -44,8 +44,7 @@ nonisolated enum Links {
             rows.append(Row(id: "ssh", label: "SSH", text: sshText(ssh), url: nil, domain: nil, mono: true))
         }
         if let fingerprint = card.gpgFingerprint {
-            let text = (try? GPGFingerprint(bytes: fingerprint))?.formatted ?? Hex.string(fingerprint).uppercased()
-            rows.append(Row(id: "gpg", label: "GPG", text: text, url: nil, domain: nil, mono: true))
+            rows.append(Row(id: "gpg", label: "GPG", text: gpgText(fingerprint), url: nil, domain: nil, mono: true))
         }
         for (index, field) in card.custom.enumerated() {
             rows.append(customRow(field, index: index))
@@ -53,9 +52,13 @@ nonisolated enum Links {
         return rows
     }
 
-    /// Name, organisation, mobile, email, the web links, the GPG
-    /// fingerprint, the photo and the persona id, key and issued day as
-    /// `X-HATBAND` lines. The note is the met string and nothing else.
+    /// The vCard hatband.link builds for the same card (`cardVCard` in
+    /// `site/src/hb1.js`), plus the met line. Name, organisation, mobile
+    /// and email; each channel and url-kind custom field as a labelled link
+    /// when `URLPolicy` accepts its URI and as `Label: text` in the note
+    /// otherwise; text, email and phone custom fields and the SSH key as
+    /// note lines; a JPEG photo; `X-HATBAND-PERSONA`, `-KEY`, `-ISSUED-DAY`
+    /// and `-SEQ`. `met` leads the note and is the one thing the site lacks.
     static func vcard(for person: Person, met: String?) -> VCard {
         let card = person.card
         var vcard = VCard(formattedName: card.name ?? "")
@@ -63,26 +66,65 @@ nonisolated enum Links {
         vcard.phone = card.phone
         vcard.email = card.email
         var links: [VCard.Link] = []
-        for row in rows(for: card) {
-            if let url = row.url, url.hasPrefix("http") {
-                links.append(VCard.Link(label: row.label, url: url))
+        var note: [String] = []
+        if let met {
+            note.append(met)
+        }
+        func link(_ label: String, _ url: String?, _ text: String) {
+            if let url, URLPolicy.verdict(for: url).isAccepted {
+                links.append(VCard.Link(label: label, url: url))
+            } else {
+                note.append(label + ": " + text)
             }
         }
+        if let website = card.website {
+            link("Website", CanonicalURI.website(website.address, insecure: website.insecure), website.address)
+        }
+        if let github = card.github {
+            link("GitHub", CanonicalURI.github(github), github)
+        }
+        if let linkedin = card.linkedin {
+            link("LinkedIn", CanonicalURI.linkedin(linkedin), linkedin)
+        }
+        if let mastodon = card.mastodon {
+            link("Mastodon", CanonicalURI.mastodon(mastodon)?.profile, mastodon)
+        }
+        if let signal = card.signal {
+            switch signal {
+            case .username:
+                link("Signal", CardFields.display(signal: signal), "username link")
+            case .phone(let number):
+                link("Signal", CardFields.display(signal: signal), number)
+            }
+        }
+        if let calendly = card.calendly {
+            link("Calendly", CanonicalURI.calendly(calendly), calendly)
+        }
         if let fingerprint = card.gpgFingerprint {
-            links.append(VCard.Link(label: "GPG", url: CanonicalURI.gpgFingerprint(fingerprint)))
+            link("GPG", CanonicalURI.gpgFingerprint(fingerprint), gpgText(fingerprint))
+        }
+        for field in card.custom {
+            if field.kind == .url {
+                link(field.label, field.value, field.value)
+            } else {
+                note.append(field.label + ": " + field.value)
+            }
+        }
+        if let ssh = card.ssh, let line = sshDisplay(ssh) {
+            note.append(line)
         }
         vcard.links = links
-        vcard.note = met
-        vcard.photoJPEG = card.photo
-        var extensions = [
-            VCard.Extension(name: "PERSONA", value: Hex.string(card.personaID)),
-            VCard.Extension(name: "ISSUED-DAY", value: String(card.issuedDay)),
-        ]
+        vcard.note = note.isEmpty ? nil : note.joined(separator: "\n")
+        if let photo = card.photo, isJPEG(photo) {
+            vcard.photoJPEG = photo
+        }
+        var extensions = [VCard.Extension(name: "PERSONA", value: Hex.string(card.personaID))]
         if let key = card.publicKey {
             extensions.append(VCard.Extension(name: "KEY", value: Base64.encode(key)))
         }
-        if let ssh = card.ssh, let line = authorizedKeysLine(ssh) {
-            extensions.append(VCard.Extension(name: "SSH", value: line))
+        extensions.append(VCard.Extension(name: "ISSUED-DAY", value: String(card.issuedDay)))
+        if card.seq != 0 {
+            extensions.append(VCard.Extension(name: "SEQ", value: String(card.seq)))
         }
         vcard.extensions = extensions
         return vcard
@@ -92,6 +134,22 @@ nonisolated enum Links {
     /// passed on never says where you met.
     static func metNote(for encounter: Encounter) -> String {
         "Met " + encounter.date.formatted(date: .abbreviated, time: .omitted)
+    }
+
+    /// What the site shows for key 11 (`sshDisplay`): the `authorized_keys`
+    /// line for an inline key, `SHA256:` and the stored digest for RSA, nil
+    /// for anything malformed.
+    static func sshDisplay(_ field: SSHKeyField) -> String? {
+        guard let kind = SSHPublicKey.Kind(rawValue: field.kind) else { return nil }
+        if kind == .rsa {
+            return field.bytes.count == 32 ? SSHPublicKey.fingerprintString(sha256: field.bytes) : nil
+        }
+        return authorizedKeysLine(field)
+    }
+
+    /// The site's `isJPEG`: the SOI marker, nothing else is a photo.
+    static func isJPEG(_ bytes: [UInt8]) -> Bool {
+        bytes.count >= 2 && bytes[0] == 0xFF && bytes[1] == 0xD8
     }
 
     /// What the editors and inspector call a channel.
@@ -156,6 +214,11 @@ nonisolated enum Links {
             let link = try? SignalLink(phone: number)
             return row("signal", "Signal", number, url: link?.url)
         }
+    }
+
+    /// GnuPG's grouped display form, or bare hex for an impossible length.
+    private static func gpgText(_ fingerprint: [UInt8]) -> String {
+        (try? GPGFingerprint(bytes: fingerprint))?.formatted ?? Hex.string(fingerprint).uppercased()
     }
 
     /// The OpenSSH fingerprint: computed for an inline key, carried as

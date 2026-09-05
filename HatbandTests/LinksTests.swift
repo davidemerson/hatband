@@ -145,6 +145,103 @@ struct LinksTests {
         #expect(Links.vcard(for: person, met: nil).note == nil)
     }
 
+    /// The site's `cardVCard` output for every vector, generated into
+    /// `SiteVCardFixtures` from `site/src/hb1.js`: without a met line the
+    /// app must produce the same bytes for the same card.
+    @Test(arguments: ["minimal", "compact-name-only", "compact-two-channels", "typical-signed", "maximal-qr-signed",
+                      "file-with-photo-and-key", "alias-signed", "unicode-nfc", "unicode-nfd", "tampered-signature"])
+    func vcardMatchesTheSiteForVector(name: String) throws {
+        let card = try Vectors.card(name)
+        let person = Person(personaID: card.personaID, cardBytes: try Vectors.cbor(name), card: card,
+                            publicKey: card.publicKey, keyFingerprint: card.keyFingerprint, trust: .byFile, source: .file,
+                            tags: ["private"], note: "private", gpgKey: card.gpgKey, createdAt: Date(), updatedAt: Date(),
+                            encounters: [])
+        let expected = try #require(SiteVCardFixtures.text[name])
+        let text = Links.vcard(for: person, met: nil).text
+        #expect(Array(text.utf8) == Array(expected.utf8), "\(name)")
+        #expect(!text.contains("private"))
+    }
+
+    @Test func vcardMetLeadsTheNoteAndRejectedChannelsFollow() throws {
+        var card = try Vectors.card("maximal-qr-signed")
+        card.website = Website(address: "evil.example/\"><script>", insecure: false)
+        card.custom.append(CustomField(label: "Work", value: "bloom@example.ie", kind: .email))
+        card.custom.append(CustomField(label: "Script", value: "javascript:alert(1)", kind: .url))
+        let person = Person(personaID: card.personaID, cardBytes: card.cbor.encoded, card: card, publicKey: card.publicKey,
+                            keyFingerprint: nil, trust: .inPerson, source: .scan, tags: [], note: "", gpgKey: nil,
+                            createdAt: Date(), updatedAt: Date(), encounters: [])
+        let met = "Met 16 Jun 2026 at Davy Byrne's"
+        let vcard = Links.vcard(for: person, met: met)
+        let parsed = try VCard.parseBasic(vcard.text)
+        let ssh = try #require(Links.sshDisplay(try #require(card.ssh)))
+        #expect(parsed.note == [met, "Website: evil.example/\"><script>", "Pub: Davy Byrne's", "Fax: +35318000000",
+                                "Work: bloom@example.ie", "Script: javascript:alert(1)", ssh].joined(separator: "\n"))
+        #expect(parsed.links.map { $0.label } == ["GitHub", "LinkedIn", "Mastodon", "Signal", "Calendly", "GPG", "Matrix"])
+        #expect(parsed.links.allSatisfy { URLPolicy.verdict(for: $0.url).isAccepted })
+        #expect(!vcard.text.contains("URL:javascript"))
+        #expect(!vcard.text.contains("URL:https://evil.example"))
+        #expect(parsed.extensions.map { $0.name } == ["PERSONA", "KEY", "ISSUED-DAY", "SEQ"])
+        #expect(parsed.extensions.last?.value == "7")
+        #expect(Links.vcard(for: person, met: nil).note?.hasPrefix("Website: ") == true)
+
+        var pictured = card
+        pictured.photo = [0x89, 0x50, 0x4E, 0x47]
+        var portrait = person
+        portrait.card = pictured
+        #expect(Links.vcard(for: portrait, met: nil).photoJPEG == nil)
+        pictured.photo = [0xFF, 0xD8, 0xFF, 0xD9]
+        portrait.card = pictured
+        #expect(Links.vcard(for: portrait, met: nil).photoJPEG == [0xFF, 0xD8, 0xFF, 0xD9])
+    }
+
+    @Test func sshDisplayMatchesSite() throws {
+        let card = try Vectors.card("maximal-qr-signed")
+        let field = try #require(card.ssh)
+        let key = try SSHPublicKey(kind: .ed25519, inlineBytes: field.bytes)
+        #expect(Links.sshDisplay(field) == key.authorizedKeysLine())
+        #expect(Links.sshDisplay(field)?.hasPrefix("ssh-ed25519 ") == true)
+        let digest = [UInt8](repeating: 0xAB, count: 32)
+        let rsa = SSHKeyField(kind: SSHPublicKey.Kind.rsa.rawValue, bytes: digest)
+        #expect(Links.sshDisplay(rsa) == SSHPublicKey.fingerprintString(sha256: digest))
+        #expect(Links.sshDisplay(rsa)?.hasPrefix("SHA256:") == true)
+        #expect(Links.sshDisplay(SSHKeyField(kind: SSHPublicKey.Kind.rsa.rawValue, bytes: [1, 2, 3])) == nil)
+        #expect(Links.sshDisplay(SSHKeyField(kind: 0x7f, bytes: digest)) == nil)
+        #expect(Links.sshDisplay(SSHKeyField(kind: SSHPublicKey.Kind.ed25519.rawValue, bytes: [1, 2, 3])) == nil)
+        #expect(Links.isJPEG([0xFF, 0xD8]))
+        #expect(!Links.isJPEG([0xFF]))
+        #expect(!Links.isJPEG([0x89, 0x50, 0x4E, 0x47]))
+    }
+
+    /// Every row's url is the canonical URI and passes `URLPolicy.isTappable`;
+    /// a row without one has no domain either.
+    @Test func rowsOfferOnlyTappableCanonicalURIsForEveryVector() throws {
+        for vector in try Vectors.all() {
+            let name = try #require(vector["name"] as? String)
+            let card = try Vectors.card(name)
+            let rows = Links.rows(for: card)
+            for row in rows {
+                if let url = row.url {
+                    #expect(URLPolicy.isTappable(url), "\(name) \(row.id)")
+                    #expect(row.domain != nil || url.hasPrefix("tel:"), "\(name) \(row.id)")
+                } else {
+                    #expect(row.domain == nil, "\(name) \(row.id)")
+                }
+            }
+            if let phone = card.phone { #expect(rows.first { $0.id == "phone" }?.url == CanonicalURI.phone(phone)) }
+            if let email = card.email { #expect(rows.first { $0.id == "email" }?.url == CanonicalURI.email(email)) }
+            if let website = card.website {
+                #expect(rows.first { $0.id == "website" }?.url == CanonicalURI.website(website.address, insecure: website.insecure))
+            }
+            if let github = card.github { #expect(rows.first { $0.id == "github" }?.url == CanonicalURI.github(github)) }
+            if let linkedin = card.linkedin { #expect(rows.first { $0.id == "linkedin" }?.url == CanonicalURI.linkedin(linkedin)) }
+            if let mastodon = card.mastodon { #expect(rows.first { $0.id == "mastodon" }?.url == CanonicalURI.mastodon(mastodon)?.profile) }
+            if let calendly = card.calendly { #expect(rows.first { $0.id == "calendly" }?.url == CanonicalURI.calendly(calendly)) }
+            if let signal = card.signal { #expect(rows.first { $0.id == "signal" }?.url == CardFields.display(signal: signal)) }
+            #expect(rows.first { $0.id == "gpg" }?.url == nil)
+            #expect(rows.first { $0.id == "ssh" }?.url == nil)
+        }
+    }
+
     private func longestDigitRun(_ text: String) -> Int {
         var longest = 0
         var run = 0

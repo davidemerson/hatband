@@ -90,6 +90,23 @@ struct WidgetFeedTests {
         }
     }
 
+    /// Of the ten vectors only the two Lock Screen cards may feed the widget.
+    @Test func readAcceptsOnlyCompactVectors() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var accepted: [String] = []
+        for vector in try Vectors.all() {
+            let name = try #require(vector["name"] as? String)
+            let url = try #require(vector["url"] as? String)
+            try WidgetFeed(url: url, name: nil, color: 0, writtenAt: Date()).write(to: directory)
+            if WidgetFeed.read(from: directory) != nil {
+                accepted.append(name)
+            }
+            #expect(try HB1.decode(url: url).isCompact == name.hasPrefix("compact-"), "\(name)")
+        }
+        #expect(accepted == ["compact-name-only", "compact-two-channels"])
+    }
+
     @Test func kindAndFileNameAreFixed() {
         #expect(WidgetFeed.kind == "link.hatband.card")
         #expect(WidgetFeed.fileName == "card-widget.json")

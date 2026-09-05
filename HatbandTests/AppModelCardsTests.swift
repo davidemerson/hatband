@@ -214,30 +214,186 @@ import Testing
         #expect(compact.name == "Henry Flower")
     }
 
-    @Test func updateBumpsSeqOnlyWhenChanged() async throws {
+    /// README: "`seq` rises only when a card's content changes." The label
+    /// names the persona in the app and rides in no card; Lock Screen
+    /// channels, colour, display name and the field selection all do.
+    @Test func updateBumpsSeqOnlyWhenCardContentChanges() async throws {
         let model = try await onboarded()
         let persona = try #require(model.selectedPersona)
         #expect(persona.seq == 1)
         try await model.update(persona)
         #expect(model.selectedPersona?.seq == 1)
-        var changed = persona
-        changed.label = "Home"
-        try await model.update(changed)
-        #expect(model.selectedPersona?.seq == 2)
+
+        var renamed = persona
+        renamed.label = "Home"
+        try await model.update(renamed)
         #expect(model.selectedPersona?.label == "Home")
-        var again = try #require(model.selectedPersona)
-        again.lockScreenChannels = [.email]
-        try await model.update(again)
+        #expect(model.selectedPersona?.seq == 1)
+
+        var lockScreen = try #require(model.selectedPersona)
+        lockScreen.lockScreenChannels = [.email]
+        try await model.update(lockScreen)
+        #expect(model.selectedPersona?.seq == 2)
+
+        var recoloured = try #require(model.selectedPersona)
+        recoloured.color = 5
+        try await model.update(recoloured)
         #expect(model.selectedPersona?.seq == 3)
+
+        var named = try #require(model.selectedPersona)
+        named.displayName = "L. Bloom"
+        try await model.update(named)
+        #expect(model.selectedPersona?.seq == 4)
+
+        var narrower = try #require(model.selectedPersona)
+        narrower.channels.remove(.phone)
+        try await model.update(narrower)
+        #expect(model.selectedPersona?.seq == 5)
+
+        // A stale `seq` on the way in is ignored: the counter is the model's.
+        var stale = try #require(model.selectedPersona)
+        stale.seq = 1
+        stale.label = "Home again"
+        try await model.update(stale)
+        #expect(model.selectedPersona?.seq == 5)
+        #expect(model.selectedPersona?.label == "Home again")
+
         let reloaded = try await reload(model)
-        #expect(reloaded.selectedPersona?.seq == 3)
-        #expect(reloaded.selectedPersona?.label == "Home")
-        #expect(try reloaded.card(for: try #require(reloaded.selectedPersona), form: .fullQR).seq == 3)
+        #expect(reloaded.selectedPersona?.seq == 5)
+        #expect(reloaded.selectedPersona?.label == "Home again")
+        #expect(try reloaded.card(for: try #require(reloaded.selectedPersona), form: .fullQR).seq == 5)
         var unknown = persona
         unknown.id = [9, 9, 9, 9, 9, 9, 9, 9]
         await #expect(throws: AppError.storage("Unknown persona")) {
             try await model.update(unknown)
         }
+    }
+
+    /// Key 17 counts Gregorian days in the local time zone, whatever
+    /// calendar the phone displays; before the epoch it is clamped to 0.
+    @Test func issuedDayCountsGregorianDaysInTheLocalTimeZone() async throws {
+        let instant = Date(timeIntervalSince1970: 1_788_000_000)   // 2026-08-29T10:40:00Z
+        let utc = try #require(TimeZone(identifier: "UTC"))
+        #expect(AppModel.issuedDay(on: instant, timeZone: utc) == 2432)
+        let civil = Day.civil(2432)
+        #expect(civil.year == 2026 && civil.month == 8 && civil.day == 29)
+        #expect(AppModel.issuedDay(on: instant, timeZone: try #require(TimeZone(identifier: "Pacific/Pago_Pago"))) == 2431)
+        #expect(AppModel.issuedDay(on: instant, timeZone: try #require(TimeZone(identifier: "Pacific/Kiritimati"))) == 2433)
+        #expect(AppModel.issuedDay(on: Date(timeIntervalSince1970: 0), timeZone: utc) == 0)
+        // The vectors were issued on 2026-09-04.
+        #expect(AppModel.issuedDay(on: Date(timeIntervalSince1970: 1_788_000_000 + 6 * 86_400), timeZone: utc) == 2438)
+        let model = try await onboarded()
+        #expect(model.issuedDay() == AppModel.issuedDay(on: Date(), timeZone: .current))
+        #expect(try model.card(for: try #require(model.selectedPersona), form: .file).issuedDay == model.issuedDay())
+    }
+
+    /// Key 23 travels only beside key 12: a persona that withholds its GPG
+    /// channel does not ship the certificate that names it.
+    @Test func fileCardCarriesGPGKeyOnlyWithItsFingerprint() async throws {
+        let model = try await onboarded()
+        var persona = try #require(model.selectedPersona)
+        #expect(persona.channels.contains(.gpgFingerprint))
+        let shared = try model.card(for: persona, form: .file)
+        #expect(shared.gpgFingerprint == sampleProfile().gpgFingerprint)
+        #expect(shared.gpgKey == sampleProfile().gpgKey)
+
+        persona.channels.remove(.gpgFingerprint)
+        try await model.update(persona)
+        persona = try #require(model.selectedPersona)
+        let withheld = try model.card(for: persona, form: .file)
+        #expect(withheld.gpgFingerprint == nil)
+        #expect(withheld.gpgKey == nil)
+        #expect(withheld.photo == sampleProfile().photo)
+        #expect(withheld.signatureIsValid)
+        #expect(try HB1.decode(file: try model.fileBytes(for: persona)).gpgKey == nil)
+        #expect(try HB1.decode(url: try model.url(for: persona, form: .file)).gpgKey == nil)
+        #expect(AppModel.unsignedCard(profile: model.profile, persona: persona, form: .file, issuedDay: 1).gpgKey == nil)
+        #expect(CardBuilder.card(profile: model.profile, persona: persona, form: .file, issuedDay: 1).gpgKey != nil)
+
+        // Importing a certificate the persona does not share is not a content change either.
+        var profile = model.profile
+        profile.gpgKey = [UInt8](repeating: 0xC7, count: 300)
+        let before = persona.seq
+        try await model.saveProfile(profile)
+        #expect(model.selectedPersona?.seq == before)
+    }
+
+    /// The set of HB1 keys each form emits is the set the vector of that
+    /// tier carries; the app never writes key 22.
+    @Test func tiersEmitTheVectorKeySets() async throws {
+        let model = try await onboarded(profile: maximalProfile())
+        var persona = try #require(model.selectedPersona)
+        persona.customLabels = ["Pub", "Matrix", "Fax"]
+        try await model.update(persona)
+        persona = try #require(model.selectedPersona)
+
+        let compact = try model.card(for: persona, form: .lockScreen)
+        #expect(try keys(of: compact) == vectorKeys("compact-name-only"))
+        #expect(compact.flags == .compact)
+        #expect(compact.name == "Leopold Bloom")
+        #expect(compact.publicKey == nil && compact.signature == nil)
+
+        persona.lockScreenChannels = [.email, .mastodon]
+        try await model.update(persona)
+        persona = try #require(model.selectedPersona)
+        let channels = try model.card(for: persona, form: .lockScreen)
+        #expect(try keys(of: channels) == vectorKeys("compact-two-channels"))
+        #expect(channels.email == "henry.flower@example.ie")
+        #expect(channels.mastodon == "bloom@merveilles.town")
+        #expect(channels.company == nil)
+        #expect(channels.custom.isEmpty)
+        #expect(channels.keyFingerprint == KeyFingerprint(publicKey: try derivedKey(model, persona))?.short)
+
+        let full = try model.card(for: persona, form: .fullQR)
+        #expect(try keys(of: full) == vectorKeys("maximal-qr-signed").subtracting([FieldKey.minReader.rawValue]))
+        #expect(full.flags == [.photoAvailable])
+        #expect(full.website?.insecure == true)
+        #expect(full.photo == nil)
+        #expect(full.gpgKey == nil)
+        #expect(full.custom == maximalProfile().custom)
+        #expect(full.signatureIsValid)
+
+        let file = try model.card(for: persona, form: .file)
+        #expect(try keys(of: file) == vectorKeys("file-with-photo-and-key").subtracting([FieldKey.minReader.rawValue]))
+        #expect(file.photo == maximalProfile().photo)
+        #expect(file.gpgKey == maximalProfile().gpgKey)
+        #expect(file.signatureIsValid)
+    }
+
+    /// The maximal vector's fields as a profile.
+    private func maximalProfile() -> Profile {
+        var profile = Profile()
+        profile.name = "Leopold Bloom"
+        profile.company = "Freeman's Journal"
+        profile.phone = "+353871234567"
+        profile.email = "henry.flower@example.ie"
+        profile.website = Website(address: "example.org/~bloom", insecure: true)
+        profile.github = "lbloom"
+        profile.linkedin = "leopold-bloom"
+        profile.mastodon = "bloom@merveilles.town"
+        profile.signal = .username((0..<48).map { UInt8($0 &* 5 &+ 3) })
+        profile.calendly = "bloom/coffee"
+        profile.ssh = SSHKeyField(kind: 1, bytes: (0..<32).map { UInt8(0x40 + $0) })
+        profile.gpgFingerprint = (0..<20).map { UInt8(0xa0 + $0) }
+        profile.gpgKey = [0x98, 0x33, 0x04] + (0..<120).map { UInt8(truncatingIfNeeded: $0 &* 7) }
+        profile.photo = [0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]
+            + (0..<200).map { UInt8($0 & 0xff) } + [0xff, 0xd9]
+        profile.custom = [
+            CustomField(label: "Pub", value: "Davy Byrne's", kind: .text),
+            CustomField(label: "Matrix", value: "https://matrix.to/#/@bloom:example.ie", kind: .url),
+            CustomField(label: "Fax", value: "+35318000000", kind: .phone),
+        ]
+        return profile
+    }
+
+    private func vectorKeys(_ name: String) throws -> Set<UInt64> {
+        let map = try #require(try Vectors.vector(name)["map"] as? [String: Any])
+        return Set(map.keys.compactMap { UInt64($0) })
+    }
+
+    private func keys(of card: Card) throws -> Set<UInt64> {
+        let map = try #require(card.cbor.mapValue)
+        return Set(map.keys.compactMap { $0.unsignedValue })
     }
 
     @Test func selectPersistsLastPersonaID() async throws {

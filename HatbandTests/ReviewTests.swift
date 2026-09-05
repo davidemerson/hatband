@@ -93,6 +93,25 @@ struct ReviewTests {
         #expect(filed.acceptedCard.photo == card.photo)
     }
 
+    /// `Limits.qr` for what came off a screen, `Limits.file` for a file or
+    /// link: the photo survives only the latter.
+    @Test(arguments: [CardSource.scan, .photo, .file, .link])
+    func limitsFollowSource(source: CardSource) throws {
+        #expect(source.limits.photoBytes == (source.isInPerson ? Limits.qr.photoBytes : Limits.file.photoBytes))
+        #expect(source.limits.customFields == (source.isInPerson ? Limits.qr.customFields : Limits.file.customFields))
+        let card = try Vectors.card("file-with-photo-and-key")
+        let review = Review.make(card: card, source: source, people: [])
+        #expect(review.items.contains { $0.id == "photo" } == !source.isInPerson)
+        #expect(review.dropped.contains { $0.hasPrefix("Photo: ") } == source.isInPerson)
+        #expect(review.acceptedCard.photo == (source.isInPerson ? nil : card.photo))
+        #expect(review.dropped.contains { $0.hasPrefix("GPG key: ") })
+        #expect(review.signature == .valid)
+        var crowded = try Vectors.card("typical-signed")
+        crowded.custom = (0..<(Limits.qr.customFields + 1)).map { CustomField(label: "F\($0)", value: "v") }
+        let count = Review.make(card: crowded, source: source, people: [])
+        #expect(count.items.contains { $0.id == "custom:F0" } == !source.isInPerson)
+    }
+
     @Test func oversizeGPGKeyDropped() throws {
         var card = try Vectors.card("maximal-qr-signed")
         card.gpgKey = [UInt8](repeating: 0x98, count: Limits.file.gpgKeyBytes + 1)

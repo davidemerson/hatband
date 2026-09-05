@@ -179,6 +179,79 @@ struct MergeTests {
         #expect(person.encounters.count == 1)
     }
 
+    /// A new person keeps the bytes that were received, signature and all,
+    /// and is pinned to the key (or fingerprint) they carry.
+    @Test(arguments: ["compact-name-only", "compact-two-channels", "typical-signed", "maximal-qr-signed", "alias-signed",
+                      "unicode-nfc", "unicode-nfd"])
+    func storedBytesAreTheReceivedBytes(name: String) throws {
+        let card = try Vectors.card(name)
+        let review = Review.make(card: card, source: card.isCompact ? .scan : .link, people: [])
+        #expect(review.dropped.isEmpty, "\(name)")
+        let person = Merge.apply(existing: nil, review: review, fix: nil, label: "", note: "", tags: [],
+                                 acceptNewKey: false, now: now)
+        #expect(person.cardBytes == (try Vectors.cbor(name)), "\(name)")
+        let stored = try HB1.decode(cbor: person.cardBytes)
+        #expect(stored == card)
+        #expect(stored.signatureIsValid == card.isSigned)
+        if let key = card.publicKey {
+            #expect(person.publicKey == key)
+            #expect(person.keyFingerprint == KeyFingerprint(publicKey: key)?.short)
+        } else {
+            #expect(person.publicKey == nil)
+            #expect(person.keyFingerprint == card.keyFingerprint)
+        }
+        #expect(try PersonCodec.decode(PersonCodec.encode(person)).cardBytes == person.cardBytes)
+    }
+
+    /// README: a GPG certificate is kept only when it hashes to the card's
+    /// fingerprint, on a first save and on an update alike.
+    @Test func applyKeepsGPGKeyOnlyWhenItHashesToTheFingerprint() throws {
+        let vector = try Vectors.card("file-with-photo-and-key")
+        let unverified = Merge.apply(existing: nil, review: review(vector, source: .file), fix: nil, label: "", note: "",
+                                     tags: [], acceptNewKey: false, now: now)
+        #expect(unverified.gpgKey == nil)
+        #expect(unverified.card.gpgKey == nil)
+        #expect(unverified.card.photo == vector.photo)
+
+        let certificate = syntheticV4Certificate()
+        var anchored = vector
+        anchored.gpgFingerprint = certificate.fingerprint
+        anchored.gpgKey = certificate.packet
+        let hashing = try signed(anchored, index: 3)
+        let verified = Merge.apply(existing: nil, review: review(hashing, source: .link), fix: nil, label: "", note: "",
+                                   tags: [], acceptNewKey: false, now: now)
+        #expect(verified.gpgKey == certificate.packet)
+        #expect(verified.card.gpgKey == certificate.packet)
+
+        let pinned = pinnedPerson(try Vectors.card("maximal-qr-signed"))
+        var newer = try Vectors.card("maximal-qr-signed")
+        newer.seq = 8
+        newer.gpgFingerprint = certificate.fingerprint
+        newer.gpgKey = certificate.packet
+        let update = try signed(newer, index: 2)
+        let updateReview = review(update, source: .file, people: [pinned])
+        guard case .update = updateReview.outcome else {
+            Issue.record("expected .update, got \(updateReview.outcome)")
+            return
+        }
+        let updated = Merge.apply(existing: pinned, review: updateReview, fix: nil, label: "", note: "", tags: [],
+                                  acceptNewKey: false, now: now)
+        #expect(updated.gpgKey == certificate.packet)
+        #expect(updated.card.seq == 8)
+
+        var mismatched = newer
+        mismatched.seq = 9
+        mismatched.gpgKey = vector.gpgKey
+        let wrong = try signed(mismatched, index: 2)
+        let wrongReview = review(wrong, source: .file, people: [pinned])
+        #expect(wrongReview.dropped.contains { $0.hasPrefix("GPG key: ") })
+        let refused = Merge.apply(existing: pinned, review: wrongReview, fix: nil, label: "", note: "", tags: [],
+                                  acceptNewKey: false, now: now)
+        #expect(refused.gpgKey == nil)
+        #expect(refused.card.gpgKey == nil)
+        #expect(refused.card.seq == 9)
+    }
+
     @Test func applyKeyChangedKeepsOldUnlessAccepted() throws {
         let card = try Vectors.card("typical-signed")
         let existing = pinnedPerson(card)

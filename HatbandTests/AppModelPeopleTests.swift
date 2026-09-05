@@ -287,6 +287,62 @@ import Testing
         #expect(scanner.error == .notHatband)
     }
 
+    /// Every vector arrives through `handle(url:)` as a link and as a
+    /// `.hatband` file, and through `receive(text:)` in each spelling
+    /// `HB1.decode(url:)` accepts, with the signature class the vector has.
+    @Test func handleURLAcceptsEveryVectorForm() async throws {
+        let scanner = try await onboarded()
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Vectors-" + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for vector in try Vectors.all() {
+            let name = try #require(vector["name"] as? String)
+            let card = try Vectors.card(name)
+            let url = try Vectors.url(name)
+            let expected: Review.Signature = card.isCompact ? .compact
+                : !card.isSigned ? .unsigned
+                : name == "tampered-signature" ? .invalid : .valid
+
+            scanner.pendingReview = nil
+            scanner.handle(url: try #require(URL(string: url)))
+            #expect(scanner.error == nil, "\(name)")
+            #expect(scanner.pendingReview?.source == .link, "\(name)")
+            #expect(scanner.pendingReview?.card == card, "\(name)")
+            #expect(scanner.pendingReview?.signature == expected, "\(name)")
+
+            let fragment = String(url.dropFirst(HB1.urlPrefix.count))
+            for text in [url.uppercased(), "#" + fragment, fragment, "  " + url + "\n"] {
+                scanner.pendingReview = nil
+                try scanner.receive(text: text, source: .scan)
+                #expect(scanner.pendingReview?.card == card, "\(name)")
+                #expect(scanner.pendingReview?.source == .scan, "\(name)")
+            }
+
+            scanner.pendingReview = nil
+            let bytes = try #require(Hex.bytes(try #require(vector["file"] as? String)))
+            #expect(bytes.starts(with: HB1.fileMagic))
+            let file = directory.appendingPathComponent(name + ".hatband")
+            try Data(bytes).write(to: file)
+            scanner.handle(url: file)
+            #expect(scanner.error == nil, "\(name)")
+            #expect(scanner.pendingReview?.source == .file, "\(name)")
+            #expect(scanner.pendingReview?.card == card, "\(name)")
+            #expect(scanner.pendingReview?.signature == expected, "\(name)")
+        }
+        // The tampered vector is shown as rejected, never saved.
+        try scanner.receive(text: try Vectors.url("tampered-signature"), source: .scan)
+        let rejected = try #require(scanner.pendingReview)
+        guard case .rejected = rejected.outcome else {
+            Issue.record("expected .rejected, got \(rejected.outcome)")
+            return
+        }
+        await #expect(throws: AppError.invalidSignature) {
+            try await scanner.save(rejected, fix: nil, label: "", note: "", tags: [])
+        }
+        #expect(scanner.people.isEmpty)
+    }
+
     // MARK: - Forgetting
 
     @Test func forgetThenRestore() async throws {

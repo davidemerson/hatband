@@ -8,9 +8,18 @@ extension AppModel {
     /// persona's key is never derived again for another one.
     static let personaIndexKey = KeyName.personaIndex
 
-    /// Days since 2020-01-01 for today in the current calendar; never negative.
+    /// Days since 2020-01-01 for today, in the local time zone; never negative.
     func issuedDay() -> UInt32 {
-        let parts = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+        AppModel.issuedDay(on: Date(), timeZone: .current)
+    }
+
+    /// Key 17 counts proleptic Gregorian days, so the phone's calendar
+    /// setting is not consulted: a Buddhist year would land the card
+    /// centuries ahead and a Japanese era year before the epoch.
+    nonisolated static func issuedDay(on date: Date, timeZone: TimeZone) -> UInt32 {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
         let number = Day.number(year: parts.year ?? Day.epochYear, month: parts.month ?? 1, day: parts.day ?? 1)
         return UInt32(max(0, number))
     }
@@ -24,13 +33,13 @@ extension AppModel {
         let day = issuedDay()
         switch form {
         case .fullQR, .file:
-            let card = CardBuilder.card(profile: profile, persona: persona, form: form, issuedDay: day)
+            let card = AppModel.unsignedCard(profile: profile, persona: persona, form: form, issuedDay: day)
             return try card.signed(with: key)
         case .lockScreen:
             let publicKey = Array(key.publicKey.rawRepresentation)
             var trimmed = persona
             while true {
-                let card = CardBuilder.card(profile: profile, persona: trimmed, form: .lockScreen, issuedDay: day)
+                let card = AppModel.unsignedCard(profile: profile, persona: trimmed, form: .lockScreen, issuedDay: day)
                     .withKeyFingerprint(of: publicKey)
                 if Budget(card: card).fitsLockScreen {
                     return card
@@ -90,20 +99,20 @@ extension AppModel {
         return persona
     }
 
-    /// Replaces the persona, bumping `seq` only when something other than
-    /// `seq` changed, then saves, refreshes the widget and updates a
-    /// running activity.
+    /// Replaces the persona, then saves, refreshes the widget and updates a
+    /// running activity. `seq` rises only when the content of one of its
+    /// cards changes: a new label rides in no card and leaves it alone.
     func update(_ persona: Persona) async throws {
         guard let index = personas.firstIndex(where: { $0.id == persona.id }) else {
             throw AppError.storage("Unknown persona")
         }
-        var existing = personas[index]
-        var incoming = persona
-        existing.seq = 0
-        incoming.seq = 0
-        guard existing != incoming else { return }
+        let existing = personas[index]
         var updated = persona
-        updated.seq = personas[index].seq + 1
+        updated.seq = existing.seq
+        guard existing != updated else { return }
+        if AppModel.cardContent(profile: profile, persona: existing) != AppModel.cardContent(profile: profile, persona: updated) {
+            updated.seq = existing.seq + 1
+        }
         personas[index] = updated
         try saveOwner()
         refreshWidget()
@@ -130,13 +139,10 @@ extension AppModel {
     /// Replaces the canonical profile, bumping `seq` on every persona whose
     /// card content changes, and refreshes what is on show.
     func saveProfile(_ profile: Profile) async throws {
-        let day = issuedDay()
         var updated: [Persona] = []
         for persona in personas {
             var next = persona
-            let before = CardBuilder.card(profile: self.profile, persona: persona, form: .file, issuedDay: day)
-            let after = CardBuilder.card(profile: profile, persona: persona, form: .file, issuedDay: day)
-            if before != after {
+            if AppModel.cardContent(profile: self.profile, persona: persona) != AppModel.cardContent(profile: profile, persona: persona) {
                 next.seq += 1
             }
             updated.append(next)
@@ -148,6 +154,26 @@ extension AppModel {
         if let sharing, let persona = personas.first(where: { $0.id == sharing.personaID }) {
             await updateActivity(for: persona)
         }
+    }
+
+    /// `CardBuilder`'s card for the form, less a GPG certificate the persona
+    /// has not anchored: key 23 means nothing without key 12, and a persona
+    /// that keeps its GPG channel back must not ship the certificate that
+    /// names it.
+    nonisolated static func unsignedCard(profile: Profile, persona: Persona, form: CardForm, issuedDay: UInt32) -> Card {
+        var card = CardBuilder.card(profile: profile, persona: persona, form: form, issuedDay: issuedDay)
+        if card.gpgFingerprint == nil {
+            card.gpgKey = nil
+        }
+        return card
+    }
+
+    /// Every form of the persona's card with `seq` and the day held fixed:
+    /// what a recipient can tell apart, and so what `seq` must count.
+    nonisolated static func cardContent(profile: Profile, persona: Persona) -> [Card] {
+        var fixed = persona
+        fixed.seq = 0
+        return CardForm.allCases.map { unsignedCard(profile: profile, persona: fixed, form: $0, issuedDay: 0) }
     }
 
     // MARK: - Private
