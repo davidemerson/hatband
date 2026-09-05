@@ -89,7 +89,7 @@ Report a vulnerability privately at https://github.com/davidemerson/hatband/secu
 
 hatband.link is one static page. A QR or link carries the card in the URL fragment, which browsers never send; the page decodes it in JavaScript, verifies the signature with WebCrypto and offers Add to contacts as a vCard. It loads nothing from anywhere, and its Content-Security-Policy allows only its own hashed inline code. The host sees a request's address, user agent and time, never the card.
 
-Hosting is a private S3 bucket behind CloudFront with logging off, described in `infra/site.yaml`. `node site/build.mjs` inlines `site/src` into `site/index.html` and writes the CSP hashes; the output is committed and CI checks it is current. `infra/deploy-stack.sh` creates the stack; `scripts/deploy-site.sh` uploads the pages with explicit content types and invalidates the cache. Tests: `node --test site/test`.
+Hosting is a private S3 bucket behind CloudFront with logging off, described in `infra/site.yaml`. `node site/build.mjs` inlines `site/src` into `site/index.html` and writes the CSP hashes; the output is committed and CI checks it is current. `infra/deploy-stack.sh` creates the stack; `scripts/deploy-site.sh` uploads the pages with explicit content types and invalidates the cache. Tests: `node --test site/test/*.test.mjs`.
 
 ## License
 

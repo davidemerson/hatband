@@ -12,6 +12,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: node --test site/test
+      - run: node --test site/test/*.test.mjs
       - name: index.html is built from the sources
         run: node site/build.mjs && git diff --exit-code -- site/index.html
