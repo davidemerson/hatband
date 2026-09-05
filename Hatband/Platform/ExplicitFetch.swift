@@ -76,11 +76,14 @@ nonisolated enum ExplicitFetch {
 /// ends on the redirect response, which is not 200. `URLSessionDelegate`
 /// requires `Sendable`; this class holds no state.
 nonisolated final class RedirectPolicy: NSObject, URLSessionTaskDelegate, Sendable {
+    // The completion-handler form: the async form crashes the Swift 6.3
+    // compiler while it emits the Objective-C thunk.
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                    newRequest request: URLRequest) async -> URLRequest? {
+                    newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
         guard let from = response.url, let to = request.url, ExplicitFetch.allowsRedirect(from: from, to: to) else {
-            return nil
+            completionHandler(nil)
+            return
         }
-        return request
+        completionHandler(request)
     }
 }

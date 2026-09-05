@@ -35,7 +35,7 @@ nonisolated struct SharingSummaryView: View {
             Text("Sharing")
                 .font(.headline)
             Spacer(minLength: 0)
-            Text("until ") + Text(endsAt, style: .time)
+            Text("until \(endsAt, style: .time)")
         }
         .foregroundStyle(Theme.ink)
         .padding(.horizontal, 8)
