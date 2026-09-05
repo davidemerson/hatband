@@ -6,7 +6,7 @@ import Testing
 
 /// A well-formed v4 Ed25519 public key packet and the fingerprint the
 /// framing rule gives it: SHA-1 over 0x99, the two-byte length, the body.
-func syntheticV4Certificate() -> (packet: [UInt8], fingerprint: [UInt8]) {
+nonisolated func syntheticV4Certificate() -> (packet: [UInt8], fingerprint: [UInt8]) {
     var body: [UInt8] = [4, 0x60, 0, 0, 0, 22]
     body += [0x09, 0x2B, 0x06, 0x01, 0x04, 0x01, 0xDA, 0x47, 0x0F, 0x01]
     body += [0x01, 0x07, 0x40] + [UInt8](repeating: 0xAB, count: 32)
@@ -16,7 +16,7 @@ func syntheticV4Certificate() -> (packet: [UInt8], fingerprint: [UInt8]) {
 }
 
 /// A pinned person built straight from a card, as `Merge.apply` would.
-func pinnedPerson(_ card: Card, source: CardSource = .scan, trust: Trust = .inPerson) -> Person {
+nonisolated func pinnedPerson(_ card: Card, source: CardSource = .scan, trust: Trust = .inPerson) -> Person {
     let short = card.publicKey.flatMap { KeyFingerprint(publicKey: $0)?.short } ?? card.keyFingerprint
     let when = Date(timeIntervalSince1970: 1_700_000_000)
     return Person(personaID: card.personaID, cardBytes: card.cbor.encoded, card: card, publicKey: card.publicKey,

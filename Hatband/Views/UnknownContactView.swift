@@ -25,7 +25,7 @@ import UIKit
         controller.allowsEditing = true
         controller.delegate = context.coordinator
         controller.navigationItem.leftBarButtonItem = UIBarButtonItem(
-            systemItem: .done, primaryAction: UIAction { _ in context.coordinator.finish() })
+            barButtonSystemItem: .done, target: context.coordinator, action: #selector(Coordinator.finish))
         return UINavigationController(rootViewController: controller)
     }
 
@@ -79,7 +79,8 @@ import UIKit
             self.onDone = onDone
         }
 
-        func finish() {
+        /// The Done button's target; UIKit sends it on the main thread.
+        @objc func finish() {
             onDone()
         }
 

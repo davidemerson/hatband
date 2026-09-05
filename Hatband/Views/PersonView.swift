@@ -1,5 +1,6 @@
 import HatbandCore
 import SwiftUI
+import UIKit
 
 /// One person: links with their domains, keys in mono, verification and
 /// key fetches labelled with the host they touch, meetings, tags, Add to

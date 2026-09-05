@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 /// The only `URLSession`. One tapped button, one host named on it, one
 /// request: ephemeral, no cookies, no cache, 15 seconds, TLS 1.2 or later,
@@ -72,8 +73,9 @@ nonisolated enum ExplicitFetch {
 }
 
 /// Refuses every redirect `allowsRedirect` does not allow; the task then
-/// ends on the redirect response, which is not 200.
-nonisolated final class RedirectPolicy: NSObject, URLSessionTaskDelegate {
+/// ends on the redirect response, which is not 200. `URLSessionDelegate`
+/// requires `Sendable`; this class holds no state.
+nonisolated final class RedirectPolicy: NSObject, URLSessionTaskDelegate, Sendable {
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest) async -> URLRequest? {
         guard let from = response.url, let to = request.url, ExplicitFetch.allowsRedirect(from: from, to: to) else {
