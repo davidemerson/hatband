@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 /// Version and commit, the proofs, the license, MetricKit diagnostics kept
@@ -72,7 +73,7 @@ import SwiftUI
             }
         }
         .navigationTitle("About")
-        .task {
+        .onAppear {
             Diagnostics.subscribe()
             diagnostics = Diagnostics.files()
         }

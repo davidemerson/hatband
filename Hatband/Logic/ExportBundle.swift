@@ -4,7 +4,7 @@ import HatbandCore
 /// The export body, `{0 version, 1 seed, 2 owner blob, 3 [person body]}`,
 /// sealed in an `ExportContainer` under the passphrase. Unknown keys are
 /// ignored; another version is refused.
-nonisolated struct ExportBundle: Equatable {
+nonisolated struct ExportBundle: Equatable, Sendable {
     static let version: UInt64 = 1
 
     var seed: [UInt8]

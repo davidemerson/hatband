@@ -4,7 +4,7 @@ import Foundation
 /// `FetchTarget.Kind`, then the two hand-offs to Apple's own apps. Each
 /// happens only on a tap whose button names the host.
 nonisolated enum TrustFacts {
-    nonisolated struct Egress: Equatable {
+    nonisolated struct Egress: Equatable, Sendable {
         let host: String
         let when: String
     }

@@ -125,7 +125,10 @@ extension AppModel {
         guard phase == .ready else { throw AppError.storage("Set up Hatband before merging an export.") }
         let key = try await requireKey()
         let personaResult = BackupMerge.personas(local: personas, imported: owner.personas)
-        let peopleResult = BackupMerge.people(local: people, imported: imported, now: Date())
+        // Whole seconds, as `PersonCodec` stores dates, so what is held in
+        // memory equals what reloads.
+        let now = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down))
+        let peopleResult = BackupMerge.people(local: people, imported: imported, now: now)
         personas = personaResult.personas
         try saveOwner()
         let store = try openedStore()

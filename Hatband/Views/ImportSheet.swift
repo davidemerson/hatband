@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 /// The passphrase sheet for `pendingImport`. Restores while onboarding,
@@ -9,9 +10,11 @@ import SwiftUI
     @State private var working = false
     @State private var problem: String?
     @State private var summary: AppModel.ImportSummary?
+    /// The mode a run used; `phase` moves on once a restore succeeds.
+    @State private var ranMode: AppModel.ImportMode?
 
     private var mode: AppModel.ImportMode {
-        model.phase == .onboarding ? .restore : .merge
+        ranMode ?? (model.phase == .onboarding ? .restore : .merge)
     }
 
     var body: some View {
@@ -87,6 +90,7 @@ import SwiftUI
         guard let data = model.pendingImport else { return }
         let mode = mode
         let passphrase = passphrase
+        ranMode = mode
         working = true
         problem = nil
         Task {

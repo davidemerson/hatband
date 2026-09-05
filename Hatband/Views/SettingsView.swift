@@ -1,3 +1,4 @@
+import Foundation
 import HatbandCore
 import SwiftUI
 import UniformTypeIdentifiers
@@ -84,7 +85,7 @@ import UniformTypeIdentifiers
                     Text("Your card, personas, signing seed and every person you have scanned leave this iPhone. People who scanned you keep their copy. There is no way back but an export made first.")
                 }
             }
-            .task {
+            .onAppear {
                 Diagnostics.subscribe()
             }
         }

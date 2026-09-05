@@ -38,15 +38,21 @@ import MetricKit
         try? FileManager.default.removeItem(at: directoryURL)
     }
 
-    /// Writes each payload's `jsonRepresentation()` as its own file.
+    /// Writes each payload's `jsonRepresentation()` as its own file. One
+    /// already stored for that time is left alone, so a payload MetricKit
+    /// hands over again is not duplicated.
     nonisolated static func store(_ payloads: [MXDiagnosticPayload]) {
         guard !payloads.isEmpty else { return }
+        let manager = FileManager.default
         do {
-            try FileManager.default.createDirectory(
+            try manager.createDirectory(
                 at: directoryURL, withIntermediateDirectories: true,
                 attributes: [.protectionKey: FileProtectionType.complete])
             for payload in payloads {
                 let url = directoryURL.appendingPathComponent(fileName(for: payload.timeStampEnd))
+                if manager.fileExists(atPath: url.path) {
+                    continue
+                }
                 try payload.jsonRepresentation().write(to: url, options: [.atomic, .completeFileProtection])
             }
             Log.event("diagnostics stored")
@@ -55,14 +61,14 @@ import MetricKit
         }
     }
 
-    /// `diagnostic-<UTC time>-<random>.json`: sorts by time, never collides.
+    /// `diagnostic-<UTC time>.json`: sorts by time; the same report always
+    /// lands on the same name.
     nonisolated static func fileName(for date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(identifier: "UTC")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
-        let suffix = String(UInt32.random(in: 0...0xFFFF), radix: 16)
-        return "diagnostic-" + formatter.string(from: date) + "-" + suffix + ".json"
+        return "diagnostic-" + formatter.string(from: date) + ".json"
     }
 }
 
