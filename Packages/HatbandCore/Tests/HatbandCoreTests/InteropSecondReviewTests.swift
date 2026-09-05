@@ -134,26 +134,22 @@ private func scalars(_ s: String) -> [UInt32] { s.unicodeScalars.map(\.value) }
 }
 
 /// A default-ignorable mark — VS16, the combining grapheme joiner, VS1 — is
-/// not a format character, so the website scan keeps it, and as the second
-/// scalar of a letter it is a letter to `Hostname.normalized`. IDNA 2008
-/// disallows every Default_Ignorable_Code_Point in a label.
+/// not a format character, but IDNA 2008 disallows every
+/// Default_Ignorable_Code_Point in a label: the website scan names it and
+/// `Hostname.normalized` refuses it. (Gap closed.)
 @Test func knownGapIgnorableMarksStayInsideHosts() {
-    withKnownIssue("a default-ignorable mark is accepted inside a host label") {
-        for mark in ["\u{FE0F}", "\u{034F}", "\u{FE00}", "\u{E0100}"] {
-            #expect(throws: Normalize.Error.self) { try Normalize.website("nnix\(mark).com") }
-            #expect(throws: Normalize.Error.self) { try Normalize.mastodon("bloom@nnix\(mark).com") }
-        }
+    for mark in ["\u{FE0F}", "\u{034F}", "\u{FE00}", "\u{E0100}"] {
+        #expect(throws: Normalize.Error.self) { try Normalize.website("nnix\(mark).com") }
+        #expect(throws: Normalize.Error.self) { try Normalize.mastodon("bloom@nnix\(mark).com") }
     }
 }
 
-/// The 63-octet label and 253-octet host limits count `Character`s, and a
-/// letter with two hundred marks is one.
+/// The 63-octet label and 253-octet host limits count UTF-8 octets, so a
+/// letter with two hundred marks is four hundred and one. (Gap closed.)
 @Test func knownGapHostLimitsCountGraphemesNotOctets() {
-    withKnownIssue("host and label limits are grapheme counts, so marks make them unbounded") {
-        let label = "a" + String(repeating: "\u{301}", count: 200)
-        #expect(throws: Normalize.Error.invalidHost) { try Normalize.website(label + ".com") }
-        #expect(throws: Normalize.Error.invalidHost) { try Normalize.mastodon("bloom@" + label + ".com") }
-    }
+    let label = "a" + String(repeating: "\u{301}", count: 200)
+    #expect(throws: Normalize.Error.invalidHost) { try Normalize.website(label + ".com") }
+    #expect(throws: Normalize.Error.invalidHost) { try Normalize.mastodon("bloom@" + label + ".com") }
     // Sixty-four plain letters are still refused, so only the marks stretch it.
     #expect(throws: Normalize.Error.invalidHost) { try Normalize.website(String(repeating: "a", count: 64) + ".com") }
 }
@@ -291,20 +287,20 @@ private let sequences = [
 // MARK: - SSH
 
 /// `sshkey_advance_past_options` treats `\"` as a literal quote, so a namespace
-/// whose last scalar is a backslash escapes the closing quote of
-/// `namespaces="…"` and the entry never parses. Only reachable through the
-/// `namespace:` parameter, which the app leaves at `git`.
+/// whose last scalar is a backslash would escape the closing quote of
+/// `namespaces="…"` and the entry would never parse. The sanitiser drops
+/// every backslash and quote, so the field always closes. (Gap closed.)
 @Test func knownGapNamespaceEndingInABackslashEscapesItsQuote() throws {
     let key = try SSHPublicKey(line: ed1)
-    withKnownIssue("a trailing backslash in the namespace escapes the closing quote") {
-        for namespace in ["git\\", "\\", "a\\\"", "git\\\\"] {
-            let line = key.allowedSignersLine(principal: "bloom@nnix.com", namespace: namespace)
-            #expect(optionsFieldTerminates(line), "\(line)")
-        }
+    for namespace in ["git\\", "\\", "a\\\"", "git\\\\"] {
+        let line = key.allowedSignersLine(principal: "bloom@nnix.com", namespace: namespace)
+        #expect(optionsFieldTerminates(line), "\(line)")
     }
     for namespace in ["git", "git\\x", "\\\"git", "a\\\\b"] {
         #expect(optionsFieldTerminates(key.allowedSignersLine(principal: "bloom@nnix.com", namespace: namespace)), "\(namespace)")
     }
+    #expect(key.allowedSignersLine(principal: "bloom@nnix.com", namespace: "git\\") == "bloom@nnix.com namespaces=\"git\" ssh-ed25519 " + ed1Base64)
+    #expect(key.allowedSignersLine(principal: "bloom@nnix.com", namespace: "\\") == "bloom@nnix.com namespaces=\"\" ssh-ed25519 " + ed1Base64)
 }
 
 /// sshsig's option scan after the principals field: to whitespace, except
@@ -327,16 +323,16 @@ private func optionsFieldTerminates(_ line: String) -> Bool {
     return bytes[index...].dropFirst().starts(with: "ssh-ed25519 ".utf8)
 }
 
-/// Fields split on whitespace scalars; sshd splits on space and tab. The
-/// Unicode spaces in between are accepted here as separators, which sshd
-/// would read as part of the type name — a leniency, not a misparse, since
-/// the emitted line always uses a plain space.
-@Test func unicodeSpacesBetweenFieldsAreALeniency() throws {
+/// Fields split on space and tab, as sshd splits. A Unicode space between
+/// the type and the key is part of the type name, which sshd would not
+/// recognise either; one in the comment is comment.
+@Test func unicodeSpacesBetweenFieldsAreNotSeparators() throws {
     let key = try SSHPublicKey(line: ed1)
     for space in ["\u{A0}", "\u{3000}", "\u{2003}"] {
-        let line = "ssh-ed25519\(space)\(ed1Base64)\(space)bloom"
-        let parsed = try SSHPublicKey(line: line)
-        #expect(parsed.blob == key.blob && parsed.comment == "bloom")
-        #expect(parsed.authorizedKeysLine() == "ssh-ed25519 \(ed1Base64) bloom")
+        #expect(throws: SSHPublicKey.Error.malformedLine) { try SSHPublicKey(line: "ssh-ed25519\(space)\(ed1Base64)\(space)bloom") }
+        #expect(throws: SSHPublicKey.Error.unsupportedType("ssh-ed25519\(space)")) { try SSHPublicKey(line: "ssh-ed25519\(space) \(ed1Base64)") }
+        let parsed = try SSHPublicKey(line: "ssh-ed25519 \(ed1Base64) blo\(space)om")
+        #expect(parsed.blob == key.blob && parsed.comment == "blo\(space)om")
+        #expect(try SSHPublicKey(line: parsed.authorizedKeysLine()) == parsed)
     }
 }

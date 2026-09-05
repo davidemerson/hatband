@@ -16,8 +16,9 @@ public struct SSHPublicKey: Sendable, Hashable {
         case ecdsaP521 = 0x04
         case rsa = 0x10
 
+        /// Byte-exact, as sshd compares: no canonical equivalence.
         public init?(typeName: String) {
-            guard let kind = Kind.allCases.first(where: { $0.typeName == typeName }) else { return nil }
+            guard let kind = Kind.allCases.first(where: { $0.typeName.utf8.elementsEqual(typeName.utf8) }) else { return nil }
             self = kind
         }
 
@@ -96,32 +97,40 @@ public struct SSHPublicKey: Sendable, Hashable {
 
     /// An authorized_keys line: `<type> <base64> [comment]`. A leading
     /// options field (`no-pty,command="..." ssh-ed25519 ...`) is refused.
-    /// Fields split on whitespace scalars, as sshd splits on bytes: a
-    /// combining mark after a space starts the next field, it is not
-    /// swallowed with the space.
+    /// Fields split on space and tab only, as sshd splits bytes: any other
+    /// whitespace scalar is part of the field it sits in, and a combining
+    /// mark after a space starts the next field rather than vanishing with
+    /// the space. The comment is the remainder of the line, verbatim, after
+    /// the ends of the line are trimmed.
     public init(line: String) throws {
         let text = line.trimmed()
         guard !text.isEmpty, !text.unicodeScalars.contains(where: Self.isLineBreak) else { throw Error.malformedLine }
-        let fields = text.unicodeScalars.split(maxSplits: 2, omittingEmptySubsequences: true, whereSeparator: \.properties.isWhitespace)
+        let fields = text.unicodeScalars.split(maxSplits: 2, omittingEmptySubsequences: true, whereSeparator: Self.isFieldSeparator)
             .map { Substring($0) }
         guard fields.count >= 2 else { throw Error.malformedLine }
         let typeName = String(fields[0])
         guard let kind = Kind(typeName: typeName) else {
-            if typeName.hasPrefix("sk-") { throw Error.securityKey(typeName) }
+            if typeName.starts(withScalars: "sk-") { throw Error.securityKey(typeName) }
             throw Self.startsWithKeyType(Self.afterOptions(text)) ? Error.optionsNotSupported : Error.unsupportedType(typeName)
         }
         guard let blob = try? Base64.decode(fields[1]) else { throw Error.invalidBase64 }
-        try self.init(blob: blob, comment: fields.count == 3 ? String(fields[2].trimmed()) : nil)
+        let comment = fields.count == 3 ? String(fields[2].unicodeScalars.drop(while: Self.isFieldSeparator)) : nil
+        try self.init(blob: blob, comment: comment)
         guard self.kind == kind else { throw Error.typeMismatch }
     }
 
-    /// What follows one options field, skipped as sshd does: up to
-    /// whitespace, except inside double quotes, where `\"` is a literal.
+    /// What sshd splits fields on (auth2-pubkey.c, sshkey.c): space and tab.
+    private static func isFieldSeparator(_ scalar: Unicode.Scalar) -> Bool {
+        scalar == " " || scalar == "\t"
+    }
+
+    /// What follows one options field, skipped as sshd does: up to a
+    /// separator, except inside double quotes, where `\"` is a literal.
     private static func afterOptions(_ text: Substring) -> Substring {
         let scalars = text.unicodeScalars
         var quoted = false
         var index = scalars.startIndex
-        while index < scalars.endIndex, quoted || !scalars[index].properties.isWhitespace {
+        while index < scalars.endIndex, quoted || !isFieldSeparator(scalars[index]) {
             let next = scalars.index(after: index)
             if scalars[index] == "\\", next < scalars.endIndex, scalars[next] == "\"" {
                 index = next
@@ -130,12 +139,12 @@ public struct SSHPublicKey: Sendable, Hashable {
             }
             index = scalars.index(after: index)
         }
-        return Substring(scalars[index...].drop(while: \.properties.isWhitespace))
+        return Substring(scalars[index...].drop(while: isFieldSeparator))
     }
 
     private static func startsWithKeyType(_ text: Substring) -> Bool {
-        let name = String(text.unicodeScalars.prefix { !$0.properties.isWhitespace })
-        return Kind(typeName: name) != nil || name.hasPrefix("sk-")
+        let name = String(text.unicodeScalars.prefix { !isFieldSeparator($0) })
+        return Kind(typeName: name) != nil || name.starts(withScalars: "sk-")
     }
 
     /// What `Character.isNewline` matches, scalar by scalar.
@@ -148,7 +157,7 @@ public struct SSHPublicKey: Sendable, Hashable {
         var reader = WireReader(bytes: blob)
         let typeName = try reader.string()
         guard let kind = Kind(typeName: typeName) else {
-            throw typeName.hasPrefix("sk-") ? Error.securityKey(typeName) : Error.unsupportedType(typeName)
+            throw typeName.starts(withScalars: "sk-") ? Error.securityKey(typeName) : Error.unsupportedType(typeName)
         }
         var inline: [UInt8]?
         var bits = 0
@@ -225,7 +234,7 @@ public struct SSHPublicKey: Sendable, Hashable {
 
     public static func fingerprintString(sha256: [UInt8]) -> String {
         var text = Base64.encode(sha256)
-        while text.last == "=" { text.removeLast() }
+        while text.utf8.last == UInt8(ascii: "=") { text.removeLast() }
         return "SHA256:" + text
     }
 
@@ -245,25 +254,31 @@ public struct SSHPublicKey: Sendable, Hashable {
     }
 
     /// A git `gpg.ssh.allowedSignersFile` entry: the principal (an email),
-    /// the namespace restriction, and the key. Whitespace, commas and any
-    /// leading `#` (sshsig reads a line whose first byte is `#` as a comment)
-    /// leave the principal; one with nothing left becomes `*`, the OpenSSH
-    /// wildcard, so the line stays well formed.
+    /// the namespace restriction, and the key. Whitespace, commas, double
+    /// quotes, backslashes and any leading `#` (sshsig reads a line whose
+    /// first byte is `#` as a comment) leave the principal; one with nothing
+    /// left becomes `*`, the OpenSSH wildcard, so the line stays well formed.
+    /// The namespace loses whitespace, double quotes and backslashes: sshsig
+    /// reads `\"` inside the quoted field as a literal quote, so a trailing
+    /// backslash would swallow the closing one and the entry would never
+    /// parse. A namespace with nothing left yields `namespaces=""`, a well
+    /// formed entry that matches no namespace.
     public func allowedSignersLine(principal: String, namespace: String = "git") -> String {
-        var principal = String(Self.scrubbed(principal, whitespaceAnd: ",").unicodeScalars.drop(while: { $0 == "#" }))
+        var principal = String(Self.scrubbed(principal, whitespaceAnd: [",", "\"", "\\"]).unicodeScalars.drop(while: { $0 == "#" }))
         if principal.isEmpty { principal = "*" }
-        let namespace = Self.scrubbed(namespace, whitespaceAnd: "\"")
+        let namespace = Self.scrubbed(namespace, whitespaceAnd: ["\"", "\\"])
         return "\(principal) namespaces=\"\(namespace)\" \(kind.typeName) \(base64)"
     }
 
     /// Drops controls and line breaks (U+2028 and U+2029 are not controls,
-    /// but `init(line:)` refuses them), and on request whitespace plus one
-    /// more separator. Scalar by scalar: a combining mark after a `,` or `"`
-    /// would otherwise shield it from a `Character` filter.
-    private static func scrubbed(_ text: String, whitespaceAnd separator: Unicode.Scalar? = nil) -> String {
-        String(text.unicodeScalars.filter {
-            !($0.properties.generalCategory == .control || isLineBreak($0)
-              || separator != nil && ($0.properties.isWhitespace || $0 == separator))
+    /// but `init(line:)` refuses them), and on request whitespace plus the
+    /// given separators. Scalar by scalar: a combining mark after a `,`, a
+    /// `"` or a `\` would otherwise shield it from a `Character` filter.
+    private static func scrubbed(_ text: String, whitespaceAnd separators: Set<Unicode.Scalar>? = nil) -> String {
+        String(text.unicodeScalars.filter { scalar in
+            if scalar.isControl || isLineBreak(scalar) { return false }
+            guard let separators else { return true }
+            return !(scalar.properties.isWhitespace || separators.contains(scalar))
         })
     }
 
@@ -299,13 +314,13 @@ public struct SSHPublicKey: Sendable, Hashable {
 
         func border(_ text: String) -> String {
             // OpenSSH formats the label into a 17-byte buffer, so at most 16
-            // characters fit. Not full parity: OpenSSH truncates a 17-character
-            // title to 16 and falls back to `[type]` beyond that; we drop any
-            // title of 17 or more.
-            let label = text.count < width ? text : ""
-            let lead = (width - label.count) / 2
+            // bytes fit. Not full parity: OpenSSH truncates a 17-byte title
+            // to 16 and falls back to `[type]` beyond that; we drop any title
+            // of 17 bytes or more.
+            let label = text.utf8.count < width ? text : ""
+            let lead = (width - label.utf8.count) / 2
             return "+" + String(repeating: "-", count: lead) + label
-                + String(repeating: "-", count: width - lead - label.count) + "+"
+                + String(repeating: "-", count: width - lead - label.utf8.count) + "+"
         }
         var lines = [border(title)]
         for row in 0..<height {

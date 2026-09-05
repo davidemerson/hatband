@@ -47,15 +47,17 @@ public struct VCard: Sendable, Hashable {
 
     /// Splits the name into `N` components unless told otherwise: the last
     /// word is the family name, which is a guess Contacts lets the user fix.
+    /// Words split on whitespace scalars, so a mark after a space starts the
+    /// next word and a space after a Prepend letter still ends one.
     public init(formattedName: String, familyName: String? = nil, givenName: String? = nil) {
         self.formattedName = formattedName
         if let familyName, let givenName {
             self.familyName = familyName
             self.givenName = givenName
         } else {
-            let words = formattedName.split(whereSeparator: \.isWhitespace)
-            let guessedFamily = words.count > 1 ? String(words.last!) : ""
-            let guessedGiven = words.count > 1 ? words.dropLast().joined(separator: " ") : String(words.first ?? "")
+            let words = formattedName.unicodeScalars.split(whereSeparator: { $0.properties.isWhitespace }).map { String($0) }
+            let guessedFamily = words.count > 1 ? words.last! : ""
+            let guessedGiven = words.count > 1 ? words.dropLast().joined(separator: " ") : words.first ?? ""
             self.familyName = familyName ?? guessedFamily
             self.givenName = givenName ?? guessedGiven
         }
@@ -137,8 +139,11 @@ public struct VCard: Sendable, Hashable {
         return out
     }
 
+    /// Full uppercase mapping (so `ß` becomes `SS`), then only ASCII letters,
+    /// digits and hyphens survive, scalar by scalar: a mark on a letter is
+    /// dropped and the letter kept.
     static func propertyName(_ name: String) -> String {
-        String(name.uppercased().filter { $0.isASCIIAlphanumeric || $0 == "-" })
+        String(name.uppercased().unicodeScalars.filter { $0.isASCIIAlphanumeric || $0 == "-" })
     }
 
     // MARK: Parsing
@@ -159,9 +164,13 @@ public struct VCard: Sendable, Hashable {
                 logical.append(String(line))
             }
         }
-        guard logical.first?.uppercased() == "BEGIN:VCARD", logical.last?.uppercased() == "END:VCARD" else {
-            throw Error.notAVCard
-        }
+        // Property names are ASCII (RFC 2426 §4 `iana-token`), so the case
+        // folding is ASCII too; a name with any other scalar matches no
+        // literal below, since none of them holds a scalar with a singleton
+        // canonical decomposition.
+        guard logical.first?.equals(asciiCaseInsensitive: "begin:vcard") == true,
+              logical.last?.equals(asciiCaseInsensitive: "end:vcard") == true
+        else { throw Error.notAVCard }
         var card = VCard(formattedName: "", familyName: "", givenName: "")
         var labels: [String: String] = [:]
         var urls: [(group: String, url: String)] = []
@@ -169,15 +178,15 @@ public struct VCard: Sendable, Hashable {
         for line in logical.dropFirst().dropLast() {
             guard case let (head, value)? = splitProperty(line) else { throw Error.malformedLine(line) }
             let params = head.unicodeScalars.split(separator: ";", omittingEmptySubsequences: false).map { String($0) }
-            var name = params[0].uppercased()
+            var name = params[0].asciiUppercased()
             var group = ""
             if let dot = name.unicodeScalars.firstIndex(of: ".") {
-                group = String(name[..<dot])
+                group = String(name.unicodeScalars[..<dot])
                 name = String(name.unicodeScalars[name.unicodeScalars.index(after: dot)...])
             }
             switch name {
             case "VERSION":
-                guard value == "3.0" else { throw Error.unsupportedVersion(value) }
+                guard value.unicodeScalars.elementsEqual("3.0".unicodeScalars) else { throw Error.unsupportedVersion(value) }
             case "N":
                 let parts = splitComponents(value)
                 card.familyName = parts.count > 0 ? parts[0] : ""
@@ -192,8 +201,10 @@ public struct VCard: Sendable, Hashable {
             case "PHOTO":
                 // `VALUE=uri` is a reference, not data; that and anything
                 // else that is not base64 is skipped rather than refused.
-                let unquoted = params.dropFirst().map { param in String(param.uppercased().unicodeScalars.filter { $0 != "\"" }) }
-                guard !unquoted.contains("VALUE=URI"), let bytes = try? Base64.decode(value.filter { !$0.isWhitespace }) else { break }
+                let unquoted = params.dropFirst().map { param in String(param.asciiUppercased().unicodeScalars.filter { $0 != "\"" }) }
+                guard !unquoted.contains(where: { $0.unicodeScalars.elementsEqual("VALUE=URI".unicodeScalars) }),
+                      let bytes = try? Base64.decode(String(value.unicodeScalars.filter { !$0.properties.isWhitespace }))
+                else { break }
                 card.photoJPEG = bytes
             default:
                 if name.unicodeScalars.starts(with: extensionPrefix) {
@@ -215,7 +226,7 @@ public struct VCard: Sendable, Hashable {
         for index in scalars.indices {
             switch scalars[index] {
             case "\"": quoted.toggle()
-            case ":" where !quoted: return (line[..<index], String(scalars[scalars.index(after: index)...]))
+            case ":" where !quoted: return (Substring(scalars[..<index]), String(scalars[scalars.index(after: index)...]))
             default: break
             }
         }
