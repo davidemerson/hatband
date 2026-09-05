@@ -320,7 +320,8 @@ import Testing
             }
 
             scanner.pendingReview = nil
-            let bytes = try #require(Hex.bytes(try #require(vector["file"] as? String)))
+            let fileHex = try #require(vector["file"] as? String)
+            let bytes = try #require(Hex.bytes(fileHex))
             #expect(bytes.starts(with: HB1.fileMagic))
             let file = directory.appendingPathComponent(name + ".hatband")
             try Data(bytes).write(to: file)

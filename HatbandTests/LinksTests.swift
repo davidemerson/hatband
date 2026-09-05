@@ -173,7 +173,8 @@ struct LinksTests {
         let met = "Met 16 Jun 2026 at Davy Byrne's"
         let vcard = Links.vcard(for: person, met: met)
         let parsed = try VCard.parseBasic(vcard.text)
-        let ssh = try #require(Links.sshDisplay(try #require(card.ssh)))
+        let sshField = try #require(card.ssh)
+        let ssh = try #require(Links.sshDisplay(sshField))
         #expect(parsed.note == [met, "Website: evil.example/\"><script>", "Pub: Davy Byrne's", "Fax: +35318000000",
                                 "Work: bloom@example.ie", "Script: javascript:alert(1)", ssh].joined(separator: "\n"))
         #expect(parsed.links.map { $0.label } == ["GitHub", "LinkedIn", "Mastodon", "Signal", "Calendly", "GPG", "Matrix"])
