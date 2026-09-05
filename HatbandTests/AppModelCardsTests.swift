@@ -396,6 +396,111 @@ import Testing
         return Set(map.keys.compactMap { $0.unsignedValue })
     }
 
+    /// `budget(for:form:)` reads the persona and nothing else: repeated
+    /// calls agree with each other and with `Budget(card:)`, though every
+    /// signed card carries a fresh signature, and nothing is written or
+    /// prompted for on the way.
+    @Test func budgetIsPure() async throws {
+        let model = try await onboarded()
+        let persona = try #require(model.selectedPersona)
+        let keys = try #require(model.keys as? MemoryKeyStore)
+        let promptsBefore = keys.prompts.count
+        var events: [String] = []
+        keys.onEvent = { events.append($0) }
+        defer { keys.onEvent = nil }
+        let personas = model.personas
+        let profile = model.profile
+        let settings = model.settings
+        for form in CardForm.allCases {
+            let first = try model.budget(for: persona, form: form)
+            let second = try model.budget(for: persona, form: form)
+            #expect(first == second)
+            #expect(first == Budget(card: try model.card(for: persona, form: form)))
+            #expect(first.bytes > 0)
+            #expect(first.characters > first.bytes)
+        }
+        #expect(!events.isEmpty)
+        #expect(events.allSatisfy { $0 == "read " + KeyName.seed })
+        #expect(keys.prompts.count == promptsBefore)
+        #expect(model.personas == personas)
+        #expect(model.profile == profile)
+        #expect(model.settings == settings)
+    }
+
+    /// A view caches its meters under `budgetKey(for:)`, so the key moves
+    /// exactly with what a card carries: never for a label, always for a
+    /// colour, channel, name or Lock Screen change, and for `seq`, the day
+    /// and the signing key, which ride in or under every card.
+    @Test func budgetKeyFollowsCardContentOnly() async throws {
+        let model = try await onboarded()
+        let persona = try #require(model.selectedPersona)
+        let day = model.issuedDay()
+        let key = model.budgetKey(for: persona)
+        #expect(model.budgetKey(for: persona) == key)
+        #expect(key == AppModel.budgetKey(profile: model.profile, persona: persona, issuedDay: day))
+
+        var relabelled = persona
+        relabelled.label = "Home"
+        #expect(model.budgetKey(for: relabelled) == key)
+        for form in CardForm.allCases {
+            #expect(try model.budget(for: relabelled, form: form) == (try model.budget(for: persona, form: form)))
+        }
+
+        var recoloured = persona
+        recoloured.color = 5
+        #expect(model.budgetKey(for: recoloured) != key)
+        var lockScreen = persona
+        lockScreen.lockScreenChannels = [.email]
+        #expect(model.budgetKey(for: lockScreen) != key)
+        var named = persona
+        named.displayName = "L. Bloom"
+        #expect(model.budgetKey(for: named) != key)
+        var narrower = persona
+        narrower.channels.remove(.phone)
+        #expect(model.budgetKey(for: narrower) != key)
+        var withoutPhoto = persona
+        withoutPhoto.includePhoto = false
+        #expect(model.budgetKey(for: withoutPhoto) != key)
+        var bumped = persona
+        bumped.seq += 1
+        #expect(model.budgetKey(for: bumped) != key)
+        var rekeyed = persona
+        rekeyed.keyIndex += 1
+        #expect(model.budgetKey(for: rekeyed) != key)
+        #expect(AppModel.budgetKey(profile: model.profile, persona: persona, issuedDay: day + 1) != key)
+
+        // A profile change the persona does not share leaves its key alone; one it shares moves it.
+        var withheld = persona
+        withheld.channels.remove(.gpgFingerprint)
+        let before = AppModel.budgetKey(profile: model.profile, persona: withheld, issuedDay: day)
+        var profile = model.profile
+        profile.gpgKey = [UInt8](repeating: 0xC7, count: 300)
+        #expect(AppModel.budgetKey(profile: profile, persona: withheld, issuedDay: day) == before)
+        profile.company = "Sweets of Sin"
+        #expect(AppModel.budgetKey(profile: profile, persona: withheld, issuedDay: day) != before)
+    }
+
+    /// `measure` is `card(for:form:)` and `Budget(card:)` in one value, a
+    /// failure kept as the error to show.
+    @Test func measureCarriesCardBudgetOrProblem() async throws {
+        let model = try await onboarded()
+        let persona = try #require(model.selectedPersona)
+        for form in CardForm.allCases {
+            let measured = model.measure(persona, form: form)
+            let card = try #require(measured.card)
+            #expect(measured.problem == nil)
+            #expect(measured.budget == Budget(card: card))
+            #expect(measured.budget == (try model.budget(for: persona, form: form)))
+            #expect(card.isCompact == (form == .lockScreen))
+        }
+        var huge = persona
+        huge.displayName = String(repeating: "N", count: 2000)
+        let refused = model.measure(huge, form: .lockScreen)
+        #expect(refused.card == nil)
+        #expect(refused.budget == nil)
+        #expect(refused.problem == .tooBigForLockScreen)
+    }
+
     @Test func selectPersistsLastPersonaID() async throws {
         let model = try await onboarded()
         let work = try model.addPersona(label: "Work", alias: false)

@@ -50,6 +50,7 @@ import UIKit
             keysSection
             customSection
         }
+        .grounded()
         .navigationTitle(alias == nil ? "Profile" : "Alias")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

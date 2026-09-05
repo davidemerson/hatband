@@ -30,6 +30,8 @@ import SwiftUI
         if stops.isEmpty {
             ContentUnavailableView("No fixed abode.", systemImage: "map",
                                    description: Text("Meetings appear here once you have scanned someone."))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Theme.ground)
         } else {
             VStack(spacing: 0) {
                 if stops.contains(where: { $0.encounter.fix != nil }) {
@@ -38,6 +40,7 @@ import SwiftUI
                 }
                 timeline(stops)
             }
+            .background(Theme.ground)
         }
     }
 
@@ -66,6 +69,8 @@ import SwiftUI
                                     Text(stop.person.card.name ?? "Unnamed")
                                     HStack(spacing: 6) {
                                         Text(stop.encounter.date, style: .time)
+                                            .font(Theme.mono)
+                                            .foregroundStyle(Theme.tertiary)
                                         if !stop.encounter.label.isEmpty {
                                             Text(stop.encounter.label)
                                         }
@@ -86,6 +91,7 @@ import SwiftUI
             }
         }
         .listStyle(.plain)
+        .grounded()
     }
 
     // MARK: - Data

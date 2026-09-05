@@ -18,6 +18,7 @@ import SwiftUI
         }
         .font(Theme.mono)
         .foregroundStyle(tone)
+        .accessibilityElement(children: .combine)
     }
 
     private var limit: Int {
@@ -56,6 +57,7 @@ import SwiftUI
             Text("+")
                 .font(Theme.mono)
                 .foregroundStyle(Theme.tertiary)
+                .accessibilityHidden(true)
             content
         }
     }
@@ -74,6 +76,46 @@ import SwiftUI
     var body: some View {
         Text(text)
             .font(Theme.mono)
+    }
+}
+
+/// A passphrase entry that can be shown in the clear: generated
+/// passphrases are read off paper, so the words must be checkable.
+@MainActor struct PassphraseField: View {
+    let title: String
+    @Binding var text: String
+    @State private var revealed = false
+
+    init(_ title: String, text: Binding<String>) {
+        self.title = title
+        _text = text
+    }
+
+    var body: some View {
+        HStack {
+            Group {
+                if revealed {
+                    TextField(title, text: $text)
+                } else {
+                    SecureField(title, text: $text)
+                }
+            }
+            .font(Theme.mono)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            Button {
+                revealed.toggle()
+            } label: {
+                Image(systemName: revealed ? "eye.slash" : "eye")
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(PassphraseField.toggleLabel(revealed: revealed))
+        }
+    }
+
+    /// The reveal button's VoiceOver label.
+    nonisolated static func toggleLabel(revealed: Bool) -> String {
+        revealed ? "Hide passphrase" : "Show passphrase"
     }
 }
 
@@ -110,6 +152,13 @@ extension View {
     /// The privacy cover over this view while `AppModel.covered`.
     @MainActor func privacyCovered() -> some View {
         modifier(PrivacyCovered())
+    }
+
+    /// The nnix ground behind a `List` or `Form`, in place of the system
+    /// grouped background. Rows keep their own surface.
+    @MainActor func grounded() -> some View {
+        scrollContentBackground(.hidden)
+            .background(Theme.ground)
     }
 }
 

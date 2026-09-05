@@ -77,7 +77,8 @@ nonisolated enum Merge {
 
     /// The person to store. A new person is pinned to the card's key (or
     /// fingerprint) with trust by source; an existing one gains an
-    /// encounter and, per the outcome, a new card or a re-pin.
+    /// encounter and, per the outcome, a new card (unless the review keeps
+    /// the stored one) or a re-pin.
     static func apply(existing: Person?, review: Review, fix: Fix?, label: String, note: String, tags: [String],
                       acceptNewKey: Bool, now: Date) -> Person {
         let encounter = Encounter(id: UUID(), date: now, fix: fix, label: label, note: note)
@@ -93,7 +94,7 @@ nonisolated enum Merge {
         person.tags = cleaned(person.tags + tags)
         person.updatedAt = now
         switch review.outcome {
-        case .update:
+        case .update where review.updateCard:
             replaceCard(of: &person, with: card, review: review, keepPhoto: true)
         case .keyChanged where acceptNewKey:
             person.trust = .keyChanged(previous: person.publicKey ?? person.keyFingerprint ?? [])
@@ -103,7 +104,7 @@ nonisolated enum Merge {
             } else {
                 replaceCard(of: &person, with: card, review: review, keepPhoto: false)
             }
-        case .new, .encounterOnly, .keyChanged, .rejected:
+        case .new, .encounterOnly, .update, .keyChanged, .rejected:
             break
         }
         return person

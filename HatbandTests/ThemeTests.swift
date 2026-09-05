@@ -29,6 +29,26 @@ struct ThemeTests {
         }
     }
 
+    private static let secondaryLight: UInt32 = 0xD9D9D9
+    private static let secondaryDark: UInt32 = 0x262626
+
+    /// `Theme.secondary` is the one text surface besides the grounds (the
+    /// undo banner). Ink and the accent clear 4.5:1 on it in both
+    /// appearances. The tertiary token reaches only 3.6:1 on the light
+    /// one, the floor for glyphs but not for text, so mono metadata never
+    /// sits on that surface; on the dark one it clears 4.5:1.
+    @Test func inkAndAccentContrastWithSecondary() {
+        for token in ThemeTests.textTokens {
+            let floor: Double = token.name == "tertiary" ? 3 : 4.5
+            #expect(ThemeTests.contrast(token.light, ThemeTests.secondaryLight) >= floor, "\(token.name) light")
+            #expect(ThemeTests.contrast(token.dark, ThemeTests.secondaryDark) >= floor, "\(token.name) dark")
+        }
+        #expect(ThemeTests.contrast(0x9A9A9A, ThemeTests.secondaryDark) >= 4.5)
+        // The surface itself stands off the ground it sits on.
+        #expect(ThemeTests.contrast(ThemeTests.secondaryLight, ThemeTests.groundLight) > 1.2)
+        #expect(ThemeTests.contrast(ThemeTests.secondaryDark, ThemeTests.groundDark) > 1.2)
+    }
+
     /// WCAG 2 relative luminance and contrast ratio over packed sRGB.
     private static func luminance(_ packed: UInt32) -> Double {
         func channel(_ value: UInt32) -> Double {

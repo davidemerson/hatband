@@ -18,6 +18,7 @@ import SwiftUI
                     Image(systemName: Theme.hat)
                         .font(.largeTitle)
                         .foregroundStyle(Theme.accent)
+                        .accessibilityHidden(true)
                     VStack(alignment: .leading) {
                         Text("Hatband")
                             .font(.headline)
@@ -73,6 +74,7 @@ import SwiftUI
                     .foregroundStyle(Theme.tertiary)
             }
         }
+        .grounded()
         .navigationTitle("About")
         .onAppear {
             Diagnostics.subscribe()
@@ -125,6 +127,7 @@ import SwiftUI
                     .foregroundStyle(.secondary)
             }
         }
+        .grounded()
         .navigationTitle("What leaves your phone")
     }
 }

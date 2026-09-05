@@ -26,6 +26,7 @@ import SwiftUI
                     entrySection
                 }
             }
+            .grounded()
             .navigationTitle(mode == .restore ? "Restore" : "Merge")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -49,10 +50,7 @@ import SwiftUI
                     .foregroundStyle(.secondary)
             }
             Section("Passphrase") {
-                SecureField("The words you were given", text: $passphrase)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .font(Theme.mono)
+                PassphraseField("The words you were given", text: $passphrase)
             }
             Section {
                 Button(working ? "Opening…" : (mode == .restore ? "Restore" : "Merge")) {

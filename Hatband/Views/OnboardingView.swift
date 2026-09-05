@@ -77,6 +77,7 @@ import UniformTypeIdentifiers
                     }
                 }
             }
+            .grounded()
             .navigationTitle("Hatband")
         }
         .onAppear {

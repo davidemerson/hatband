@@ -50,6 +50,7 @@ import UniformTypeIdentifiers
                         NavigationLink("About", value: Page.about)
                     }
                 }
+                .grounded()
                 .navigationTitle("Settings")
                 .navigationDestination(for: Page.self) { page in
                     switch page {
@@ -209,9 +210,7 @@ import UniformTypeIdentifiers
         Form {
             Section {
                 if useOwn {
-                    SecureField("At least \(ExportView.minimumLength) characters", text: $own)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                    PassphraseField("At least \(ExportView.minimumLength) characters", text: $own)
                 } else {
                     MonoText(generated)
                     Button("Copy") {
@@ -242,6 +241,7 @@ import UniformTypeIdentifiers
                 Text("Everything: your card, personas, signing seed, the people you have scanned and where you met them, sealed on this iPhone. Whoever has the file and the passphrase has all of it.")
             }
         }
+        .grounded()
         .navigationTitle("Export")
         .onChange(of: passphrase) {
             file = nil

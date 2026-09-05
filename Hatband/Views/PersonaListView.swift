@@ -29,6 +29,7 @@ import SwiftUI
                 }
                 .onDelete(perform: delete)
             }
+            .grounded()
             .navigationTitle("Personas")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -65,8 +66,10 @@ import SwiftUI
             Circle()
                 .fill(Theme.personaColor(persona.color))
                 .frame(width: 12, height: 12)
+                .accessibilityHidden(true)
             Image(systemName: persona.isAlias ? Theme.flower : Theme.hat)
                 .foregroundStyle(Theme.tertiary)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(persona.label)
                 Text(summary(persona))

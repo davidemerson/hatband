@@ -117,10 +117,12 @@ import SwiftUI
             HStack(spacing: 6) {
                 Image(systemName: selected?.isAlias == true ? Theme.flower : Theme.hat)
                     .foregroundStyle(Theme.personaColor(selected?.color ?? 0))
+                    .accessibilityHidden(true)
                 Text(selected?.label ?? "Persona")
                     .font(.headline)
                 Image(systemName: "chevron.down")
                     .font(.caption)
+                    .accessibilityHidden(true)
             }
             .foregroundStyle(Theme.ink)
         }
@@ -136,6 +138,7 @@ import SwiftUI
                 VStack(spacing: 8) {
                     Image(systemName: "eye.slash")
                         .font(.title)
+                        .accessibilityHidden(true)
                     Text("Hidden while the screen is recorded or mirrored.")
                         .font(.footnote)
                         .multilineTextAlignment(.center)
@@ -238,15 +241,9 @@ import SwiftUI
         var problem: String?
     }
 
-    /// Everything the shown code depends on.
-    nonisolated struct RenderKey: Equatable {
-        var persona: Persona?
-        var profile: Profile
-        var day: UInt32
-    }
-
-    private var renderKey: RenderKey {
-        RenderKey(persona: selected, profile: model.profile, day: model.issuedDay())
+    /// Everything the shown code depends on; nil without a persona.
+    private var renderKey: BudgetKey? {
+        selected.map { model.budgetKey(for: $0) }
     }
 
     /// The full-QR card of the selected persona and its code, plus the
@@ -335,6 +332,7 @@ import SwiftUI
                     ProgressView()
                 }
             }
+            .grounded()
             .navigationTitle("Print")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

@@ -20,6 +20,8 @@ import UIKit
         } else {
             ContentUnavailableView("Forgotten", systemImage: "person.slash",
                                    description: Text("This person is no longer on your phone."))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Theme.ground)
         }
     }
 
@@ -71,6 +73,7 @@ import UIKit
             contactsSection
             forgetSection
         }
+        .grounded()
         .navigationTitle(card.name ?? "Card")
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear {
@@ -121,7 +124,7 @@ import UIKit
                             .foregroundStyle(.secondary)
                     }
                     Text(trustText)
-                        .font(.caption)
+                        .font(Theme.mono)
                         .foregroundStyle(trustIsWarning ? .red : Theme.tertiary)
                     Text("Card issued " + ReviewSheet.issuedText(card.issuedDay))
                         .font(Theme.mono)
@@ -283,9 +286,9 @@ import UIKit
                     HStack {
                         Text(encounter.date, style: .date)
                         Text(encounter.date, style: .time)
-                            .foregroundStyle(.secondary)
                     }
-                    .font(.caption)
+                    .font(Theme.mono)
+                    .foregroundStyle(Theme.tertiary)
                     TextField("Where", text: $encounter.label)
                         .onSubmit {
                             commit()

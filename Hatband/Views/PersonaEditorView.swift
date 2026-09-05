@@ -6,12 +6,19 @@ import SwiftUI
 /// channels, and live meters for both codes. Done commits through
 /// `AppModel.update(_:)`, which bumps `seq` only when something changed.
 @MainActor struct PersonaEditorView: View {
+    /// A colour swatch's tap target, the HIG minimum, and the disc in it.
+    nonisolated static let swatchTarget: CGFloat = 44
+    nonisolated static let swatchDiameter: CGFloat = 28
+
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     let personaID: [UInt8]
     @State private var draft: Persona?
     @State private var problem: String?
     @State private var saving = false
+    /// The two meters, rebuilt when `meterKey` changes and never in `body`:
+    /// measuring reads the seed and signs.
+    @State private var meters: [CardForm: MeasuredCard] = [:]
 
     var body: some View {
         Form {
@@ -27,6 +34,7 @@ import SwiftUI
                 }
             }
         }
+        .grounded()
         .navigationTitle(draft?.label ?? "Persona")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -47,6 +55,9 @@ import SwiftUI
             if model.route.editingPersona == personaID {
                 model.route.editingPersona = nil
             }
+        }
+        .onChange(of: meterKey, initial: true) { _, _ in
+            measure()
         }
     }
 
@@ -102,13 +113,16 @@ import SwiftUI
             Text("Your name is always on the Lock Screen card. Channels that do not fit are dropped, last first.")
         }
         Section("Size") {
-            meter(persona.wrappedValue, form: .fullQR, title: "Full card")
-            meter(persona.wrappedValue, form: .lockScreen, title: "Lock Screen")
+            meter(form: .fullQR, title: "Full card")
+            meter(form: .lockScreen, title: "Lock Screen")
         }
     }
 
+    /// The palette in a wrapping grid: each swatch a 44 pt target named
+    /// for VoiceOver, the chosen one ringed in ink.
     private func colours(_ persona: Binding<Persona>) -> some View {
-        HStack(spacing: 12) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: PersonaEditorView.swatchTarget), spacing: 4)],
+                  alignment: .leading, spacing: 4) {
             ForEach(0..<Palette.colors.count, id: \.self) { index in
                 let selected = persona.wrappedValue.color == UInt8(index)
                 Button {
@@ -116,18 +130,25 @@ import SwiftUI
                 } label: {
                     Circle()
                         .fill(Theme.personaColor(UInt8(index)))
-                        .frame(width: 24, height: 24)
+                        .frame(width: PersonaEditorView.swatchDiameter, height: PersonaEditorView.swatchDiameter)
                         .overlay {
                             Circle()
                                 .strokeBorder(Theme.ink, lineWidth: selected ? 2 : 0)
                         }
+                        .frame(width: PersonaEditorView.swatchTarget, height: PersonaEditorView.swatchTarget)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(Palette.colors[index].name)
+                .accessibilityLabel(PersonaEditorView.swatchLabel(index))
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
         .padding(.vertical, 4)
+    }
+
+    /// The VoiceOver name of a swatch: the palette colour's name.
+    nonisolated static func swatchLabel(_ index: Int) -> String {
+        Palette.color(at: UInt8(clamping: index)).name
     }
 
     @ViewBuilder private func lockOptions(_ persona: Binding<Persona>) -> some View {
@@ -137,18 +158,33 @@ import SwiftUI
         }
     }
 
-    @ViewBuilder private func meter(_ persona: Persona, form: CardForm, title: String) -> some View {
+    @ViewBuilder private func meter(form: CardForm, title: String) -> some View {
         HStack {
             Text(title)
             Spacer()
-            if let budget = try? model.budget(for: persona, form: form) {
+            if let budget = meters[form]?.budget {
                 ByteMeter(budget: budget, form: form, compact: true)
-            } else {
+            } else if meters[form] != nil {
                 Text(form == .lockScreen ? "too big for the Lock Screen" : "cannot build")
                     .font(Theme.mono)
                     .foregroundStyle(.red)
             }
         }
+    }
+
+    // MARK: - Meters
+
+    /// What the meters depend on; nil until the draft is loaded.
+    private var meterKey: BudgetKey? {
+        draft.map { model.budgetKey(for: $0) }
+    }
+
+    private func measure() {
+        guard let draft else {
+            meters = [:]
+            return
+        }
+        meters = [.fullQR: model.measure(draft, form: .fullQR), .lockScreen: model.measure(draft, form: .lockScreen)]
     }
 
     // MARK: - Choices

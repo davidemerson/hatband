@@ -9,6 +9,7 @@ import SwiftUI
             Image(systemName: "lock")
                 .font(.largeTitle)
                 .foregroundStyle(Theme.tertiary)
+                .accessibilityHidden(true)
             Text("Locked")
                 .font(.headline)
             Text("The people you have scanned stay behind Face ID or your passcode.")
@@ -23,5 +24,7 @@ import SwiftUI
             .buttonStyle(.borderedProminent)
         }
         .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.ground)
     }
 }

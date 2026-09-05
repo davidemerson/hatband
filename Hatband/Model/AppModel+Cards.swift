@@ -2,6 +2,25 @@ import CryptoKit
 import Foundation
 import HatbandCore
 
+/// What every `budget(for:form:)` of a persona depends on: each form of
+/// its card with `seq` and the day held fixed, then `seq`, the day and the
+/// key index. A view keeps its meters in `@State` and rebuilds them when
+/// this changes, so a new label or a fresh signature costs nothing.
+nonisolated struct BudgetKey: Hashable, Sendable {
+    let content: [Card]
+    let keyIndex: UInt32
+    let seq: UInt32
+    let issuedDay: UInt32
+}
+
+/// One form's card with its meter, or why the form has none. Built off
+/// the render path: `card(for:form:)` reads the seed and signs.
+nonisolated struct MeasuredCard: Equatable {
+    var card: Card?
+    var budget: Budget?
+    var problem: AppError?
+}
+
 /// Card building and persona bookkeeping.
 extension AppModel {
     /// Key-store item holding the next persona key index, so a deleted
@@ -81,6 +100,28 @@ extension AppModel {
 
     func budget(for persona: Persona, form: CardForm) throws -> Budget {
         Budget(card: try card(for: persona, form: form))
+    }
+
+    /// The inputs of every `budget(for:form:)` for the persona, for views
+    /// that cache: rebuild in `.onChange(of:)` of this, never in `body`.
+    func budgetKey(for persona: Persona) -> BudgetKey {
+        AppModel.budgetKey(profile: profile, persona: persona, issuedDay: issuedDay())
+    }
+
+    nonisolated static func budgetKey(profile: Profile, persona: Persona, issuedDay: UInt32) -> BudgetKey {
+        BudgetKey(content: cardContent(profile: profile, persona: persona), keyIndex: persona.keyIndex,
+                  seq: persona.seq, issuedDay: issuedDay)
+    }
+
+    /// `card(for:form:)` and its budget in one value, a failure kept as
+    /// the error to show.
+    func measure(_ persona: Persona, form: CardForm) -> MeasuredCard {
+        do {
+            let card = try card(for: persona, form: form)
+            return MeasuredCard(card: card, budget: Budget(card: card), problem: nil)
+        } catch {
+            return MeasuredCard(problem: AppError(error))
+        }
     }
 
     func url(for persona: Persona, form: CardForm) throws -> String {

@@ -17,6 +17,9 @@ import SwiftUI
     @State private var tagText = ""
     @State private var tags: [String] = []
     @State private var acceptNewKey = false
+    /// For a newer card from someone known: replace the stored card, or
+    /// keep it and add the meeting alone.
+    @State private var updateCard = true
     @State private var saving = false
 
     init(review: Review) {
@@ -37,6 +40,7 @@ import SwiftUI
                 meetingSection
                 tagsSection
             }
+            .grounded()
             .navigationTitle(review.card.name ?? "Card")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -99,6 +103,19 @@ import SwiftUI
             case .rejected(let reason):
                 Label(reason, systemImage: "xmark.octagon")
                     .foregroundStyle(.red)
+            }
+            if ReviewSheet.offersMeetingOnly(review.outcome) {
+                Picker("Newer card", selection: $updateCard) {
+                    Text("Update card").tag(true)
+                    Text("Add meeting only").tag(false)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                if !updateCard {
+                    Text("The card you have stays as it is; only this meeting is added.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
@@ -254,6 +271,7 @@ import SwiftUI
         addTag()
         var accepted = review
         accepted.items = items
+        accepted.updateCard = updateCard
         let chosenFix = useLocation ? fix : nil
         let place = label.trimmingCharacters(in: .whitespacesAndNewlines)
         let text = note.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -274,6 +292,14 @@ import SwiftUI
 
     nonisolated static func isMono(_ id: String) -> Bool {
         id == CardFields.ssh || id == CardFields.gpgFingerprint || id == CardFields.signal
+    }
+
+    /// Only a newer card from someone known offers "Add meeting only".
+    nonisolated static func offersMeetingOnly(_ outcome: Merge.Outcome) -> Bool {
+        if case .update = outcome {
+            return true
+        }
+        return false
     }
 
     /// `Day.civil` as yyyy-mm-dd.

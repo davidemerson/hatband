@@ -6,16 +6,20 @@ import SwiftUI
 @MainActor struct InspectorView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    /// The card on show, rebuilt when `inspectedKey` changes and never in
+    /// `body`: building it reads the seed and signs.
+    @State private var shown: MeasuredCard?
 
     var body: some View {
         NavigationStack {
             List {
-                if let persona = model.selectedPersona {
-                    sections(persona)
-                } else {
+                if model.selectedPersona == nil {
                     Text("Add a persona to show a card.")
+                } else if let shown {
+                    sections(shown)
                 }
             }
+            .grounded()
             .navigationTitle("What's in this QR")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -26,10 +30,17 @@ import SwiftUI
                 }
             }
         }
+        .onChange(of: inspectedKey, initial: true) { _, _ in
+            shown = model.selectedPersona.map { model.measure($0, form: .fullQR) }
+        }
     }
 
-    @ViewBuilder private func sections(_ persona: Persona) -> some View {
-        let shown = inspected(persona)
+    /// What the shown card depends on; nil without a persona.
+    private var inspectedKey: BudgetKey? {
+        model.selectedPersona.map { model.budgetKey(for: $0) }
+    }
+
+    @ViewBuilder private func sections(_ shown: MeasuredCard) -> some View {
         if let card = shown.card {
             Section("Fields") {
                 if let name = card.name {
@@ -58,7 +69,7 @@ import SwiftUI
             }
             Section("Envelope") {
                 row("Persona id", Hex.string(card.personaID), mono: true)
-                row("Issued", InspectorView.civil(card.issuedDay))
+                row("Issued", InspectorView.civil(card.issuedDay), mono: true)
                 row("Sequence", String(card.seq))
                 row("Colour", Palette.color(at: card.color).name)
                 if card.flags.contains(.alias) {
@@ -86,22 +97,7 @@ import SwiftUI
                 }
             }
         } else {
-            Text(shown.problem ?? "No card.")
-        }
-    }
-
-    private struct Inspected {
-        var card: Card?
-        var budget: Budget?
-        var problem: String?
-    }
-
-    private func inspected(_ persona: Persona) -> Inspected {
-        do {
-            let card = try model.card(for: persona, form: .fullQR)
-            return Inspected(card: card, budget: Budget(card: card), problem: nil)
-        } catch {
-            return Inspected(problem: AppError(error).message)
+            Text(shown.problem?.message ?? "No card.")
         }
     }
 

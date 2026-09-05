@@ -12,6 +12,9 @@ import SwiftUI
     @State private var alwaysOn = false
     @State private var working = false
     @State private var problem: String?
+    /// What the compact card carries, rebuilt when `summaryKey` changes
+    /// and never in `body`: building it reads the seed.
+    @State private var summary: Summary?
 
     var body: some View {
         NavigationStack {
@@ -31,15 +34,15 @@ import SwiftUI
                     Text("The card on the Lock Screen is compact: your name, up to two channels and your key fingerprint. Choose the channels in the persona editor.")
                 }
                 Section("Lock Screen card") {
-                    if let persona = model.selectedPersona {
-                        summaryRows(persona)
-                    } else {
+                    if model.selectedPersona == nil {
                         Text("Add a persona first.")
+                    } else if let summary {
+                        summaryRows(summary)
                     }
                 }
                 Section {
                     if let sharing = model.sharing {
-                        Text("Sharing until \(sharing.endsAt, style: .time)")
+                        Text("Sharing until ") + Text(sharing.endsAt, style: .time).font(Theme.mono)
                         Button("Stop sharing", role: .destructive) {
                             stop()
                         }
@@ -59,6 +62,7 @@ import SwiftUI
                     Text("Sharing starts and stops only from here. The card leaves the Lock Screen when the time is up.")
                 }
             }
+            .grounded()
             .navigationTitle("Lock Screen")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -73,6 +77,9 @@ import SwiftUI
             minutes = [30, 120, 480].contains(stored) ? stored : 120
             showName = model.settings.showNameOnLockScreen
             alwaysOn = model.settings.alwaysOnQR
+        }
+        .onChange(of: summaryKey, initial: true) { _, _ in
+            summary = model.selectedPersona.map { measure($0) }
         }
         .onChange(of: showName) { _, value in
             if model.settings.showNameOnLockScreen != value {
@@ -104,8 +111,7 @@ import SwiftUI
         var problem: String?
     }
 
-    @ViewBuilder private func summaryRows(_ persona: Persona) -> some View {
-        let digest = summary(persona)
+    @ViewBuilder private func summaryRows(_ digest: Summary) -> some View {
         if let problem = digest.problem {
             Text(problem)
                 .foregroundStyle(.red)
@@ -119,15 +125,18 @@ import SwiftUI
         }
     }
 
+    /// What the compact card depends on; nil without a persona.
+    private var summaryKey: BudgetKey? {
+        model.selectedPersona.map { model.budgetKey(for: $0) }
+    }
+
     /// What the trimmed compact card carries, and its meter.
-    private func summary(_ persona: Persona) -> Summary {
-        do {
-            let card = try model.card(for: persona, form: .lockScreen)
-            let channels = Links.rows(for: card).map { $0.label }
-            return Summary(channels: channels, budget: Budget(card: card), problem: nil)
-        } catch {
-            return Summary(problem: AppError(error).message)
+    private func measure(_ persona: Persona) -> Summary {
+        let measured = model.measure(persona, form: .lockScreen)
+        guard let card = measured.card, let budget = measured.budget else {
+            return Summary(problem: (measured.problem ?? .tooBigForLockScreen).message)
         }
+        return Summary(channels: Links.rows(for: card).map { $0.label }, budget: budget, problem: nil)
     }
 
     private func persist() {

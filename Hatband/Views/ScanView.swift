@@ -73,6 +73,7 @@ import VisionKit
                     Image(systemName: "photo.on.rectangle")
                         .font(.largeTitle)
                         .foregroundStyle(Theme.tertiary)
+                        .accessibilityHidden(true)
                     Text("The camera scanner is not available here. Pick a photo of the code instead.")
                         .multilineTextAlignment(.center)
                         .padding()
@@ -85,6 +86,8 @@ import VisionKit
                     .padding(.horizontal)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.ground)
     }
 
     private var denied: some View {
@@ -92,6 +95,7 @@ import VisionKit
             Image(systemName: "camera")
                 .font(.largeTitle)
                 .foregroundStyle(Theme.tertiary)
+                .accessibilityHidden(true)
             Text("Hatband uses the camera only to read a card's QR code.")
                 .multilineTextAlignment(.center)
             if let url = URL(string: UIApplication.openSettingsURLString) {

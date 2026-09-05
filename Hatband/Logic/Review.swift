@@ -166,6 +166,9 @@ nonisolated struct Review: Identifiable, Equatable, Sendable {
     let outcome: Merge.Outcome
     /// The received certificate hashes to the card's fingerprint.
     let gpgKeyVerified: Bool
+    /// For an `.update` outcome: replace the stored card, or keep it and
+    /// add the meeting alone.
+    var updateCard = true
 
     /// The card with excluded and dropped fields removed.
     var acceptedCard: Card {
