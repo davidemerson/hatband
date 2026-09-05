@@ -1,4 +1,3 @@
-// STUB: replaced by package C
 import ActivityKit
 import Foundation
 
