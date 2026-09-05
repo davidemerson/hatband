@@ -1,4 +1,4 @@
-// owned by package C
+// STUB: replaced by package C
 import ActivityKit
 import Foundation
 

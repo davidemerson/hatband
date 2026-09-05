@@ -2,7 +2,7 @@ import Foundation
 import LocalAuthentication
 import Security
 
-extension KeyAccess {
+nonisolated extension KeyAccess {
     /// Follows `thisDeviceOnly` in both the access-control and plain branches.
     var accessible: CFString {
         thisDeviceOnly ? kSecAttrAccessibleWhenUnlockedThisDeviceOnly : kSecAttrAccessibleWhenUnlocked

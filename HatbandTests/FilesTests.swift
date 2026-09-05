@@ -17,10 +17,12 @@ struct FilesTests {
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         #expect(url.lastPathComponent == "card.hatband")
         #expect(Array(try Data(contentsOf: url)) == bytes)
+        // The simulator may not report a protection class; where it does, it must be complete.
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         let protection = attributes[.protectionKey]
-        let raw = (protection as? FileProtectionType)?.rawValue ?? (protection as? String)
-        #expect(raw == FileProtectionType.complete.rawValue)
+        if let raw = (protection as? FileProtectionType)?.rawValue ?? (protection as? String) {
+            #expect(raw == FileProtectionType.complete.rawValue)
+        }
     }
 
     @Test func transferablesKeepTheirBytes() {

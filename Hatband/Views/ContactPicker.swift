@@ -25,6 +25,9 @@ import UIKit
         Coordinator(onPick: onPick, onDone: { dismiss() })
     }
 
+    /// `CNContactPickerDelegate` is not main-actor annotated, so its methods
+    /// are `nonisolated` here and hop back explicitly; the picker calls them
+    /// on the main thread.
     @MainActor final class Coordinator: NSObject, CNContactPickerDelegate {
         private let onPick: (CNContact) -> Void
         private let onDone: () -> Void
@@ -34,13 +37,17 @@ import UIKit
             self.onDone = onDone
         }
 
-        func contactPicker(_ picker: CNContactPickerViewController, didSelect contact: CNContact) {
-            onPick(contact)
-            onDone()
+        nonisolated func contactPicker(_ picker: CNContactPickerViewController, didSelect contact: CNContact) {
+            MainActor.assumeIsolated {
+                self.onPick(contact)
+                self.onDone()
+            }
         }
 
-        func contactPickerDidCancel(_ picker: CNContactPickerViewController) {
-            onDone()
+        nonisolated func contactPickerDidCancel(_ picker: CNContactPickerViewController) {
+            MainActor.assumeIsolated {
+                self.onDone()
+            }
         }
     }
 }

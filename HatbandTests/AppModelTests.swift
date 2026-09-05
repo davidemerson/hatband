@@ -191,7 +191,7 @@ import UIKit
         #expect(model.phase == .onboarding)
         #expect(model.personas.isEmpty)
         #expect(model.profile == Profile())
-        #expect(model.settings == Settings())
+        #expect(model.settings == Hatband.Settings())
         #expect(model.locked)
         #expect(model.dbKey == nil)
         try model.finishOnboarding(profile: sampleProfile(), appLock: false)

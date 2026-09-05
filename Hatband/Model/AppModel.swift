@@ -86,7 +86,7 @@ import UIKit
         switch phase {
         case .active:
             covered = false
-            Task { await activate() }
+            Task { await self.activate() }
         case .inactive:
             covered = true
         case .background:

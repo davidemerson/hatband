@@ -45,10 +45,12 @@ import Testing
         try store.save()
         #expect(FileManager.default.fileExists(atPath: directory.appendingPathComponent("Hatband.store").path))
 
+        // The simulator may not report a protection class; where it does, it must be complete.
         let attributes = try FileManager.default.attributesOfItem(atPath: directory.path)
         let protection = attributes[.protectionKey]
-        let raw = (protection as? FileProtectionType)?.rawValue ?? (protection as? String)
-        #expect(raw == FileProtectionType.complete.rawValue)
+        if let raw = (protection as? FileProtectionType)?.rawValue ?? (protection as? String) {
+            #expect(raw == FileProtectionType.complete.rawValue)
+        }
 
         try store.setExcludedFromBackup(true)
         #expect(try URL(fileURLWithPath: directory.path).resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)

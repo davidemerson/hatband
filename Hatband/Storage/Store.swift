@@ -32,7 +32,7 @@ import SwiftData
             attributes: [.protectionKey: FileProtectionType.complete])
         let configuration = ModelConfiguration(
             "Hatband", schema: Records.schema, url: directory.appendingPathComponent("Hatband.store"),
-            allowsSave: true, cloudKitDatabase: ModelConfiguration.CloudKitDatabase.none)
+            allowsSave: true, cloudKitDatabase: .none)
         let container = try ModelContainer(for: Records.schema, configurations: configuration)
         let store = Store(container: container, directory: directory)
         store.reassertProtection()
@@ -42,8 +42,7 @@ import SwiftData
     static func inMemory() throws -> Store {
         let configuration = ModelConfiguration(
             schema: Records.schema, isStoredInMemoryOnly: true, allowsSave: true,
-            groupContainer: ModelConfiguration.GroupContainer.none,
-            cloudKitDatabase: ModelConfiguration.CloudKitDatabase.none)
+            groupContainer: .none, cloudKitDatabase: .none)
         let container = try ModelContainer(for: Records.schema, configurations: configuration)
         return Store(container: container, directory: nil)
     }
