@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-2WCIAverkUApkNt/JYuKtBASuoa2Hn1VVmHUJWWFseY='; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<title>Trust · Hatband</title>
+<style>:root {
+  color-scheme: light dark;
+  --ground: #f2f2f2;
+  --panel: #d9d9d9;
+  --ink: #111111;
+  --mute: #555555;
+  --accent: #00008b;
+  --good: #0b3d2e;
+  --bad: #8a3324;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --radius: 15px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #0d0d0d;
+    --panel: #262626;
+    --ink: #e6e6e6;
+    --mute: #9a9a9a;
+    --accent: #7f7fff;
+    --good: #5fae8c;
+    --bad: #d97a63;
+  }
+}
+html { background: var(--ground); color: var(--ink); font: 16px/1.5 var(--sans); -webkit-text-size-adjust: 100%; }
+body { margin: 0; padding: 1.5rem 1rem 2rem; min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; }
+main { width: 100%; max-width: 40rem; margin: 0 auto; flex: 1; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 0.15em; }
+h1, h2 { font-weight: 600; margin: 0; overflow-wrap: anywhere; }
+h1 { font-size: 1.5rem; }
+h2 { font-size: 1rem; margin-top: 1.5rem; }
+p { margin: 0.5rem 0; }
+code, .mono, .domain, .meta, .error { font-family: var(--mono); font-size: 90%; }
+code { white-space: pre-wrap; overflow-wrap: anywhere; }
+ul { list-style: none; margin: 0; padding: 0; }
+li { position: relative; padding: 0.3rem 0 0.3rem 1.25rem; overflow-wrap: anywhere; }
+li::before { content: "+"; position: absolute; left: 0; color: var(--mute); font-family: var(--mono); }
+
+.card { background: var(--panel); border-radius: var(--radius); overflow: hidden; }
+.band { height: 8px; }
+.card header { display: flex; align-items: center; gap: 1rem; padding: 1.25rem 1.25rem 0.5rem; }
+.photo { width: 72px; height: 72px; flex: none; border-radius: var(--radius); object-fit: cover; background: var(--ground); }
+.company { margin: 0.1rem 0 0; color: var(--mute); }
+.alias { color: var(--accent); font-weight: 400; }
+.card ul { padding: 0.5rem 1.25rem; }
+.card ul + ul { padding-top: 0; }
+.label { color: var(--mute); margin-right: 0.5em; }
+.domain, .warn { color: var(--mute); margin-left: 0.5em; }
+.warn { color: var(--bad); font-size: 80%; }
+.copy { font: inherit; font-size: 80%; margin-left: 0.5em; padding: 0.05em 0.6em; border: 1px solid currentColor; border-radius: 999px; background: transparent; color: var(--accent); cursor: pointer; vertical-align: middle; }
+.badges { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center; padding: 0.5rem 1.25rem; color: var(--mute); }
+.badge { font-family: var(--mono); font-size: 85%; padding: 0.1em 0.7em; border: 1px solid currentColor; border-radius: 999px; }
+.badge.ok { color: var(--good); }
+.badge.bad { color: var(--bad); }
+.actions { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; padding: 0.75rem 1.25rem 1.25rem; }
+.button { display: inline-block; padding: 0.45em 1.1em; border-radius: 999px; background: var(--accent); color: var(--ground); text-decoration: none; }
+
+.c0 .band { background: #111111; }
+.c1 .band { background: #00008b; }
+.c2 .band { background: #0b3d2e; }
+.c3 .band { background: #8a6d00; }
+.c4 .band { background: #8a3324; }
+.c5 .band { background: #4a5560; }
+.c6 .band { background: #4b4a2a; }
+.c7 .band { background: #4a3728; }
+.c8 .band { background: #5b4b7a; }
+.c9 .band { background: #8c7f4d; }
+@media (prefers-color-scheme: dark) {
+  .c0 .band { background: #e6e6e6; }
+  .c1 .band { background: #7f7fff; }
+  .c2 .band { background: #5fae8c; }
+  .c3 .band { background: #d4b64a; }
+  .c4 .band { background: #d97a63; }
+  .c5 .band { background: #a3adb8; }
+  .c6 .band { background: #b8b47a; }
+  .c7 .band { background: #b89078; }
+  .c8 .band { background: #b6a3d6; }
+  .c9 .band { background: #e8dcb5; }
+}
+
+.empty h1 { font-size: 2rem; margin: 3rem 0 0.5rem; }
+.empty p, .page p { max-width: 36rem; }
+.page h1 { margin-bottom: 0.75rem; }
+.page li { padding-top: 0.15rem; padding-bottom: 0.15rem; }
+.page .csp { display: block; padding: 0.75rem 1rem; background: var(--panel); border-radius: var(--radius); }
+footer { max-width: 40rem; width: 100%; margin: 2rem auto 0; color: var(--mute); font-size: 90%; }
+footer a { color: inherit; }
+footer a + a::before { content: " · "; text-decoration: none; display: inline-block; margin: 0 0.15em; }
+</style>
+</head>
+<body>
+<main class="page"><h1>Trust</h1>
+<p>The page is one file with everything inline, so you can read all of it. The decoder is a port of the app's; both must agree on the same published test vectors.</p>
+<ul>
+<li>source: <a href="https://github.com/davidemerson/hatband">github.com/davidemerson/hatband</a>, the page under <code>site/</code></li>
+<li>vectors: <a href="https://github.com/davidemerson/hatband/blob/main/spec/vectors/cards.json"><code>spec/vectors/cards.json</code></a></li>
+<li>signatures: a card carries an Ed25519 signature; the page checks it with your browser's WebCrypto and says whether it holds</li>
+<li>links: only <code>https</code>, <code>http</code> (marked), <code>mailto</code> and <code>tel</code> are ever tappable, and the host is printed beside each</li>
+</ul>
+<h2>Content-Security-Policy</h2>
+<p>Script and style are admitted by hash only; nothing may be fetched or posted.</p>
+<code class="csp">default-src 'none'; script-src 'sha256-zrAWCDaZM21t451TJmLkScTKUteqfCA3NTZV2TmejuU='; style-src 'sha256-2WCIAverkUApkNt/JYuKtBASuoa2Hn1VVmHUJWWFseY='; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'</code></main>
+<footer><a href="/">hatband.link</a><a href="/privacy">privacy</a><a href="/trust">trust</a><a href="/support">support</a><a href="https://github.com/davidemerson/hatband">source</a></footer>
+</body>
+</html>

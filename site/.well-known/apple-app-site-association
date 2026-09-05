@@ -1,0 +1,12 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["TEAMID.link.hatband.ios"],
+        "components": [
+          { "/": "/", "#": "1*" }
+        ]
+      }
+    ]
+  }
+}

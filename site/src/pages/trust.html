@@ -1,0 +1,12 @@
+
+<h1>Trust</h1>
+<p>The page is one file with everything inline, so you can read all of it. The decoder is a port of the app's; both must agree on the same published test vectors.</p>
+<ul>
+<li>source: <a href="https://github.com/davidemerson/hatband">github.com/davidemerson/hatband</a>, the page under <code>site/</code></li>
+<li>vectors: <a href="https://github.com/davidemerson/hatband/blob/main/spec/vectors/cards.json"><code>spec/vectors/cards.json</code></a></li>
+<li>signatures: a card carries an Ed25519 signature; the page checks it with your browser's WebCrypto and says whether it holds</li>
+<li>links: only <code>https</code>, <code>http</code> (marked), <code>mailto</code> and <code>tel</code> are ever tappable, and the host is printed beside each</li>
+</ul>
+<h2>Content-Security-Policy</h2>
+<p>Script and style are admitted by hash only; nothing may be fetched or posted.</p>
+<code class="csp">{{indexCsp}}</code>

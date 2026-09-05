@@ -1,0 +1,1492 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-zrAWCDaZM21t451TJmLkScTKUteqfCA3NTZV2TmejuU='; style-src 'sha256-2WCIAverkUApkNt/JYuKtBASuoa2Hn1VVmHUJWWFseY='; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex">
+<title>Hatband</title>
+<style>:root {
+  color-scheme: light dark;
+  --ground: #f2f2f2;
+  --panel: #d9d9d9;
+  --ink: #111111;
+  --mute: #555555;
+  --accent: #00008b;
+  --good: #0b3d2e;
+  --bad: #8a3324;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --radius: 15px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #0d0d0d;
+    --panel: #262626;
+    --ink: #e6e6e6;
+    --mute: #9a9a9a;
+    --accent: #7f7fff;
+    --good: #5fae8c;
+    --bad: #d97a63;
+  }
+}
+html { background: var(--ground); color: var(--ink); font: 16px/1.5 var(--sans); -webkit-text-size-adjust: 100%; }
+body { margin: 0; padding: 1.5rem 1rem 2rem; min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; }
+main { width: 100%; max-width: 40rem; margin: 0 auto; flex: 1; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 0.15em; }
+h1, h2 { font-weight: 600; margin: 0; overflow-wrap: anywhere; }
+h1 { font-size: 1.5rem; }
+h2 { font-size: 1rem; margin-top: 1.5rem; }
+p { margin: 0.5rem 0; }
+code, .mono, .domain, .meta, .error { font-family: var(--mono); font-size: 90%; }
+code { white-space: pre-wrap; overflow-wrap: anywhere; }
+ul { list-style: none; margin: 0; padding: 0; }
+li { position: relative; padding: 0.3rem 0 0.3rem 1.25rem; overflow-wrap: anywhere; }
+li::before { content: "+"; position: absolute; left: 0; color: var(--mute); font-family: var(--mono); }
+
+.card { background: var(--panel); border-radius: var(--radius); overflow: hidden; }
+.band { height: 8px; }
+.card header { display: flex; align-items: center; gap: 1rem; padding: 1.25rem 1.25rem 0.5rem; }
+.photo { width: 72px; height: 72px; flex: none; border-radius: var(--radius); object-fit: cover; background: var(--ground); }
+.company { margin: 0.1rem 0 0; color: var(--mute); }
+.alias { color: var(--accent); font-weight: 400; }
+.card ul { padding: 0.5rem 1.25rem; }
+.card ul + ul { padding-top: 0; }
+.label { color: var(--mute); margin-right: 0.5em; }
+.domain, .warn { color: var(--mute); margin-left: 0.5em; }
+.warn { color: var(--bad); font-size: 80%; }
+.copy { font: inherit; font-size: 80%; margin-left: 0.5em; padding: 0.05em 0.6em; border: 1px solid currentColor; border-radius: 999px; background: transparent; color: var(--accent); cursor: pointer; vertical-align: middle; }
+.badges { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center; padding: 0.5rem 1.25rem; color: var(--mute); }
+.badge { font-family: var(--mono); font-size: 85%; padding: 0.1em 0.7em; border: 1px solid currentColor; border-radius: 999px; }
+.badge.ok { color: var(--good); }
+.badge.bad { color: var(--bad); }
+.actions { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; padding: 0.75rem 1.25rem 1.25rem; }
+.button { display: inline-block; padding: 0.45em 1.1em; border-radius: 999px; background: var(--accent); color: var(--ground); text-decoration: none; }
+
+.c0 .band { background: #111111; }
+.c1 .band { background: #00008b; }
+.c2 .band { background: #0b3d2e; }
+.c3 .band { background: #8a6d00; }
+.c4 .band { background: #8a3324; }
+.c5 .band { background: #4a5560; }
+.c6 .band { background: #4b4a2a; }
+.c7 .band { background: #4a3728; }
+.c8 .band { background: #5b4b7a; }
+.c9 .band { background: #8c7f4d; }
+@media (prefers-color-scheme: dark) {
+  .c0 .band { background: #e6e6e6; }
+  .c1 .band { background: #7f7fff; }
+  .c2 .band { background: #5fae8c; }
+  .c3 .band { background: #d4b64a; }
+  .c4 .band { background: #d97a63; }
+  .c5 .band { background: #a3adb8; }
+  .c6 .band { background: #b8b47a; }
+  .c7 .band { background: #b89078; }
+  .c8 .band { background: #b6a3d6; }
+  .c9 .band { background: #e8dcb5; }
+}
+
+.empty h1 { font-size: 2rem; margin: 3rem 0 0.5rem; }
+.empty p, .page p { max-width: 36rem; }
+.page h1 { margin-bottom: 0.75rem; }
+.page li { padding-top: 0.15rem; padding-bottom: 0.15rem; }
+.page .csp { display: block; padding: 0.75rem 1rem; background: var(--panel); border-radius: var(--radius); }
+footer { max-width: 40rem; width: 100%; margin: 2rem auto 0; color: var(--mute); font-size: 90%; }
+footer a { color: inherit; }
+footer a + a::before { content: " · "; text-decoration: none; display: inline-block; margin: 0 0.15em; }
+</style>
+</head>
+<body>
+<main id="app"><noscript><p>This page reads the card in the link with JavaScript, in your browser; it makes no requests of its own.</p></noscript></main>
+<footer><a href="/privacy">privacy</a><a href="/trust">trust</a><a href="/support">support</a><a href="https://github.com/davidemerson/hatband">source</a></footer>
+<script>(() => {
+'use strict';
+/* HB1 in the browser: Base32, deterministic CBOR, the card model, canonical
+   URIs, vCard 3.0, the link allow-list and Ed25519 verification. A port of
+   HatbandCore; spec/vectors keeps the two decoders honest. No DOM here. */
+
+// MARK: - Errors
+
+/** Every failure carries a `code` to switch on; the message is for logs. */
+class HBError extends Error {
+  constructor(code, message, detail) {
+    super(message || code);
+    this.name = new.target.name;
+    this.code = code;
+    if (detail) Object.assign(this, detail);
+  }
+}
+class Base32Error extends HBError {}
+class Base64Error extends HBError {}
+class CBORError extends HBError {}
+class HB1Error extends HBError {}
+class CardError extends HBError {}
+
+// MARK: - Bytes
+
+const utf8 = new TextEncoder();
+const utf8Strict = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
+
+function utf8Encode(text) {
+  return utf8.encode(text);
+}
+
+function utf8Length(text) {
+  return utf8.encode(text).length;
+}
+
+function hexEncode(bytes, upper = false) {
+  let out = '';
+  for (const b of bytes) out += (b < 16 ? '0' : '') + b.toString(16);
+  return upper ? out.toUpperCase() : out;
+}
+
+function hexDecode(text) {
+  if (text.length % 2 !== 0 || /[^0-9a-fA-F]/.test(text)) throw new TypeError('not hex');
+  const out = new Uint8Array(text.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(text.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+
+function bytesEqual(a, b) {
+  return a.length === b.length && compareBytes(a, b) === 0;
+}
+
+/** Lexicographic, shorter prefix first: the order deterministic CBOR keys use. */
+function compareBytes(a, b) {
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i++) if (a[i] !== b[i]) return a[i] - b[i];
+  return a.length - b.length;
+}
+
+function concatBytes(...parts) {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let offset = 0;
+  for (const p of parts) {
+    out.set(p, offset);
+    offset += p.length;
+  }
+  return out;
+}
+
+// MARK: - Base32 (RFC 4648, unpadded, the QR alphanumeric subset)
+
+const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+function base32Encode(bytes) {
+  let out = '';
+  let buffer = 0;
+  let bits = 0;
+  for (const byte of bytes) {
+    buffer = (buffer << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      bits -= 5;
+      out += BASE32[(buffer >> bits) & 31];
+    }
+    buffer &= (1 << bits) - 1;
+  }
+  if (bits > 0) out += BASE32[(buffer << (5 - bits)) & 31];
+  return out;
+}
+
+/** Either case, any run of trailing `=`. Rejects other characters,
+    impossible lengths and non-zero fill bits, so every accepted spelling
+    re-encodes to itself once upper-cased and stripped. */
+function base32Decode(text) {
+  let end = text.length;
+  while (end > 0 && text.charCodeAt(end - 1) === 0x3d) end--;
+  const values = new Array(end);
+  for (let i = 0; i < end; i++) {
+    const c = text.charCodeAt(i);
+    if (c >= 0x41 && c <= 0x5a) values[i] = c - 0x41;
+    else if (c >= 0x61 && c <= 0x7a) values[i] = c - 0x61;
+    else if (c >= 0x32 && c <= 0x37) values[i] = c - 0x32 + 26;
+    else throw new Base32Error('invalidCharacter');
+  }
+  switch (end % 8) {
+    case 1: case 3: case 6: throw new Base32Error('invalidLength');
+    default: break;
+  }
+  const out = new Uint8Array(Math.floor(end * 5 / 8));
+  let n = 0;
+  let buffer = 0;
+  let bits = 0;
+  for (const value of values) {
+    buffer = (buffer << 5) | value;
+    bits += 5;
+    if (bits >= 8) {
+      bits -= 8;
+      out[n++] = (buffer >> bits) & 0xff;
+      buffer &= (1 << bits) - 1;
+    }
+  }
+  if (buffer !== 0) throw new Base32Error('nonZeroPadding');
+  return out;
+}
+
+// MARK: - Base64 (standard padded, or URL-safe unpadded)
+
+const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const BASE64URL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+
+function base64Encode(bytes, url = false) {
+  const alphabet = url ? BASE64URL : BASE64;
+  let out = '';
+  let buffer = 0;
+  let bits = 0;
+  for (const byte of bytes) {
+    buffer = (buffer << 8) | byte;
+    bits += 8;
+    while (bits >= 6) {
+      bits -= 6;
+      out += alphabet[(buffer >> bits) & 63];
+    }
+    buffer &= (1 << bits) - 1;
+  }
+  if (bits > 0) out += alphabet[(buffer << (6 - bits)) & 63];
+  if (!url) while (out.length % 4 !== 0) out += '=';
+  return out;
+}
+
+function base64Decode(text, url = false) {
+  let end = text.length;
+  let padding = 0;
+  while (end > 0 && text.charCodeAt(end - 1) === 0x3d) {
+    end--;
+    padding++;
+  }
+  if (padding > 0 && (padding > 2 || (end + padding) % 4 !== 0)) throw new Base64Error('invalidPadding');
+  const values = new Array(end);
+  for (let i = 0; i < end; i++) {
+    const c = text.charCodeAt(i);
+    if (c >= 0x41 && c <= 0x5a) values[i] = c - 0x41;
+    else if (c >= 0x61 && c <= 0x7a) values[i] = c - 0x61 + 26;
+    else if (c >= 0x30 && c <= 0x39) values[i] = c - 0x30 + 52;
+    else if (c === (url ? 0x2d : 0x2b)) values[i] = 62;
+    else if (c === (url ? 0x5f : 0x2f)) values[i] = 63;
+    else throw new Base64Error('invalidCharacter');
+  }
+  if (end % 4 === 1) throw new Base64Error('invalidLength');
+  const out = new Uint8Array(Math.floor(end * 6 / 8));
+  let n = 0;
+  let buffer = 0;
+  let bits = 0;
+  for (const value of values) {
+    buffer = (buffer << 6) | value;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out[n++] = (buffer >> bits) & 0xff;
+      buffer &= (1 << bits) - 1;
+    }
+  }
+  if (buffer !== 0) throw new Base64Error('nonZeroPadding');
+  return out;
+}
+
+// MARK: - CBOR (RFC 8949 §4.2.1, decode rejects anything else)
+
+/* Values: integers are numbers when safe and BigInt beyond 2^53; bytes are
+   Uint8Array; text, arrays, booleans and null are themselves; maps are Map.
+   Map keys are checked strictly increasing on the wire, which also rules
+   out duplicates. */
+
+const CBOR_MAX_DEPTH = 32;
+const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
+
+function cborDecode(input) {
+  const bytes = input instanceof Uint8Array ? input : Uint8Array.from(input);
+  let offset = 0;
+  const fail = (code, detail) => { throw new CBORError(code, code, detail); };
+  const byte = () => {
+    if (offset >= bytes.length) fail('truncated');
+    return bytes[offset++];
+  };
+  const bigEndian = (n) => {
+    if (bytes.length - offset < n) fail('truncated');
+    let v = 0n;
+    for (let i = 0; i < n; i++) v = (v << 8n) | BigInt(bytes[offset++]);
+    return v;
+  };
+  const argument = (major, info) => {
+    if (info < 24) return info;
+    switch (info) {
+      case 24: { const v = byte(); if (v < 24) fail('notShortestForm'); return v; }
+      case 25: { const v = Number(bigEndian(2)); if (v <= 0xff) fail('notShortestForm'); return v; }
+      case 26: { const v = Number(bigEndian(4)); if (v <= 0xffff) fail('notShortestForm'); return v; }
+      case 27: {
+        const v = bigEndian(8);
+        if (v <= 0xffffffffn) fail('notShortestForm');
+        return v <= MAX_SAFE ? Number(v) : v;
+      }
+      case 31: return fail('indefiniteLength');
+      default: return fail('unsupported', { major, info });
+    }
+  };
+  // A length bounded by what remains, so a hostile head cannot allocate.
+  const length = (major, info) => {
+    const v = argument(major, info);
+    if (typeof v === 'bigint' || v > bytes.length - offset) fail('truncated');
+    return v;
+  };
+  const item = (depth) => {
+    const initial = byte();
+    const major = initial >> 5;
+    const info = initial & 0x1f;
+    switch (major) {
+      case 0:
+        return argument(major, info);
+      case 1: {
+        const v = argument(major, info);
+        return typeof v === 'bigint' || v >= Number.MAX_SAFE_INTEGER ? -1n - BigInt(v) : -1 - v;
+      }
+      case 2: {
+        const n = length(major, info);
+        const out = bytes.slice(offset, offset + n);
+        offset += n;
+        return out;
+      }
+      case 3: {
+        const n = length(major, info);
+        let text;
+        try { text = utf8Strict.decode(bytes.subarray(offset, offset + n)); } catch { fail('invalidUTF8'); }
+        offset += n;
+        return text;
+      }
+      case 4: {
+        if (depth >= CBOR_MAX_DEPTH) fail('tooDeep');
+        const n = length(major, info);
+        const out = new Array(n);
+        for (let i = 0; i < n; i++) out[i] = item(depth + 1);
+        return out;
+      }
+      case 5: {
+        if (depth >= CBOR_MAX_DEPTH) fail('tooDeep');
+        const n = length(major, info);
+        if (n > (bytes.length - offset) / 2) fail('truncated');
+        const map = new Map();
+        let previous = null;
+        for (let i = 0; i < n; i++) {
+          const start = offset;
+          const key = item(depth + 1);
+          const keyBytes = bytes.subarray(start, offset);
+          if (previous !== null && compareBytes(previous, keyBytes) >= 0) fail('mapKeysNotOrdered');
+          previous = keyBytes;
+          map.set(key, item(depth + 1));
+        }
+        return map;
+      }
+      case 7:
+        switch (info) {
+          case 20: return false;
+          case 21: return true;
+          case 22: return null;
+          default: return fail('unsupported', { major, info });
+        }
+      default:
+        return fail('unsupported', { major, info });
+    }
+  };
+  const value = item(0);
+  if (offset !== bytes.length) fail('trailingBytes');
+  return value;
+}
+
+function cborEncode(value) {
+  const out = [];
+  encodeInto(value, out);
+  return Uint8Array.from(out);
+}
+
+function header(major, value, out) {
+  const v = BigInt(value);
+  const m = major << 5;
+  if (v < 0n) throw new RangeError('negative argument');
+  if (v < 24n) out.push(m | Number(v));
+  else if (v <= 0xffn) out.push(m | 24, Number(v));
+  else if (v <= 0xffffn) { out.push(m | 25); bigEndianInto(v, 2, out); }
+  else if (v <= 0xffffffffn) { out.push(m | 26); bigEndianInto(v, 4, out); }
+  else if (v <= 0xffffffffffffffffn) { out.push(m | 27); bigEndianInto(v, 8, out); }
+  else throw new RangeError('integer exceeds 64 bits');
+}
+
+function bigEndianInto(v, n, out) {
+  for (let shift = BigInt((n - 1) * 8); shift >= 0n; shift -= 8n) out.push(Number((v >> shift) & 0xffn));
+}
+
+function encodeInto(value, out) {
+  if (typeof value === 'number') {
+    if (!Number.isSafeInteger(value)) throw new TypeError('not an integer');
+    return value >= 0 ? header(0, value, out) : header(1, -1 - value, out);
+  }
+  if (typeof value === 'bigint') return value >= 0n ? header(0, value, out) : header(1, -1n - value, out);
+  if (typeof value === 'string') {
+    const b = utf8.encode(value);
+    header(3, b.length, out);
+    for (const x of b) out.push(x);
+    return undefined;
+  }
+  if (value instanceof Uint8Array) {
+    header(2, value.length, out);
+    for (const x of value) out.push(x);
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    header(4, value.length, out);
+    for (const x of value) encodeInto(x, out);
+    return undefined;
+  }
+  if (value instanceof Map) {
+    const entries = [...value].map(([k, v]) => [cborEncode(k), v]).sort((a, b) => compareBytes(a[0], b[0]));
+    header(5, entries.length, out);
+    for (const [k, v] of entries) {
+      for (const x of k) out.push(x);
+      encodeInto(v, out);
+    }
+    return undefined;
+  }
+  if (typeof value === 'boolean') return out.push(value ? 0xf5 : 0xf4);
+  if (value === null) return out.push(0xf6);
+  throw new TypeError('not a CBOR value');
+}
+
+/** The JSON shape of spec/vectors: maps become objects keyed by the decimal
+    key, bytes become {hex}. For tests and debugging, never for the wire. */
+function cborToJSON(value) {
+  if (value instanceof Map) {
+    const out = {};
+    for (const [k, v] of value) out[String(k)] = cborToJSON(v);
+    return out;
+  }
+  if (value instanceof Uint8Array) return { hex: hexEncode(value) };
+  if (Array.isArray(value)) return value.map(cborToJSON);
+  if (typeof value === 'bigint') return value.toString();
+  return value;
+}
+
+// MARK: - HB1 wire forms
+
+const HB1_HOST = 'hatband.link';
+const HB1_URL_PREFIX = 'https://hatband.link/#';
+const HB1_FORMAT_TAG = '1';
+/** The characters outside the Base32 alphabet, so a fragment is self-describing. */
+const HB1_POSSIBLE_TAGS = new Set(['0', '1', '8', '9']);
+const HB1_FILE_MAGIC = Uint8Array.of(0x48, 0x42, 0x31, 0x00);
+/** Hard ceiling on any form, in CBOR bytes. */
+const HB1_MAX_BYTES = 32768;
+
+const WHITESPACE_EDGES = /^\p{White_Space}+|\p{White_Space}+$/gu;
+
+/** The CBOR behind a URL (any case in scheme and host), a bare fragment,
+    or a fragment with its leading `#`. */
+function hb1Fragment(text) {
+  let s = String(text).replace(WHITESPACE_EDGES, '');
+  if (s.startsWith('#')) {
+    s = s.slice(1);
+  } else {
+    const hash = s.indexOf('#');
+    if (hash >= 0) {
+      if (s.slice(0, hash).toLowerCase() !== HB1_URL_PREFIX.slice(0, -1)) throw new HB1Error('notHatband');
+      s = s.slice(hash + 1);
+    }
+  }
+  const tag = s.slice(0, 1);
+  if (!HB1_POSSIBLE_TAGS.has(tag)) throw new HB1Error('notHatband');
+  if (tag !== HB1_FORMAT_TAG) throw new HB1Error('unsupportedFormat', 'unsupported format', { tag });
+  try {
+    return base32Decode(s.slice(1));
+  } catch {
+    throw new HB1Error('notHatband');
+  }
+}
+
+function hb1DecodeURL(text) {
+  return hb1DecodeCBOR(hb1Fragment(text));
+}
+
+function hb1DecodeFile(input) {
+  const bytes = input instanceof Uint8Array ? input : Uint8Array.from(input);
+  if (bytes.length < HB1_FILE_MAGIC.length || !bytesEqual(bytes.subarray(0, 4), HB1_FILE_MAGIC)) {
+    throw new HB1Error('badMagic');
+  }
+  return hb1DecodeCBOR(bytes.subarray(4));
+}
+
+/** The card map. Shape checks happen in `cardFromMap`. */
+function hb1DecodeCBOR(bytes) {
+  if (bytes.length > HB1_MAX_BYTES) throw new HB1Error('tooLarge', 'too large', { size: bytes.length });
+  const value = cborDecode(bytes);
+  if (!(value instanceof Map)) throw new CardError('notAMap');
+  return value;
+}
+
+function hb1URL(map) {
+  return HB1_URL_PREFIX + HB1_FORMAT_TAG + base32Encode(cborEncode(map));
+}
+
+// MARK: - Card
+
+const FieldKey = Object.freeze({
+  flags: 0, name: 1, company: 2, phone: 3, email: 4, website: 5, github: 6, linkedin: 7,
+  mastodon: 8, signal: 9, calendly: 10, ssh: 11, gpgFingerprint: 12, custom: 13, publicKey: 14,
+  signature: 15, personaID: 16, issuedDay: 17, color: 18, keyFingerprint: 19, photo: 20,
+  seq: 21, minReader: 22, gpgKey: 23,
+});
+
+const CustomKind = Object.freeze({ text: 0, url: 1, email: 2, phone: 3, key: 4 });
+
+const FLAG_COMPACT = 1n;
+const FLAG_PHOTO = 2n;
+const FLAG_ALIAS = 4n;
+const FLAG_INSECURE_WEBSITE = 8n;
+const UINT8_MAX = 0xff;
+const UINT32_MAX = 0xffffffff;
+const UINT64_MAX = (1n << 64n) - 1n;
+
+function keyName(key) {
+  return Object.keys(FieldKey).find((name) => FieldKey[name] === key) || String(key);
+}
+
+function isUnsigned(v) {
+  return (typeof v === 'number' && Number.isInteger(v) && v >= 0) || (typeof v === 'bigint' && v >= 0n);
+}
+
+/** Reads a card from its map, as Model/Card.swift does: unknown keys are
+    ignored, known keys with the wrong shape are errors. The insecure-website
+    bit moves out of `flags` into `website.insecure`. */
+function cardFromMap(map) {
+  if (!(map instanceof Map)) throw new CardError('notAMap');
+  const K = FieldKey;
+  const fail = (code, key, detail) => { throw new CardError(code, `${code}: ${keyName(key)}`, { key, ...detail }); };
+  const text = (key) => {
+    if (!map.has(key)) return null;
+    const v = map.get(key);
+    if (typeof v !== 'string') fail('wrongType', key);
+    return v;
+  };
+  const bytes = (key, lengths) => {
+    if (!map.has(key)) return null;
+    const v = map.get(key);
+    if (!(v instanceof Uint8Array)) fail('wrongType', key);
+    if (lengths && !lengths.includes(v.length)) fail('wrongLength', key, { expected: lengths, actual: v.length });
+    return v;
+  };
+  const unsigned = (key, max) => {
+    if (!map.has(key)) return null;
+    const v = map.get(key);
+    if (!isUnsigned(v)) fail('wrongType', key);
+    if (v > max) fail('outOfRange', key);
+    return v;
+  };
+
+  const personaID = bytes(K.personaID, [8]);
+  if (!personaID) fail('missing', K.personaID);
+  const issuedDay = unsigned(K.issuedDay, UINT32_MAX);
+  if (issuedDay === null) fail('missing', K.issuedDay);
+
+  const raw = BigInt(unsigned(K.flags, UINT64_MAX) ?? 0);
+  const kept = raw & ~FLAG_INSECURE_WEBSITE;
+  const card = {
+    flags: kept <= MAX_SAFE ? Number(kept) : kept,
+    compact: (raw & FLAG_COMPACT) !== 0n,
+    photoAvailable: (raw & FLAG_PHOTO) !== 0n,
+    alias: (raw & FLAG_ALIAS) !== 0n,
+    name: text(K.name),
+    company: text(K.company),
+    phone: text(K.phone),
+    email: text(K.email),
+    website: null,
+    github: null,
+    linkedin: null,
+    mastodon: null,
+    signal: null,
+    calendly: null,
+    ssh: null,
+    gpgFingerprint: null,
+    custom: [],
+    publicKey: null,
+    signature: null,
+    personaID,
+    issuedDay: Number(issuedDay),
+    color: 0,
+    keyFingerprint: null,
+    photo: null,
+    seq: 0,
+    minReader: null,
+    gpgKey: null,
+  };
+  const website = text(K.website);
+  if (website !== null) card.website = { address: website, insecure: (raw & FLAG_INSECURE_WEBSITE) !== 0n };
+  card.github = text(K.github);
+  card.linkedin = text(K.linkedin);
+  card.mastodon = text(K.mastodon);
+  if (map.has(K.signal)) {
+    const v = map.get(K.signal);
+    if (v instanceof Uint8Array) {
+      if (v.length !== 48) fail('wrongLength', K.signal, { expected: [48], actual: v.length });
+      card.signal = { username: v };
+    } else if (typeof v === 'string') {
+      card.signal = { phone: v };
+    } else {
+      fail('wrongType', K.signal);
+    }
+  }
+  card.calendly = text(K.calendly);
+  const ssh = bytes(K.ssh);
+  if (ssh) {
+    if (ssh.length < 2) fail('wrongLength', K.ssh, { expected: [2], actual: ssh.length });
+    card.ssh = { kind: ssh[0], bytes: ssh.slice(1) };
+  }
+  card.gpgFingerprint = bytes(K.gpgFingerprint, [20, 32]);
+  if (map.has(K.custom)) {
+    const items = map.get(K.custom);
+    if (!Array.isArray(items)) fail('wrongType', K.custom);
+    card.custom = items.map((item) => {
+      if (!Array.isArray(item) || item.length !== 3 || typeof item[0] !== 'string'
+        || typeof item[1] !== 'string' || !isUnsigned(item[2]) || item[2] > CustomKind.key) {
+        fail('badCustomField', K.custom);
+      }
+      return { label: item[0], value: item[1], kind: Number(item[2]) };
+    });
+  }
+  card.publicKey = bytes(K.publicKey, [32]);
+  card.signature = bytes(K.signature, [64]);
+  card.color = Number(unsigned(K.color, UINT8_MAX) ?? 0);
+  card.keyFingerprint = bytes(K.keyFingerprint, [8]);
+  card.photo = bytes(K.photo);
+  card.seq = Number(unsigned(K.seq, UINT32_MAX) ?? 0);
+  const minReader = unsigned(K.minReader, UINT8_MAX);
+  card.minReader = minReader === null ? null : Number(minReader);
+  card.gpgKey = bytes(K.gpgKey);
+  return card;
+}
+
+function isSigned(card) {
+  return card.publicKey !== null && card.signature !== null;
+}
+
+/** JPEG starts with the SOI marker; nothing else is shown as a photo. */
+function isJPEG(bytes) {
+  return bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xd8;
+}
+
+/** Canonical bytes a signature covers: the map without key 15. */
+function signingBytes(map) {
+  const copy = new Map(map);
+  copy.delete(FieldKey.signature);
+  return cborEncode(copy);
+}
+
+// MARK: - Signatures (Ed25519 over `hatband-card-v1` || signing bytes)
+
+const SIGNING_DOMAIN = utf8.encode('hatband-card-v1');
+/** RFC 8032 §7.1 test 1, a public key any conforming implementation imports. */
+const ED25519_PROBE_KEY = hexDecode('d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a');
+
+function defaultSubtle() {
+  return globalThis.crypto && globalThis.crypto.subtle;
+}
+
+async function ed25519Supported(subtle = defaultSubtle()) {
+  if (!subtle) return false;
+  try {
+    await subtle.importKey('raw', ED25519_PROBE_KEY, { name: 'Ed25519' }, false, ['verify']);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** False for anything malformed; never throws, so a hostile card cannot
+    make verification fail differently from a forged one. */
+async function verifySignature(publicKey, signature, bytes, subtle = defaultSubtle()) {
+  if (!subtle || publicKey.length !== 32 || signature.length !== 64) return false;
+  try {
+    const key = await subtle.importKey('raw', publicKey, { name: 'Ed25519' }, false, ['verify']);
+    return await subtle.verify({ name: 'Ed25519' }, key, signature, concatBytes(SIGNING_DOMAIN, bytes));
+  } catch {
+    return false;
+  }
+}
+
+/** `none` (no key or signature), `unsupported` (browser lacks Ed25519),
+    `verified` or `invalid`. */
+async function signatureStatus(card, map, subtle = defaultSubtle()) {
+  if (!isSigned(card)) return 'none';
+  if (!(await ed25519Supported(subtle))) return 'unsupported';
+  return (await verifySignature(card.publicKey, card.signature, signingBytes(map), subtle)) ? 'verified' : 'invalid';
+}
+
+async function sha256(bytes, subtle = defaultSubtle()) {
+  return new Uint8Array(await subtle.digest('SHA-256', bytes));
+}
+
+// MARK: - Canonical URIs (Interop/CanonicalURI.swift)
+
+const MAILTO_SAFE = new Set(utf8.encode("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~!$'()*+,;:@"));
+
+function phoneURI(e164) {
+  return 'tel:' + e164;
+}
+
+/** RFC 6068: bytes outside `unreserved` and `some-delims` are percent-encoded. */
+function emailURI(address) {
+  let out = 'mailto:';
+  for (const byte of utf8.encode(address)) {
+    out += MAILTO_SAFE.has(byte) ? String.fromCharCode(byte) : '%' + hexEncode([byte], true);
+  }
+  return out;
+}
+
+function websiteURI(address, insecure = false) {
+  return (insecure ? 'http://' : 'https://') + address;
+}
+
+function githubURI(user) {
+  return 'https://github.com/' + user;
+}
+
+function linkedinURI(slug) {
+  return slug.startsWith('company/') ? 'https://www.linkedin.com/' + slug : 'https://www.linkedin.com/in/' + slug;
+}
+
+/** The WebFinger account URI and the profile page; null without an `@`. */
+function mastodonURI(handle) {
+  const at = handle.lastIndexOf('@');
+  if (at <= 0 || at === handle.length - 1) return null;
+  return { account: 'acct:' + handle, profile: `https://${handle.slice(at + 1)}/@${handle.slice(0, at)}` };
+}
+
+function calendlyURI(path) {
+  return 'https://calendly.com/' + path;
+}
+
+function gpgFingerprintURI(bytes) {
+  return 'OPENPGP4FPR:' + hexEncode(bytes, true);
+}
+
+/** `{username: bytes}` or `{phone: e164}`, as stored in key 9. */
+function signalURI(signal) {
+  if (signal.username) return 'https://signal.me/#eu/' + base64Encode(signal.username, true);
+  return 'https://signal.me/#p/' + signal.phone;
+}
+
+// MARK: - Fingerprints and keys
+
+/** GnuPG's display form: groups of four, a double space between the halves. */
+function gpgFingerprintFormatted(bytes) {
+  const groups = hexEncode(bytes, true).match(/.{1,4}/g) || [];
+  const half = Math.floor(groups.length / 2);
+  return groups.slice(0, half).join(' ') + '  ' + groups.slice(half).join(' ');
+}
+
+/** Uppercase hex in groups of four, eight groups per line. */
+function keyFingerprintDisplay(bytes) {
+  const groups = hexEncode(bytes, true).match(/.{1,4}/g) || [];
+  const lines = [];
+  for (let i = 0; i < groups.length; i += 8) lines.push(groups.slice(i, i + 8).join(' '));
+  return lines.join('\n');
+}
+
+const SSH_KINDS = Object.freeze({
+  0x01: { typeName: 'ssh-ed25519', inlineLength: 32 },
+  0x02: { typeName: 'ecdsa-sha2-nistp256', curve: 'nistp256', inlineLength: 65 },
+  0x03: { typeName: 'ecdsa-sha2-nistp384', curve: 'nistp384', inlineLength: 97 },
+  0x04: { typeName: 'ecdsa-sha2-nistp521', curve: 'nistp521', inlineLength: 133 },
+  0x10: { typeName: 'ssh-rsa' },
+});
+const SSH_KIND_RSA = 0x10;
+
+function sshString(bytes, out) {
+  const n = bytes.length;
+  out.push((n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff);
+  for (const b of bytes) out.push(b);
+}
+
+/** `<type> <base64>` rebuilt from the material a card carries (RFC 4253
+    §6.6 blob), or null for RSA, unknown kinds and malformed material. The
+    point is checked for shape, not for lying on the curve. */
+function sshAuthorizedKeysLine(kind, bytes) {
+  const info = SSH_KINDS[kind];
+  if (!info || !info.inlineLength || bytes.length !== info.inlineLength) return null;
+  if (info.curve && bytes[0] !== 0x04) return null;
+  const blob = [];
+  sshString(utf8.encode(info.typeName), blob);
+  if (info.curve) sshString(utf8.encode(info.curve), blob);
+  sshString(bytes, blob);
+  return info.typeName + ' ' + base64Encode(blob);
+}
+
+/** `SHA256:` and unpadded base64, as `ssh-keygen -l` prints it. */
+function sshFingerprintText(sha256Bytes) {
+  return 'SHA256:' + base64Encode(sha256Bytes).replace(/=+$/, '');
+}
+
+/** What to show for key 11: the authorized_keys line, the RSA fingerprint, or null. */
+function sshDisplay(ssh) {
+  if (!ssh) return null;
+  if (ssh.kind === SSH_KIND_RSA) return ssh.bytes.length === 32 ? sshFingerprintText(ssh.bytes) : null;
+  return sshAuthorizedKeysLine(ssh.kind, ssh.bytes);
+}
+
+// MARK: - Day (days since 2020-01-01, proleptic Gregorian)
+
+const EPOCH_YEAR = 2020;
+const div = (a, b) => Math.trunc(a / b);
+
+function daysFromCivil(y, m, d) {
+  y = m <= 2 ? y - 1 : y;
+  const era = div(y >= 0 ? y : y - 399, 400);
+  const yoe = y - era * 400;
+  const doy = div(153 * (m > 2 ? m - 3 : m + 9) + 2, 5) + d - 1;
+  const doe = yoe * 365 + div(yoe, 4) - div(yoe, 100) + doy;
+  return era * 146097 + doe - 719468;
+}
+
+function civilFromDays(z) {
+  z += 719468;
+  const era = div(z >= 0 ? z : z - 146096, 146097);
+  const doe = z - era * 146097;
+  const yoe = div(doe - div(doe, 1460) + div(doe, 36524) - div(doe, 146096), 365);
+  const y = yoe + era * 400;
+  const doy = doe - (365 * yoe + div(yoe, 4) - div(yoe, 100));
+  const mp = div(5 * doy + 2, 153);
+  const day = doy - div(153 * mp + 2, 5) + 1;
+  const month = mp < 10 ? mp + 3 : mp - 9;
+  return { year: month <= 2 ? y + 1 : y, month, day };
+}
+
+function dayToCivil(number) {
+  return civilFromDays(number + daysFromCivil(EPOCH_YEAR, 1, 1));
+}
+
+function civilToDay(year, month, day) {
+  return daysFromCivil(year, month, day) - daysFromCivil(EPOCH_YEAR, 1, 1);
+}
+
+function isoDate({ year, month, day }) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${year}-${pad(month)}-${pad(day)}`;
+}
+
+// MARK: - Palette (Model/Palette.swift; the index is on the wire, so the order is frozen)
+
+const PALETTE = Object.freeze([
+  { name: 'ink', light: '#111111', dark: '#e6e6e6' },
+  { name: 'dark blue', light: '#00008b', dark: '#7f7fff' },
+  { name: 'bottle green', light: '#0b3d2e', dark: '#5fae8c' },
+  { name: 'brass', light: '#8a6d00', dark: '#d4b64a' },
+  { name: 'rust', light: '#8a3324', dark: '#d97a63' },
+  { name: 'slate', light: '#4a5560', dark: '#a3adb8' },
+  { name: 'bog', light: '#4b4a2a', dark: '#b8b47a' },
+  { name: 'peat', light: '#4a3728', dark: '#b89078' },
+  { name: 'heather', light: '#5b4b7a', dark: '#b6a3d6' },
+  { name: 'tram cream', light: '#8c7f4d', dark: '#e8dcb5' },
+].map(Object.freeze));
+
+function paletteIndex(index) {
+  return index < PALETTE.length ? index : 0;
+}
+
+function paletteColor(index) {
+  return PALETTE[paletteIndex(index)];
+}
+
+// MARK: - vCard 3.0 (Interop/VCard.swift)
+
+const VCARD_FOLD_WIDTH = 75;
+
+/** RFC 2426 §2.4.2 on code points: backslash, comma and semicolon get a
+    backslash; every line break becomes the two characters `\n`. */
+function vcardEscape(value) {
+  let out = '';
+  const chars = [...value];
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i];
+    switch (ch) {
+      case '\\': out += '\\\\'; break;
+      case ',': out += '\\,'; break;
+      case ';': out += '\\;'; break;
+      case '\r':
+        if (chars[i + 1] === '\n') i++;
+        out += '\\n';
+        break;
+      case '\n': case '\u0085': case '\u2028': case '\u2029': out += '\\n'; break;
+      default: out += ch;
+    }
+  }
+  return out;
+}
+
+function utf8Width(cp) {
+  return cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+}
+
+/** RFC 2425 §5.8.1: continuation lines start with one space, 75 octets a
+    line, never splitting a multi-byte character. */
+function vcardFold(line) {
+  if (utf8Length(line) <= VCARD_FOLD_WIDTH) return line;
+  let out = '';
+  let current = 0;
+  let limit = VCARD_FOLD_WIDTH;
+  for (const ch of line) {
+    const width = utf8Width(ch.codePointAt(0));
+    if (current + width > limit) {
+      out += '\r\n ';
+      current = 0;
+      limit = VCARD_FOLD_WIDTH - 1;
+    }
+    out += ch;
+    current += width;
+  }
+  return out;
+}
+
+function vcardPropertyName(name) {
+  return name.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+}
+
+/** The last word is the family name, a guess Contacts lets the user fix. */
+function vcardNameParts(formattedName) {
+  const words = formattedName.split(/\s+/u).filter((w) => w.length > 0);
+  if (words.length > 1) return { familyName: words[words.length - 1], givenName: words.slice(0, -1).join(' ') };
+  return { familyName: '', givenName: words[0] || '' };
+}
+
+/** Lines end in CRLF and fold at 75 octets. Every value is escaped, so no
+    input can start a line of its own. */
+function vcardText(v) {
+  const lines = ['BEGIN:VCARD', 'VERSION:3.0'];
+  lines.push('N:' + [v.familyName || '', v.givenName || '', '', '', ''].map(vcardEscape).join(';'));
+  lines.push('FN:' + vcardEscape(v.formattedName || ''));
+  if (v.organization != null) lines.push('ORG:' + vcardEscape(v.organization));
+  if (v.phone != null) lines.push('TEL;TYPE=CELL:' + vcardEscape(v.phone));
+  if (v.email != null) lines.push('EMAIL;TYPE=INTERNET:' + vcardEscape(v.email));
+  (v.links || []).forEach((link, i) => {
+    lines.push(`item${i + 1}.URL:` + vcardEscape(link.url));
+    lines.push(`item${i + 1}.X-ABLabel:` + vcardEscape(link.label));
+  });
+  if (v.note != null) lines.push('NOTE:' + vcardEscape(v.note));
+  if (v.photoJPEG) lines.push('PHOTO;ENCODING=b;TYPE=JPEG:' + base64Encode(v.photoJPEG));
+  for (const ext of v.extensions || []) lines.push('X-HATBAND-' + vcardPropertyName(ext.name) + ':' + vcardEscape(ext.value));
+  lines.push('END:VCARD');
+  return lines.map((line) => vcardFold(line) + '\r\n').join('');
+}
+
+/** A card as Contacts should see it: the channels as labelled links where
+    the allow-list accepts the URI, everything else as text in the note. */
+function cardVCard(card) {
+  const name = card.name || '';
+  const v = { formattedName: name, ...vcardNameParts(name), links: [], extensions: [] };
+  if (card.company) v.organization = card.company;
+  if (card.phone) v.phone = card.phone;
+  if (card.email) v.email = card.email;
+  const note = [];
+  const link = (label, url, text) => {
+    if (url && urlVerdict(url).kind !== 'reject') v.links.push({ label, url });
+    else note.push(`${label}: ${text}`);
+  };
+  if (card.website) link('Website', websiteURI(card.website.address, card.website.insecure), card.website.address);
+  if (card.github) link('GitHub', githubURI(card.github), card.github);
+  if (card.linkedin) link('LinkedIn', linkedinURI(card.linkedin), card.linkedin);
+  if (card.mastodon) {
+    const m = mastodonURI(card.mastodon);
+    link('Mastodon', m && m.profile, card.mastodon);
+  }
+  if (card.signal) link('Signal', signalURI(card.signal), card.signal.phone || 'username link');
+  if (card.calendly) link('Calendly', calendlyURI(card.calendly), card.calendly);
+  if (card.gpgFingerprint) link('GPG', gpgFingerprintURI(card.gpgFingerprint), gpgFingerprintFormatted(card.gpgFingerprint));
+  for (const field of card.custom) {
+    if (field.kind === CustomKind.url) link(field.label, field.value, field.value);
+    else note.push(`${field.label}: ${field.value}`);
+  }
+  const ssh = sshDisplay(card.ssh);
+  if (ssh) note.push(ssh);
+  if (note.length) v.note = note.join('\n');
+  if (card.photo && isJPEG(card.photo)) v.photoJPEG = card.photo;
+  v.extensions.push({ name: 'PERSONA', value: hexEncode(card.personaID) });
+  if (card.publicKey) v.extensions.push({ name: 'KEY', value: base64Encode(card.publicKey) });
+  v.extensions.push({ name: 'ISSUED-DAY', value: String(card.issuedDay) });
+  if (card.seq) v.extensions.push({ name: 'SEQ', value: String(card.seq) });
+  return vcardText(v);
+}
+
+// MARK: - Text checks (Validate/TextCheck.swift, Validate/Confusables.swift)
+
+const UNASSIGNED = /^[\p{Cn}\p{Co}\p{Cs}]$/u;
+const WHITESPACE = /^\p{White_Space}$/u;
+
+/** Why a code point is never allowed in card text or a URL, or null. */
+function textProblem(cp) {
+  if (cp <= 0x1f || (cp >= 0x7f && cp <= 0x9f)) return 'control character';
+  if (cp === 0x061c || cp === 0x200e || cp === 0x200f || (cp >= 0x202a && cp <= 0x202e) || (cp >= 0x2066 && cp <= 0x2069)) {
+    return 'bidirectional control character';
+  }
+  if (cp === 0x00ad || cp === 0x034f || cp === 0x180e || (cp >= 0x200b && cp <= 0x200d) || cp === 0x2028 || cp === 0x2029
+    || (cp >= 0x2060 && cp <= 0x2064) || (cp >= 0x206a && cp <= 0x206f) || cp === 0xfeff
+    || (cp >= 0xfff9 && cp <= 0xfffb) || (cp >= 0xe0000 && cp <= 0xe007f)) {
+    return 'invisible character';
+  }
+  if (UNASSIGNED.test(String.fromCodePoint(cp))) return 'unassigned or private-use character';
+  return null;
+}
+
+function textProblemIn(text) {
+  for (const ch of text) {
+    const problem = textProblem(ch.codePointAt(0));
+    if (problem) return problem;
+  }
+  return null;
+}
+
+/* The ASCII a code point is routinely mistaken for: Cyrillic, Greek, a few
+   Latin and Armenian forms, the fullwidth block, dots and slashes. */
+const LOOKALIKES = {
+  0x0430: 'a', 0x0435: 'e', 0x043e: 'o', 0x0440: 'p', 0x0441: 'c', 0x0443: 'y', 0x0445: 'x', 0x0455: 's',
+  0x0456: 'i', 0x0458: 'j', 0x04bb: 'h', 0x04cf: 'l', 0x0501: 'd', 0x051b: 'q', 0x051d: 'w',
+  0x0410: 'A', 0x0412: 'B', 0x0415: 'E', 0x0417: '3', 0x041a: 'K', 0x041c: 'M', 0x041d: 'H', 0x041e: 'O',
+  0x0420: 'P', 0x0421: 'C', 0x0422: 'T', 0x0423: 'Y', 0x0425: 'X', 0x0405: 'S', 0x0406: 'I', 0x0408: 'J',
+  0x04ba: 'H', 0x04c0: 'I', 0x0500: 'D', 0x051a: 'Q', 0x051c: 'W',
+  0x03b1: 'a', 0x03b9: 'i', 0x03ba: 'k', 0x03bd: 'v', 0x03bf: 'o', 0x03c1: 'p', 0x03c4: 't', 0x03c5: 'u',
+  0x03c7: 'x', 0x03c9: 'w', 0x03f2: 'c', 0x03f3: 'j',
+  0x0391: 'A', 0x0392: 'B', 0x0395: 'E', 0x0396: 'Z', 0x0397: 'H', 0x0399: 'I', 0x039a: 'K', 0x039c: 'M',
+  0x039d: 'N', 0x039f: 'O', 0x03a1: 'P', 0x03a4: 'T', 0x03a5: 'Y', 0x03a7: 'X',
+  0x0131: 'i', 0x017f: 's', 0x0237: 'j', 0x0261: 'g', 0x2113: 'l', 0x212a: 'K',
+  0x0570: 'h', 0x0578: 'n', 0x057d: 'u', 0x0585: 'o', 0x054f: 'S', 0x0555: 'O',
+  0x3000: ' ', 0x2024: '.', 0x3002: '.', 0x2044: '/', 0x2215: '/',
+};
+
+function asciiLookalike(cp) {
+  if (cp >= 0xff01 && cp <= 0xff5e) return String.fromCharCode(cp - 0xfee0);
+  return LOOKALIKES[cp] || null;
+}
+
+/** The text with well-known look-alikes replaced by the ASCII they imitate,
+    or null when it has none. */
+function looksLikeASCII(text) {
+  let out = '';
+  let changed = false;
+  for (const ch of text) {
+    const ascii = asciiLookalike(ch.codePointAt(0));
+    if (ascii) changed = true;
+    out += ascii || ch;
+  }
+  return changed ? out : null;
+}
+
+// MARK: - Verdicts and the URL allow-list (Validate/URLPolicy.swift)
+
+const OK = Object.freeze({ kind: 'ok' });
+const warning = (message) => ({ kind: 'warning', message });
+const reject = (message) => ({ kind: 'reject', message });
+const isAccepted = (verdict) => verdict.kind !== 'reject';
+
+/** The more severe of two; two warnings keep both messages. */
+function mergeVerdicts(a, b) {
+  if (a.kind === 'reject') return a;
+  if (b.kind === 'reject') return b;
+  if (a.kind === 'warning' && b.kind === 'warning') return warning(a.message + '; ' + b.message);
+  if (a.kind === 'warning') return a;
+  return b;
+}
+
+const LABEL_BYTE = /^[A-Za-z0-9-]+$/;
+
+/** A host fit for a tappable link: ASCII labels per RFC 1123. Non-ASCII is
+    rejected, naming the ASCII host it resembles; `xn--` labels warn. */
+function domainVerdict(host) {
+  if (host.length === 0) return reject('empty host');
+  if (utf8Length(host) > 253) return reject('host over 253 bytes');
+  const problem = textProblemIn(host);
+  if (problem) return reject(problem);
+  if (/[^\x00-\x7f]/.test(host)) {
+    const skeleton = looksLikeASCII(host);
+    return reject(skeleton ? `non-ASCII host, looks like “${skeleton}”` : 'non-ASCII host');
+  }
+  let punycode = false;
+  for (const label of host.split('.')) {
+    if (label.length === 0 || label.length > 63 || label.startsWith('-') || label.endsWith('-') || !LABEL_BYTE.test(label)) {
+      return reject('invalid host label');
+    }
+    if (label.length > 4 && label.slice(0, 4).toLowerCase() === 'xn--') punycode = true;
+  }
+  return punycode ? warning('punycode host label') : OK;
+}
+
+const URL_MAX_BYTES = 2048;
+const TAPPABLE_SCHEMES = new Set(['https', 'http', 'mailto', 'tel']);
+const SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*$/;
+const TAIL_BYTE = /^[A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]$/;
+const ATEXT_OR_DOT = /^[A-Za-z0-9!#$%&'*+\-=?^_`{|}~.]+$/;
+
+/** RFC 3986 §3.1, lowercased; null when the text does not start with one. */
+function urlScheme(url) {
+  const colon = url.indexOf(':');
+  if (colon <= 0) return null;
+  const head = url.slice(0, colon);
+  return SCHEME.test(head) ? head.toLowerCase() : null;
+}
+
+/** `https` is fine; `http` warns; `mailto`, `tel`, `acct` and `OPENPGP4FPR`
+    must parse as such. Everything else is rejected, including any URL with
+    userinfo, whitespace or a hidden character. */
+function urlVerdict(url) {
+  if (utf8Length(url) > URL_MAX_BYTES) return reject(`over ${URL_MAX_BYTES} bytes`);
+  for (const ch of url) {
+    const cp = ch.codePointAt(0);
+    const problem = textProblem(cp);
+    if (problem) return reject(problem);
+    if (WHITESPACE.test(ch)) return reject('whitespace');
+  }
+  const scheme = urlScheme(url);
+  if (scheme === null) return reject('missing scheme');
+  const rest = url.slice(scheme.length + 1);
+  switch (scheme) {
+    case 'https': return webVerdict(rest);
+    case 'http': return mergeVerdicts(webVerdict(rest), warning('not encrypted'));
+    case 'mailto': return mailtoVerdict(rest);
+    case 'tel': return isE164(rest.replace(/[-.()]/g, '')) ? OK : reject('not an E.164 number');
+    case 'acct': return addressVerdict(rest, 'not an acct address');
+    case 'openpgp4fpr': return /^([0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$/.test(rest) ? OK : reject('not an OpenPGP fingerprint');
+    default: return reject('scheme not allowed: ' + scheme.slice(0, 32));
+  }
+}
+
+/** Accepted and openable by the system: what the page may render as a link. */
+function isTappable(url) {
+  if (!isAccepted(urlVerdict(url))) return false;
+  const scheme = urlScheme(url);
+  return scheme !== null && TAPPABLE_SCHEMES.has(scheme);
+}
+
+function webVerdict(rest) {
+  if (!rest.startsWith('//')) return reject('malformed URL');
+  const after = rest.slice(2);
+  const end = after.search(/[/?#]/);
+  const authority = end < 0 ? after : after.slice(0, end);
+  if (authority.includes('@')) return reject('userinfo in URL');
+  const colon = authority.indexOf(':');
+  const host = colon < 0 ? authority : authority.slice(0, colon);
+  const hostVerdict = domainVerdict(host);
+  if (!isAccepted(hostVerdict)) return hostVerdict;
+  if (colon >= 0) {
+    const port = authority.slice(colon + 1);
+    if (!/^[0-9]{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) return reject('invalid port');
+  }
+  return mergeVerdicts(hostVerdict, tailVerdict(end < 0 ? '' : after.slice(end)));
+}
+
+/** RFC 6068: one address, then optional header fields after `?`. */
+function mailtoVerdict(rest) {
+  const end = rest.indexOf('?');
+  const verdict = addressVerdict(end < 0 ? rest : rest.slice(0, end), 'not an email address');
+  if (!isAccepted(verdict)) return verdict;
+  return mergeVerdicts(verdict, tailVerdict(end < 0 ? '' : rest.slice(end)));
+}
+
+/** `local@host`: an RFC 5322 dot-atom of at most 64 bytes and a host that
+    passes `domainVerdict`. Non-ASCII local parts are rejected. */
+function addressVerdict(text, failure) {
+  const at = text.indexOf('@');
+  if (at < 0 || text.lastIndexOf('@') !== at) return reject(failure);
+  const local = text.slice(0, at);
+  if (/[^\x00-\x7f]/.test(local)) return reject('non-ASCII character');
+  if (local.length < 1 || local.length > 64 || !ATEXT_OR_DOT.test(local)
+    || local.startsWith('.') || local.endsWith('.') || local.includes('..')) {
+    return reject(failure);
+  }
+  return domainVerdict(text.slice(at + 1));
+}
+
+/** RFC 3966 global number: `+` and 2–15 digits, the first non-zero. */
+function isE164(text) {
+  return /^\+[1-9][0-9]{1,14}$/.test(text);
+}
+
+/** Path, query and fragment: RFC 3986 characters, valid percent triplets,
+    and any non-ASCII that passed the scan (an IRI). */
+function tailVerdict(text) {
+  const chars = [...text];
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i];
+    if (ch === '%') {
+      if (i + 2 >= chars.length || !/^[0-9A-Fa-f]$/.test(chars[i + 1]) || !/^[0-9A-Fa-f]$/.test(chars[i + 2])) {
+        return reject('bad percent-encoding');
+      }
+      i += 2;
+      continue;
+    }
+    if (ch.codePointAt(0) < 0x80 && !TAIL_BYTE.test(ch)) return reject('invalid character in URL');
+  }
+  return OK;
+}
+
+/* Renders a card into the DOM. Text enters only as text nodes; attributes
+   come from constants, from URIs the allow-list accepted, or from bytes we
+   encoded ourselves. Every function takes the document, so node:test can
+   drive it with a stub. */
+
+/** Placeholder until the listing exists. */
+const APP_STORE_URL = 'https://apps.apple.com/app/id0000000000';
+const SOURCE_URL = 'https://github.com/davidemerson/hatband';
+
+function el(doc, tag, className, ...children) {
+  const node = doc.createElement(tag);
+  if (className) node.className = className;
+  for (const child of children) {
+    if (child == null) continue;
+    node.appendChild(typeof child === 'string' ? doc.createTextNode(child) : child);
+  }
+  return node;
+}
+
+/** The host a link goes to, shown beside it so a label cannot disguise the
+    destination. Empty for `tel:`. */
+function hostOf(uri) {
+  const web = /^https?:\/\/([^/?#]+)/i.exec(uri);
+  if (web) return web[1].toLowerCase();
+  const mail = /^mailto:([^?]*)/i.exec(uri);
+  if (mail) {
+    const at = mail[1].lastIndexOf('@');
+    return at < 0 ? '' : mail[1].slice(at + 1).toLowerCase();
+  }
+  return '';
+}
+
+/** A link when the allow-list permits, the bare text otherwise. */
+function linkNode(doc, uri, label) {
+  if (!uri || !isTappable(uri)) return doc.createTextNode(label);
+  const fragment = doc.createDocumentFragment();
+  const a = el(doc, 'a', null, label);
+  a.setAttribute('href', uri);
+  a.setAttribute('rel', 'noreferrer noopener');
+  fragment.appendChild(a);
+  const host = hostOf(uri);
+  if (host) fragment.appendChild(el(doc, 'span', 'domain', host));
+  const verdict = urlVerdict(uri);
+  if (verdict.kind === 'warning') fragment.appendChild(el(doc, 'span', 'warn', verdict.message));
+  return fragment;
+}
+
+function channelRows(card) {
+  const rows = [];
+  if (card.phone) rows.push({ label: 'phone', text: card.phone, uri: phoneURI(card.phone) });
+  if (card.email) rows.push({ label: 'email', text: card.email, uri: emailURI(card.email) });
+  if (card.website) {
+    rows.push({ label: 'website', text: card.website.address, uri: websiteURI(card.website.address, card.website.insecure) });
+  }
+  if (card.github) rows.push({ label: 'GitHub', text: card.github, uri: githubURI(card.github) });
+  if (card.linkedin) rows.push({ label: 'LinkedIn', text: card.linkedin, uri: linkedinURI(card.linkedin) });
+  if (card.mastodon) {
+    const m = mastodonURI(card.mastodon);
+    rows.push({ label: 'Mastodon', text: card.mastodon, uri: m ? m.profile : null });
+  }
+  if (card.signal) {
+    rows.push({ label: 'Signal', text: card.signal.phone || 'username link', uri: signalURI(card.signal) });
+  }
+  if (card.calendly) rows.push({ label: 'Calendly', text: card.calendly, uri: calendlyURI(card.calendly) });
+  return rows;
+}
+
+/** Monospace rows with a copy button: GPG and SSH from the card, the
+    Hatband key fingerprint from key 19 or SHA-256 of key 14. */
+function keyRows(card, keyFingerprint) {
+  const rows = [];
+  if (card.gpgFingerprint) rows.push({ label: 'GPG', text: gpgFingerprintFormatted(card.gpgFingerprint) });
+  const ssh = sshDisplay(card.ssh);
+  if (ssh) rows.push({ label: 'SSH', text: ssh });
+  if (keyFingerprint) rows.push({ label: 'Hatband key', text: keyFingerprintDisplay(keyFingerprint) });
+  return rows;
+}
+
+function customRows(card) {
+  return card.custom.map((field) => {
+    const row = { label: field.label, text: field.value, uri: null, mono: false };
+    switch (field.kind) {
+      case CustomKind.url: row.uri = field.value; break;
+      case CustomKind.email: row.uri = emailURI(field.value); break;
+      case CustomKind.phone: row.uri = phoneURI(field.value); break;
+      case CustomKind.key: row.mono = true; break;
+      default: break;
+    }
+    return row;
+  });
+}
+
+function badgeText(card, signature) {
+  switch (signature) {
+    case 'verified': return 'signature verified';
+    case 'invalid': return 'signature invalid';
+    case 'unsupported': return 'unverified (browser lacks Ed25519)';
+    default: return card.compact ? 'unsigned (Lock Screen card)' : 'unsigned';
+  }
+}
+
+/** Controls, bidi overrides and path characters stripped: a name cannot
+    disguise the extension or escape a folder. */
+function vcardFileName(card) {
+  const stem = (card.name || '').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff/\\:*?"<>|]/g, '').trim().slice(0, 60);
+  return (stem || 'card') + '.vcf';
+}
+
+function copyButton(doc, env, text) {
+  const button = el(doc, 'button', 'copy', 'copy');
+  button.setAttribute('type', 'button');
+  button.addEventListener('click', () => {
+    const clipboard = env.navigator && env.navigator.clipboard;
+    if (clipboard) clipboard.writeText(text).catch(() => {});
+  });
+  return button;
+}
+
+function rowList(doc, env, className, rows) {
+  const list = el(doc, 'ul', className);
+  for (const row of rows) {
+    const item = el(doc, 'li', null, el(doc, 'span', 'label', row.label));
+    if (row.mono) {
+      item.appendChild(el(doc, 'code', null, row.text));
+      item.appendChild(copyButton(doc, env, row.text));
+    } else {
+      item.appendChild(linkNode(doc, row.uri, row.text));
+    }
+    list.appendChild(item);
+  }
+  return list;
+}
+
+/** `env`: `{ signature, keyFingerprint, url, navigator, File }`. */
+function renderCard(doc, card, env = {}) {
+  const article = el(doc, 'article', 'card c' + paletteIndex(card.color));
+  article.appendChild(el(doc, 'div', 'band'));
+
+  const header = el(doc, 'header');
+  if (card.photo && isJPEG(card.photo)) {
+    const img = el(doc, 'img', 'photo');
+    img.setAttribute('src', 'data:image/jpeg;base64,' + base64Encode(card.photo));
+    img.setAttribute('alt', '');
+    header.appendChild(img);
+  }
+  const names = el(doc, 'div');
+  const h1 = el(doc, 'h1', 'name', card.name || '');
+  if (card.alias) {
+    const glyph = el(doc, 'span', 'alias', ' ✿');
+    glyph.setAttribute('title', 'alias');
+    h1.appendChild(glyph);
+  }
+  names.appendChild(h1);
+  if (card.company) names.appendChild(el(doc, 'p', 'company', card.company));
+  header.appendChild(names);
+  article.appendChild(header);
+
+  const channels = channelRows(card);
+  if (channels.length) article.appendChild(rowList(doc, env, 'channels', channels));
+  const keys = keyRows(card, env.keyFingerprint || null).map((row) => ({ ...row, mono: true }));
+  if (keys.length) article.appendChild(rowList(doc, env, 'keys', keys));
+  const custom = customRows(card);
+  if (custom.length) article.appendChild(rowList(doc, env, 'custom', custom));
+
+  const status = env.signature || 'none';
+  const badge = el(doc, 'span', 'badge ' + (status === 'verified' ? 'ok' : status === 'invalid' ? 'bad' : 'plain'),
+    badgeText(card, status));
+  const meta = 'issued ' + isoDate(dayToCivil(card.issuedDay)) + (card.seq ? ' · seq ' + card.seq : '');
+  article.appendChild(el(doc, 'p', 'badges', badge, el(doc, 'span', 'meta', meta)));
+
+  const actions = el(doc, 'p', 'actions');
+  const vcf = cardVCard(card);
+  const filename = vcardFileName(card);
+  const add = el(doc, 'a', 'button', 'Add to contacts');
+  add.setAttribute('href', 'data:text/vcard;charset=utf-8,' + encodeURIComponent(vcf));
+  add.setAttribute('download', filename);
+  const nav = env.navigator;
+  if (nav && typeof nav.canShare === 'function' && typeof env.File === 'function') {
+    try {
+      const file = new env.File([vcf], filename, { type: 'text/vcard' });
+      if (nav.canShare({ files: [file] })) {
+        add.addEventListener('click', (event) => {
+          event.preventDefault();
+          nav.share({ files: [file], title: card.name || 'Hatband card' }).catch(() => {});
+        });
+      }
+    } catch {
+      // No share sheet: the download link stands.
+    }
+  }
+  actions.appendChild(add);
+  if (env.url) {
+    const open = el(doc, 'a', 'button', 'Open in Hatband');
+    open.setAttribute('href', env.url);
+    actions.appendChild(open);
+  }
+  const store = el(doc, 'a', null, 'App Store');
+  store.setAttribute('href', APP_STORE_URL);
+  store.setAttribute('rel', 'noreferrer noopener');
+  actions.appendChild(store);
+  article.appendChild(actions);
+  return article;
+}
+
+function renderEmpty(doc) {
+  return el(doc, 'section', 'empty',
+    el(doc, 'h1', null, 'No fixed abode.'),
+    el(doc, 'p', null, 'hatband.link shows a Hatband business card from the link that opened it, decoded in your browser and sent nowhere.'));
+}
+
+/** Fixed sentences only; the fragment is never echoed. */
+function errorMessage(error) {
+  if (error instanceof HB1Error) {
+    switch (error.code) {
+      case 'notHatband': return 'Not a Hatband card.';
+      case 'unsupportedFormat': return 'This card uses a newer format than this page knows. Open it in the app.';
+      case 'tooLarge': return 'This card is too large to be a Hatband card.';
+      default: break;
+    }
+  }
+  return 'This card could not be read.';
+}
+
+function renderError(doc, error) {
+  return el(doc, 'p', 'error', errorMessage(error));
+}
+
+async function main(win) {
+  const doc = win.document;
+  const root = doc.getElementById('app');
+  const hash = win.location.hash || '';
+  if (hash === '' || hash === '#') {
+    root.appendChild(renderEmpty(doc));
+    return;
+  }
+  let map;
+  let card;
+  try {
+    map = hb1DecodeURL(hash);
+    card = cardFromMap(map);
+  } catch (error) {
+    root.appendChild(renderError(doc, error));
+    return;
+  }
+  const subtle = (win.crypto && win.crypto.subtle) || null;
+  const signature = await signatureStatus(card, map, subtle);
+  let keyFingerprint = card.keyFingerprint;
+  if (card.publicKey && subtle) keyFingerprint = await sha256(card.publicKey, subtle);
+  if (card.name) doc.title = card.name + ' · Hatband';
+  root.appendChild(renderCard(doc, card, {
+    signature, keyFingerprint, url: win.location.href, navigator: win.navigator, File: win.File,
+  }));
+}
+
+if (typeof window !== 'undefined' && window.document) {
+  main(window).catch(() => {
+    const root = window.document.getElementById('app');
+    root.textContent = '';
+    root.appendChild(renderError(window.document, null));
+  });
+}
+
+})();
+</script>
+</body>
+</html>
