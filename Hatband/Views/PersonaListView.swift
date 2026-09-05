@@ -2,51 +2,60 @@ import HatbandCore
 import SwiftUI
 
 /// Every persona: which one the card shows, a door to each editor, and
-/// the way to add or delete one. Lives inside whatever stack presents it.
+/// the way to add or delete one. Presented as a sheet, from the Card tab
+/// or Settings; it brings its own `NavigationStack` and pushes the editors.
 @MainActor struct PersonaListView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
     @State private var adding = false
     @State private var newLabel = ""
 
     var body: some View {
-        List {
-            ForEach(model.personas, id: \.id) { persona in
-                NavigationLink {
-                    PersonaEditorView(personaID: persona.id)
-                } label: {
-                    row(persona)
-                }
-                .swipeActions(edge: .leading) {
-                    Button("Use") {
-                        model.select(persona)
+        NavigationStack {
+            List {
+                ForEach(model.personas, id: \.id) { persona in
+                    NavigationLink {
+                        PersonaEditorView(personaID: persona.id)
+                    } label: {
+                        row(persona)
                     }
-                    .tint(Theme.accent)
+                    .swipeActions(edge: .leading) {
+                        Button("Use") {
+                            model.select(persona)
+                        }
+                        .tint(Theme.accent)
+                    }
+                }
+                .onDelete(perform: delete)
+            }
+            .navigationTitle("Personas")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        newLabel = ""
+                        adding = true
+                    } label: {
+                        Label("Add persona", systemImage: "plus")
+                    }
                 }
             }
-            .onDelete(perform: delete)
-        }
-        .navigationTitle("Personas")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    newLabel = ""
-                    adding = true
-                } label: {
-                    Label("Add persona", systemImage: "plus")
+            .alert("New persona", isPresented: $adding) {
+                TextField("Label, such as Work", text: $newLabel)
+                Button("Add persona") {
+                    add(alias: false)
                 }
+                Button("Add alias") {
+                    add(alias: true)
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("A persona shares a subset of your profile under its own key. An alias has a name and details of its own.")
             }
-        }
-        .alert("New persona", isPresented: $adding) {
-            TextField("Label, such as Work", text: $newLabel)
-            Button("Add persona") {
-                add(alias: false)
-            }
-            Button("Add alias") {
-                add(alias: true)
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("A persona shares a subset of your profile under its own key. An alias has a name and details of its own.")
         }
     }
 

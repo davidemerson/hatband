@@ -9,15 +9,18 @@ import SwiftUI
     @Environment(\.scenePhase) private var scenePhase
     /// Read from `Screen.isCaptured` on appear and on every scene change.
     @State private var captured = false
+    /// The signed card, its code and the file share, rebuilt only when
+    /// `renderKey` changes: Ed25519 signatures are randomised, so signing
+    /// on every body evaluation would redraw a different code each time.
+    @State private var shown: Rendered?
 
     var body: some View {
-        let shown = rendered()
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
                     personaMenu
-                    panel(shown)
-                    details(shown)
+                    panel
+                    details
                     Text("Only the person who scans you keeps a record of this meeting.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -37,7 +40,7 @@ import SwiftUI
                     }
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    shareMenu(shown)
+                    shareMenu
                     Button {
                         model.route.sheet = .print
                     } label: {
@@ -66,7 +69,10 @@ import SwiftUI
         .onChange(of: scenePhase) { _, _ in
             captured = Screen.isCaptured
         }
-        .sheet(item: sheet) { which in
+        .onChange(of: renderKey, initial: true) { _, _ in
+            shown = rendered()
+        }
+        .sheet(item: cardSheet) { which in
             presented(which)
         }
     }
@@ -108,7 +114,7 @@ import SwiftUI
 
     /// The white panel: the code, a cover while the screen is captured,
     /// or the reason there is no code.
-    private func panel(_ shown: Rendered) -> some View {
+    private var panel: some View {
         ZStack {
             RoundedRectangle(cornerRadius: Theme.radius)
                 .fill(.white)
@@ -122,49 +128,51 @@ import SwiftUI
                 }
                 .foregroundStyle(.black)
                 .padding()
-            } else if let code = shown.code {
+            } else if let code = shown?.code {
                 QRShape(code: code)
                     .fill(.black)
                     .aspectRatio(1, contentMode: .fit)
                     .padding(12)
                     .accessibilityLabel("Your card as a QR code")
-            } else {
+            } else if let shown {
                 Text(shown.problem ?? "This card is too big for a QR code. Share it as a file.")
                     .font(.footnote)
                     .foregroundStyle(.black)
                     .multilineTextAlignment(.center)
                     .padding()
+            } else {
+                ProgressView()
             }
         }
         .aspectRatio(1, contentMode: .fit)
         .frame(maxWidth: 360)
     }
 
-    private func details(_ shown: Rendered) -> some View {
+    private var details: some View {
         VStack(spacing: 4) {
-            if let name = shown.card?.name {
+            if let name = shown?.card?.name {
                 Text(name)
                     .font(.title3.bold())
             }
-            if let company = shown.card?.company {
+            if let company = shown?.card?.company {
                 Text(company)
                     .foregroundStyle(.secondary)
             }
-            if let budget = shown.budget {
+            if let budget = shown?.budget {
                 ByteMeter(budget: budget, form: .fullQR)
             }
         }
     }
 
-    /// The link form as text, and the `.hatband` file.
-    private func shareMenu(_ shown: Rendered) -> some View {
+    /// The link form as text, and the `.hatband` file, both from the file
+    /// card signed in `rendered()`.
+    private var shareMenu: some View {
         Menu {
-            if let persona = selected, let url = try? model.url(for: persona, form: .file),
-               let bytes = try? model.fileBytes(for: persona) {
+            if let persona = selected, let url = shown?.fileURL, let bytes = shown?.fileBytes {
                 ShareLink(item: url) {
                     Label("Share as link", systemImage: "link")
                 }
-                ShareLink(item: CardFile(bytes: bytes, name: CardView.fileBase(shown.card?.name ?? persona.label) + ".hatband"),
+                ShareLink(item: CardFile(bytes: bytes, name: CardView.fileBase(shown?.card?.name ?? persona.label) + ".hatband"),
                           preview: SharePreview("Hatband card")) {
                     Label("Share as file", systemImage: "doc")
                 }
@@ -185,20 +193,16 @@ import SwiftUI
         case .print:
             PrintSheet()
         case .profile:
-            NavigationStack {
-                ProfileEditorView()
-            }
+            ProfileEditorView()
         case .personas:
-            NavigationStack {
-                PersonaListView()
-            }
+            PersonaListView()
         case .about, .importFile:
             EmptyView()
         }
     }
 
     /// Only the Card tab presents these sheets; dismissing clears the route.
-    private var sheet: Binding<Sheet?> {
+    private var cardSheet: Binding<Sheet?> {
         Binding(
             get: { model.route.tab == .card ? model.route.sheet : nil },
             set: { value in
@@ -210,20 +214,37 @@ import SwiftUI
 
     // MARK: - Rendering
 
-    struct Rendered {
+    nonisolated struct Rendered {
         var card: Card?
         var code: QRCode?
         var budget: Budget?
+        /// The file-form URL and bytes offered by the share menu.
+        var fileURL: String?
+        var fileBytes: [UInt8]?
         var problem: String?
     }
 
-    /// The full-QR card of the selected persona and its code.
+    /// Everything the shown code depends on.
+    nonisolated struct RenderKey: Equatable {
+        var persona: Persona?
+        var profile: Profile
+        var day: UInt32
+    }
+
+    private var renderKey: RenderKey {
+        RenderKey(persona: selected, profile: model.profile, day: model.issuedDay())
+    }
+
+    /// The full-QR card of the selected persona and its code, plus the
+    /// file card behind the share menu.
     private func rendered() -> Rendered {
         guard let persona = selected else { return Rendered(problem: "Add a persona to show a card.") }
         do {
             let card = try model.card(for: persona, form: .fullQR)
             let code = try Budget.qrCode(for: card, form: .fullQR)
-            return Rendered(card: card, code: code, budget: Budget(card: card), problem: nil)
+            let file = try model.card(for: persona, form: .file)
+            return Rendered(card: card, code: code, budget: Budget(card: card),
+                            fileURL: HB1.url(for: file), fileBytes: HB1.fileBytes(for: file), problem: nil)
         } catch {
             return Rendered(problem: AppError(error).message)
         }

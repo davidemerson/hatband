@@ -6,8 +6,9 @@ import UIKit
 
 /// The canonical profile, or an alias persona's own. Every field commits
 /// through `Normalize` and `FieldValidator`: nothing is stored until it
-/// normalises, and warnings stay on screen. Lives inside whatever stack
-/// presents it.
+/// normalises, and warnings stay on screen. The canonical editor is
+/// presented as a sheet and brings its own `NavigationStack`; the alias
+/// editor is pushed from `PersonaEditorView` and has none.
 @MainActor struct ProfileEditorView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -33,6 +34,16 @@ import UIKit
     }
 
     var body: some View {
+        if alias == nil {
+            NavigationStack {
+                editor
+            }
+        } else {
+            editor
+        }
+    }
+
+    private var editor: some View {
         Form {
             identitySection
             channelsSection
@@ -296,14 +307,14 @@ import UIKit
 
 /// The editor's text, and the profile it commits to.
 nonisolated struct ProfileDraft: Equatable {
-    struct CustomDraft: Identifiable, Equatable {
+    nonisolated struct CustomDraft: Identifiable, Equatable {
         let id: UUID
         var label: String
         var value: String
         var kind: CustomKind
     }
 
-    struct Commit {
+    nonisolated struct Commit {
         /// Nil while any field has a problem.
         var profile: Profile?
         var problems: [String: String]

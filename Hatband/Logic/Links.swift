@@ -4,7 +4,7 @@ import HatbandCore
 /// What a card shows, one row per channel, and the vCard a person
 /// becomes. A row offers a url only when `URLPolicy.isTappable`.
 nonisolated enum Links {
-    struct Row: Identifiable, Equatable {
+    nonisolated struct Row: Identifiable, Equatable {
         let id: String
         let label: String
         let text: String

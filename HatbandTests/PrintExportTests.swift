@@ -7,7 +7,7 @@ import UIKit
 
 @MainActor struct PrintExportTests {
     private func code() throws -> QRCode {
-        try #require(Budget.qrCode(for: try Vectors.card("typical-signed"), form: .fullQR))
+        try #require(try Budget.qrCode(for: try Vectors.card("typical-signed"), form: .fullQR))
     }
 
     /// Gray value of the pixel at the centre of module (x, y).
