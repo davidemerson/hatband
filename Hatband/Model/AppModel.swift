@@ -158,7 +158,8 @@ import UIKit
                 }
             }
             dbKey = key
-            people = loaded
+            // Oldest first, so `people(matching:)` can break timestamp ties by position.
+            people = loaded.sorted { ($0.updatedAt, $0.createdAt) < ($1.updatedAt, $1.createdAt) }
             locked = false
             return true
         } catch {

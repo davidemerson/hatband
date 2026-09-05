@@ -112,7 +112,15 @@ extension AppModel {
     /// Most recently updated first; every whitespace-separated term must
     /// appear somewhere in the person's text.
     func people(matching query: String) -> [Person] {
-        let sorted = people.sorted { $0.updatedAt > $1.updatedAt }
+        // Newest first; on equal timestamps (the codec keeps whole seconds)
+        // the later entry in `people` wins, which is save order.
+        let sorted = people.enumerated()
+            .sorted { a, b in
+                a.element.updatedAt != b.element.updatedAt
+                    ? a.element.updatedAt > b.element.updatedAt
+                    : a.offset > b.offset
+            }
+            .map(\.element)
         let terms = query.split(whereSeparator: { $0.isWhitespace }).map { String($0) }
         guard !terms.isEmpty else { return sorted }
         return sorted.filter { person in
