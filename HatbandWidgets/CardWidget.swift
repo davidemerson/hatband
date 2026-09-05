@@ -59,13 +59,14 @@ nonisolated struct CardProvider: TimelineProvider {
                     RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
                         .fill(Color.white)
                         .aspectRatio(1, contentMode: .fit)
-                        .overlay(
+                        .overlay {
                             Image(decorative: image, scale: 1)
                                 .resizable()
                                 .interpolation(.none)
                                 .widgetAccentedRenderingMode(.fullColor)
                                 .aspectRatio(1, contentMode: .fit)
-                                .padding(6))
+                                .padding(6)
+                        }
                     VStack(alignment: .leading, spacing: 6) {
                         Image(systemName: Theme.hat)
                             .font(.title3)

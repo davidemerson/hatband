@@ -51,10 +51,11 @@ nonisolated struct LockScreenCardView: View {
         RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
             .fill(Color.white)
             .frame(width: LockScreenCardView.panelSide, height: LockScreenCardView.panelSide)
-            .overlay(
+            .overlay {
                 QRShape(code: code)
                     .fill(Color.black)
-                    .padding(6))
+                    .padding(6)
+            }
     }
 
     private func message(_ text: String) -> some View {
