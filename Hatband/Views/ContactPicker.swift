@@ -38,8 +38,10 @@ import UIKit
         }
 
         nonisolated func contactPicker(_ picker: CNContactPickerViewController, didSelect contact: CNContact) {
+            // Delivered on the main thread; CNContact is immutable but not Sendable.
+            nonisolated(unsafe) let picked = contact
             MainActor.assumeIsolated {
-                self.onPick(contact)
+                self.onPick(picked)
                 self.onDone()
             }
         }

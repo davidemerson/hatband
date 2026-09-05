@@ -7,7 +7,7 @@ on:
 jobs:
   linux:
     runs-on: ubuntu-24.04
-    container: swift:6.2-noble
+    container: swift:6.3.3-noble
     steps:
       - uses: actions/checkout@v4
       - run: apt-get update -q && apt-get install -y -q zbar-tools
