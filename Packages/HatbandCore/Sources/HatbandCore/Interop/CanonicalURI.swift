@@ -505,7 +505,7 @@ enum Hostname {
         var scalars = input.unicodeScalars
         if scalars.last == "." { scalars = scalars.dropLast() }
         let labels = scalars.split(separator: ".", omittingEmptySubsequences: false)
-        guard labels.count >= 2, let last = labels.last, !unmarked(last).allSatisfy(\.isDigit) else { return nil }
+        guard labels.count >= 2, let last = labels.last, !last.filter({ !$0.isMark }).allSatisfy(\.isDigit) else { return nil }
         var out = ""
         for (i, label) in labels.enumerated() {
             guard let normalizedLabel = normalizedLabel(label) else { return nil }
