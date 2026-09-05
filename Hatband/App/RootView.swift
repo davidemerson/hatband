@@ -69,6 +69,12 @@ import SwiftUI
         } message: {
             Text(model.error?.message ?? "")
         }
+        .onChange(of: model.error) { _, error in
+            // Declining Face ID is a choice the user just made, not news.
+            if error == .cancelled {
+                model.error = nil
+            }
+        }
     }
 
     private var importPresented: Binding<Bool> {
@@ -83,7 +89,7 @@ import SwiftUI
 
     private var errorPresented: Binding<Bool> {
         Binding(
-            get: { model.error != nil },
+            get: { model.error != nil && model.error != .cancelled },
             set: { shown in
                 if !shown {
                     model.error = nil

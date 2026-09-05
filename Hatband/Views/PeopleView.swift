@@ -109,7 +109,7 @@ import SwiftUI
             }
         }
         .padding()
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.radius))
+        .background(Theme.secondary, in: RoundedRectangle(cornerRadius: Theme.radius))
         .padding()
     }
 

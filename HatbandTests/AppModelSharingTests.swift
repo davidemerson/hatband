@@ -23,6 +23,39 @@ import Testing
         return model
     }
 
+    /// The Lock Screen sheet's toggles persist, reach the widget feed at
+    /// once (it carries the name too), and survive a reload.
+    @Test func applyLockScreenPreferencesPersistsAndRefeedsWidget() async throws {
+        let model = try await onboarded()
+        let directory = try #require(model.widgetDirectory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let persona = try #require(model.personas.first)
+        model.settings.homeWidget = true
+        model.refreshWidget()
+        let before = try #require(WidgetFeed.read(from: directory))
+        #expect(before.name == "Leopold Bloom")
+
+        model.settings.showNameOnLockScreen = false
+        model.settings.alwaysOnQR = true
+        model.settings.durationMinutes = 30
+        try await model.applyLockScreenPreferences()
+        let after = try #require(WidgetFeed.read(from: directory))
+        #expect(after.name == nil)
+        #expect(after.url == before.url)
+
+        let store = try #require(model.store)
+        let reloaded = AppModel(keys: model.keys, makeStore: { store })
+        reloaded.protectedDataAvailable = { true }
+        reloaded.widgetDirectory = directory
+        await reloaded.load()
+        #expect(reloaded.settings.showNameOnLockScreen == false)
+        #expect(reloaded.settings.alwaysOnQR)
+        #expect(reloaded.settings.durationMinutes == 30)
+        let content = try reloaded.sharingContent(for: persona, minutes: 30, now: Date())
+        #expect(content.state.name == nil)
+        #expect(content.state.alwaysOn)
+    }
+
     @Test func sharingContentBuildsCompactState() async throws {
         let model = try await onboarded()
         let persona = try #require(model.personas.first)

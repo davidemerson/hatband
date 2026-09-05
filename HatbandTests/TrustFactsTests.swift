@@ -23,6 +23,13 @@ struct TrustFactsTests {
         #expect(TrustFacts.egress.allSatisfy { $0.when.contains("tap") })
     }
 
+    /// Where has no hand-off button: opening the tab is what fetches
+    /// Apple's tiles, and the row says exactly that.
+    @Test func mapsRowDescribesTheTileLoad() {
+        #expect(TrustFacts.maps.host == "Apple Maps")
+        #expect(TrustFacts.maps.when.contains("Where tab"))
+    }
+
     /// Where opens a map, which loads Apple's tiles; there is no hand-off
     /// to the Maps app, so the row must not describe one.
     @Test func mapsDescribesTileLoadingOnWhere() {

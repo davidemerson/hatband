@@ -67,7 +67,7 @@ import VisionKit
             case true?:
                 if DataScannerViewController.isSupported, DataScannerViewController.isAvailable {
                     ScannerView(onScan: { recognised($0, source: .scan) },
-                                onUnavailable: { problem = AppError($0).message })
+                                onUnavailable: { problem = ScanView.unavailableText($0) })
                         .ignoresSafeArea(edges: .bottom)
                 } else {
                     Image(systemName: "photo.on.rectangle")
@@ -140,7 +140,24 @@ import VisionKit
             }
             recognised(payload, source: .photo)
         } catch {
-            problem = AppError(error).message
+            problem = "That photo could not be read."
         }
+    }
+
+    /// What the sheet says when the data scanner cannot run. The photo
+    /// path is always open, so every line ends by pointing at it.
+    nonisolated static func unavailableText(_ error: any Error) -> String {
+        let photo = " Pick a photo of the code instead."
+        if let reason = error as? DataScannerViewController.ScanningUnavailable {
+            switch reason {
+            case .cameraRestricted:
+                return "The camera is restricted on this iPhone." + photo
+            case .unsupported:
+                return "The camera scanner is not available here." + photo
+            @unknown default:
+                break
+            }
+        }
+        return "The camera could not start." + photo
     }
 }

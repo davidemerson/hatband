@@ -19,6 +19,7 @@ import UniformTypeIdentifiers
     @State private var email = ""
     @State private var problem: String?
     @State private var appLock = false
+    @State private var lockAvailable = false
     @State private var pickingContact = false
     @State private var importing = false
 
@@ -59,8 +60,11 @@ import UniformTypeIdentifiers
                 }
                 Section {
                     Toggle("Lock scanned people behind Face ID or passcode", isOn: $appLock)
+                        .disabled(!lockAvailable)
                 } footer: {
-                    Text("Showing your own card never asks.")
+                    Text(lockAvailable
+                         ? "Showing your own card never asks."
+                         : "Set a passcode on this iPhone first. Showing your own card never asks.")
                 }
                 Section {
                     Button("Continue") {
@@ -76,7 +80,8 @@ import UniformTypeIdentifiers
             .navigationTitle("Hatband")
         }
         .onAppear {
-            appLock = model.canUseAppLock()
+            lockAvailable = model.canUseAppLock()
+            appLock = lockAvailable
         }
         .sheet(isPresented: $pickingContact) {
             ContactPicker { contact in

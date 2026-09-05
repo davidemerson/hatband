@@ -52,6 +52,7 @@ import SwiftUI
                             ShareLink(item: url) {
                                 Image(systemName: "square.and.arrow.up")
                             }
+                            .accessibilityLabel("Share \(url.lastPathComponent)")
                         }
                     }
                     .onDelete { offsets in
@@ -120,7 +121,7 @@ import SwiftUI
                 }
             }
             Section("Never") {
-                Text("No analytics, no crash reporting service, no push notifications, no iCloud. A card travels inside a QR code or a file; when someone without the app scans you, their browser reads the card from the link's fragment, which browsers never send to hatband.link.")
+                Text("No analytics, no crash reporting service, no push notifications, no iCloud sync. A card travels inside a QR code or a file; when someone without the app scans you, their browser reads the card from the link's fragment, which browsers never send to hatband.link.")
                     .foregroundStyle(.secondary)
             }
         }

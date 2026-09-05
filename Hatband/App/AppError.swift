@@ -43,7 +43,8 @@ nonisolated enum AppError: Error, Equatable {
             case .unsupportedVersion(let version): self = .storage("Stored data version \(version) is newer than this app")
             }
         } else {
-            self = .storage(String(describing: error))
+            // The platform's own sentence, never a type dump.
+            self = .storage(error.localizedDescription)
         }
     }
 
@@ -57,6 +58,7 @@ nonisolated enum AppError: Error, Equatable {
         case .wrongPassphrase: return "Wrong passphrase, or the file was changed."
         case .cancelled: return "Cancelled."
         case .keychain(let status): return "Keychain error \(status)."
+        case .storage("last persona"): return "Keep at least one persona."
         case .storage(let detail): return detail
         case .activitiesDisabled: return "Live Activities are off for Hatband in Settings."
         case .tooBigForLockScreen: return "The name alone does not fit the Lock Screen card."

@@ -131,10 +131,12 @@ import SwiftUI
     }
 
     private func persist() {
-        do {
-            try model.saveOwner()
-        } catch {
-            model.error = AppError(error)
+        Task {
+            do {
+                try await model.applyLockScreenPreferences()
+            } catch {
+                model.error = AppError(error)
+            }
         }
     }
 

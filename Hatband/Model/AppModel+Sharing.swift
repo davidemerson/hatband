@@ -78,6 +78,17 @@ extension AppModel {
         }
     }
 
+    /// Persists the Lock Screen preferences (name, Always-On, duration) and
+    /// pushes them into the running activity and the widget feed, both of
+    /// which carry the name.
+    func applyLockScreenPreferences() async throws {
+        try saveOwner()
+        refreshWidget()
+        if let sharing, let persona = personas.first(where: { $0.id == sharing.personaID }) {
+            await updateActivity(for: persona)
+        }
+    }
+
     /// Writes the feed for the selected persona when the widget is on,
     /// removes it otherwise, then asks WidgetKit to reload.
     func refreshWidget() {

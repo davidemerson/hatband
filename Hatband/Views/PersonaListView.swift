@@ -25,6 +25,7 @@ import SwiftUI
                         }
                         .tint(Theme.accent)
                     }
+                    .deleteDisabled(model.personas.count < 2)
                 }
                 .onDelete(perform: delete)
             }
