@@ -14,6 +14,14 @@ import SwiftUI
             case .protectedDataUnavailable:
                 Text("Unlock your iPhone to open Hatband.")
                     .padding()
+            case .storeUnavailable:
+                VStack(spacing: 12) {
+                    Text("Hatband cannot open its storage.")
+                    Button("Try again") {
+                        Task { await model.load() }
+                    }
+                }
+                .padding()
             case .onboarding:
                 OnboardingView()
             case .ready:

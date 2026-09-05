@@ -9,7 +9,7 @@ import UIKit
 /// people and backup are extensions in their own files.
 @MainActor @Observable final class AppModel {
     nonisolated enum Phase: Equatable {
-        case loading, protectedDataUnavailable, onboarding, ready
+        case loading, protectedDataUnavailable, storeUnavailable, onboarding, ready
     }
 
     nonisolated struct Sharing: Equatable {
@@ -128,8 +128,11 @@ import UIKit
             }
             try store.setExcludedFromBackup(!settings.includeInBackup)
         } catch {
+            // The store could not open; RootView offers a retry.
+            phase = .storeUnavailable
             self.error = AppError(error)
             Log.failure("load", error)
+            return
         }
         if phase == .ready, !settings.appLock {
             _ = await unlock()

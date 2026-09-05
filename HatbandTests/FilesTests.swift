@@ -37,3 +37,16 @@ struct FilesTests {
         #expect(SVGFile(bytes: [], name: "f.svg").name == "f.svg")
     }
 }
+
+@Test func sweepRemovesEarlierTransfers() throws {
+    let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("sweep-" + UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: temporary) }
+    let stale = temporary.appendingPathComponent(TransferredFiles.prefix + "old", isDirectory: true)
+    let other = temporary.appendingPathComponent("keep", isDirectory: true)
+    try FileManager.default.createDirectory(at: stale, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+    TransferredFiles.sweep(in: temporary)
+    #expect(!FileManager.default.fileExists(atPath: stale.path))
+    #expect(FileManager.default.fileExists(atPath: other.path))
+}

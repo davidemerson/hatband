@@ -10,9 +10,22 @@ nonisolated extension UTType {
 /// Writes bytes for a share under complete protection in a fresh
 /// temporary directory. Every `FileRepresentation` below goes through it.
 nonisolated enum TransferredFiles {
+    static let prefix = "Transfer-"
+
+    /// Removes the directories earlier shares left behind, so plaintext
+    /// card bytes never outlive the share sheet by more than one share.
+    static func sweep(in temporary: URL = FileManager.default.temporaryDirectory) {
+        let manager = FileManager.default
+        guard let names = try? manager.contentsOfDirectory(atPath: temporary.path) else { return }
+        for name in names where name.hasPrefix(prefix) {
+            try? manager.removeItem(at: temporary.appendingPathComponent(name))
+        }
+    }
+
     static func write(_ bytes: [UInt8], name: String) throws -> URL {
+        sweep()
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Transfer-" + UUID().uuidString, isDirectory: true)
+            .appendingPathComponent(prefix + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true,
             attributes: [.protectionKey: FileProtectionType.complete])
