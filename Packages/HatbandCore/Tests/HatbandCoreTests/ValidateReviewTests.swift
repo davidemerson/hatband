@@ -165,10 +165,12 @@ func percentEncodedAddressIsJudgedDecoded(url: String, verdict: Verdict) {
 
 /// A variation selector is allowed only after a base it has a standardized
 /// sequence with: U+FE0E and U+FE0F after an emoji (the keycap bases too),
-/// the rest of U+FE00–FE0F after an ideograph, a Mongolian or Phags-pa
-/// letter or a mathematical operator, and the IVD's U+E0100–E01EF after an
-/// ideograph. Anywhere else, a Latin letter above all, it is a hidden byte
-/// with 256 values, three or four bytes of the cap each.
+/// the rest of U+FE00–FE0F after an ideograph, a Phags-pa letter or a
+/// mathematical operator, and the IVD's U+E0100–E01EF after an ideograph.
+/// Anywhere else, a Latin letter above all, it is a hidden byte with 256
+/// values, three or four bytes of the cap each. A Mongolian letter is no
+/// base for one: StandardizedVariants.txt lists none, Mongolian having
+/// selectors of its own (pinned in the second review).
 @Test(arguments: [
     ("\u{263A}\u{FE0E}", Verdict.ok),                                            // ☺︎ text style
     ("\u{263A}\u{FE0F}", .ok),                                                   // ☺️ emoji style
@@ -178,8 +180,8 @@ func percentEncodedAddressIsJudgedDecoded(url: String, verdict: Verdict) {
     ("\u{908A}\u{E0100}", .ok),                                                  // 邊󠄀, an IVD sequence
     ("\u{908A}\u{FE00}", .ok),
     ("\u{2205}\u{FE00}", .ok),                                                   // ∅︀, a standardized variant
-    ("\u{1820}\u{FE00}", .ok),
     ("\u{A856}\u{FE00}", .ok),
+    ("\u{1820}\u{FE00}", .reject("invisible character")),                     // Mongolian uses FVS1–4 instead
     ("J\u{E0100}o\u{E0148}h\u{E01EF}n\u{FE03}", .reject("invisible character")),
     ("a\u{FE0F}", .reject("invisible character")),
     ("a\u{FE00}", .reject("invisible character")),

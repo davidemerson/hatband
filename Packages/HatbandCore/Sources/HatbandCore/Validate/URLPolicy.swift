@@ -35,7 +35,7 @@ public enum URLPolicy {
         case "tel": return isE164(rest.filter { !visualSeparators.contains($0) }) ? .ok : .reject("not an E.164 number")
         case "acct": return encodedAddress(rest, or: "not an acct address")
         case "openpgp4fpr": return isFingerprint(rest) ? .ok : .reject("not an OpenPGP fingerprint")
-        default: return .reject("scheme not allowed: \(scheme.prefix(32))")
+        default: return .reject("scheme not allowed: \(String(decoding: scheme.utf8.prefix(32), as: UTF8.self))")
         }
     }
 
@@ -51,9 +51,9 @@ public enum URLPolicy {
     /// whatever follows, so `tel:555` is a bad number, not a missing scheme.
     static func scheme(of bytes: [UInt8]) -> String? {
         guard let colon = bytes.firstIndex(of: UInt8(ascii: ":")), colon > 0,
-              isASCIILetter(bytes[0]), bytes[..<colon].allSatisfy(isSchemeByte)
+              isASCIILetter(bytes[0]), bytes[..<colon].allSatisfy(isSchemeByte),
+              let name = asciiLowercased(bytes[..<colon])
         else { return nil }
-        let name = String(decoding: bytes[..<colon], as: UTF8.self).lowercased()
         let port = bytes[(colon + 1)...].prefix { !"/?#".utf8.contains($0) }
         guard knownSchemes.contains(name) || !((1...5).contains(port.count) && port.allSatisfy(isDigit)) else { return nil }
         return name
@@ -81,7 +81,7 @@ public enum URLPolicy {
     }
 
     /// RFC 6068: one address, then header fields after `?`, each named in
-    /// `mailtoHeaders` (any case, percent-encoded or not).
+    /// `mailtoHeaders` (any ASCII case, percent-encoded or not).
     private static func mailto(_ rest: ArraySlice<UInt8>) -> Verdict {
         let end = rest.firstIndex(of: UInt8(ascii: "?")) ?? rest.endIndex
         let verdict = encodedAddress(rest[..<end], or: "not an email address")
@@ -90,7 +90,7 @@ public enum URLPolicy {
         guard tailVerdict.isAccepted else { return tailVerdict }
         for field in rest[end...].dropFirst().split(separator: UInt8(ascii: "&")) {
             guard let name = percentDecoded(field.prefix { $0 != UInt8(ascii: "=") }),
-                  mailtoHeaders.contains(String(decoding: name, as: UTF8.self).lowercased())
+                  let lowered = asciiLowercased(name), mailtoHeaders.contains(lowered)
             else { return .reject("mailto header not allowed") }
         }
         return verdict.merged(with: tailVerdict)
@@ -193,6 +193,18 @@ public enum URLPolicy {
 
     private static func isASCIILetter(_ b: UInt8) -> Bool {
         (UInt8(ascii: "a")...UInt8(ascii: "z")).contains(b) || (UInt8(ascii: "A")...UInt8(ascii: "Z")).contains(b)
+    }
+
+    /// The bytes as text with `A-Z` lowered, or nil when one is not ASCII:
+    /// what a lookup among ASCII names needs. `String.lowercased()` folds
+    /// a Kelvin sign to `k`, and `==` treats it as `K` outright.
+    private static func asciiLowercased(_ bytes: some Sequence<UInt8>) -> String? {
+        var out: [UInt8] = []
+        for b in bytes {
+            guard b < 0x80 else { return nil }
+            out.append((UInt8(ascii: "A")...UInt8(ascii: "Z")).contains(b) ? b | 0x20 : b)
+        }
+        return String(decoding: out, as: UTF8.self)
     }
 
     private static func isDigit(_ b: UInt8) -> Bool {

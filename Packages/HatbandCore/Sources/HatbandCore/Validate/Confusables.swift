@@ -45,22 +45,23 @@ public enum Confusables {
     /// (1–63 of `a-z`, `0-9`, `-`, hyphen not at either end), at most 253
     /// bytes in all, any letter case (the canonical form is lowercase).
     /// Non-ASCII hosts are rejected outright; when a label is a homograph
-    /// (see `homographSkeleton`) the message names the ASCII host it
-    /// resembles, so the user reads "looks like github.com", never punycode.
+    /// (see `homographProblem`) the message names the ASCII it resembles,
+    /// so the user reads "looks like github.com", never punycode.
     /// An IP address is rejected in every spelling: RFC 3696 §2 (a top-level
     /// label is never all digits) plus the WHATWG URL "ends in a number"
     /// rule catch `127.0.0.1`, `2130706433`, `0x7f000001` and `0177.0.0.1`
-    /// alike. An `xn--` label is decoded (RFC 3492) and judged as the text
-    /// it spells: a homograph is refused the way the raw form is, a label
-    /// mixing scripts too; an honest IDN is accepted with a warning, since a
-    /// browser may render it as something else.
+    /// alike. An `xn--` label is decoded (RFC 3492) and judged on its own
+    /// as the text it spells: a homograph is refused the way the raw form
+    /// is, and so is a label that starts with a mark, holds a look-alike
+    /// of `.` or `/`, or mixes scripts (`decodedLabelProblem`); an honest
+    /// IDN is accepted with a warning, since a browser may render it as
+    /// something else.
     public static func domainVerdict(_ host: String) -> Verdict {
         guard !host.isEmpty else { return .reject("empty host") }
         guard host.utf8.count <= 253 else { return .reject("host over 253 bytes") }
         if let problem = TextCheck.problem(in: host) { return .reject(problem) }
         guard host.utf8.allSatisfy({ $0 < 0x80 }) else {
-            if let skeleton = homographSkeleton(host) { return .reject("non-ASCII host, looks like “\(skeleton)”") }
-            return .reject("non-ASCII host")
+            return .reject(homographProblem(labels(of: host)) ?? "non-ASCII host")
         }
         let labels = host.utf8.split(separator: UInt8(ascii: "."), omittingEmptySubsequences: false)
         for label in labels {
@@ -72,6 +73,7 @@ public enum Confusables {
         if let last = labels.last, isNumber(last) { return .reject("IP address") }
         guard labels.contains(where: isPunycode) else { return .ok }
         var spelled: [String] = []
+        var decoded: [String] = []
         for label in labels {
             guard isPunycode(label) else {
                 spelled.append(String(decoding: label, as: UTF8.self))
@@ -81,28 +83,108 @@ public enum Confusables {
                   !text.unicodeScalars.contains(where: { $0.properties.isWhitespace })
             else { return .reject("invalid punycode label") }
             spelled.append(text)
+            decoded.append(text)
         }
-        let unicode = spelled.joined(separator: ".")
-        if let problem = TextCheck.problem(in: unicode) { return .reject(problem) }
-        if let skeleton = homographSkeleton(unicode) { return .reject("non-ASCII host, looks like “\(skeleton)”") }
-        if mixedScripts(in: unicode) { return .reject("mixed scripts in punycode label") }
+        for text in decoded {
+            if let problem = TextCheck.problem(in: text) { return .reject(problem) }
+        }
+        if let problem = homographProblem(spelled) { return .reject(problem) }
+        for text in decoded {
+            if let problem = decodedLabelProblem(text) { return .reject(problem) }
+        }
         return .warning("punycode host label")
     }
 
+    /// The labels of a host, split on U+002E at the scalar level. A mark at
+    /// the start of a label fuses with the dot before it into one
+    /// `Character`, so a `String.split` would miss that dot and judge the
+    /// two labels as one.
+    private static func labels(of host: String) -> [String] {
+        host.unicodeScalars.split(separator: ".", omittingEmptySubsequences: false).map { String($0) }
+    }
+
     /// The host with each homograph label replaced by the ASCII it
-    /// imitates, or nil when no label is one. A label is a homograph when
-    /// every scalar in it is ASCII or has an ASCII twin (`аpple`, `gіthub`,
-    /// `ｇｉｔｈｕｂ`); one that keeps a letter no ASCII host has (`москва`,
-    /// `ελλάδα`, `münchen`) resembles no ASCII host and is left as it is
-    /// (UTS #39 §4, whole-script confusables).
+    /// imitates (`homographLabel`), or nil when no label is one.
     static func homographSkeleton(_ host: String) -> String? {
-        var found = false
-        let labels = host.split(separator: ".", omittingEmptySubsequences: false).map { label -> String in
-            guard let skeleton = looksLikeASCII(String(label)), skeleton.utf8.allSatisfy({ $0 < 0x80 }) else { return String(label) }
-            found = true
-            return skeleton
+        let labels = labels(of: host)
+        guard labels.contains(where: { homographLabel($0) != nil }) else { return nil }
+        return labels.map { homographLabel($0) ?? $0 }.joined(separator: ".")
+    }
+
+    /// Why a host with a homograph label is refused, or nil when no label
+    /// is one. What the message says the host looks like is always ASCII:
+    /// the whole host when its other labels are ASCII (`аpple.evil.com`
+    /// looks like `apple.evil.com`), else the offending label alone
+    /// (`аpple.москва`: label `аpple` looks like `apple`), so an honest
+    /// label is never named as something it is not.
+    static func homographProblem(_ labels: [String]) -> String? {
+        var skeletons: [String] = []
+        var offender: (label: String, ascii: String)?
+        for label in labels {
+            guard let ascii = homographLabel(label) else {
+                skeletons.append(label)
+                continue
+            }
+            skeletons.append(ascii)
+            if offender == nil { offender = (label, ascii) }
         }
-        return found ? labels.joined(separator: ".") : nil
+        guard let offender else { return nil }
+        let skeleton = skeletons.joined(separator: ".")
+        guard skeleton.utf8.allSatisfy({ $0 < 0x80 }) else {
+            return "label “\(offender.label)” looks like “\(offender.ascii)”"
+        }
+        return "non-ASCII host, looks like “\(skeleton)”"
+    }
+
+    /// The ASCII a label imitates when every scalar in it is ASCII or has
+    /// an ASCII twin, at least one a twin (`аpple`, `gіthub`, `ｇｉｔｈｕｂ`,
+    /// `аррӏе́`). A mark (Mn, Mc, Me) belongs to the scalar before it and
+    /// is dropped: `applé` is `apple` to the eye. Nil for an honest label,
+    /// one keeping a letter no ASCII host has (`москва`, `ελλάδα`,
+    /// `münchen`; UTS #39 §4, whole-script confusables), and for one with
+    /// nothing before a mark.
+    static func homographLabel(_ label: String) -> String? {
+        var skeleton = String.UnicodeScalarView()
+        var twins = false
+        for scalar in label.unicodeScalars {
+            if scalar.isASCII {
+                skeleton.append(scalar)
+            } else if let twin = asciiLookalike(scalar) {
+                skeleton.append(twin)
+                twins = true
+            } else if isMark(scalar), !skeleton.isEmpty {
+                continue
+            } else {
+                return nil
+            }
+        }
+        return twins ? String(skeleton) : nil
+    }
+
+    /// Why a decoded label is refused when no label is a homograph: it
+    /// starts with a mark (RFC 5891 §4.2.3.2 forbids one; drawn, the mark
+    /// lands on the dot before it), it holds a scalar that passes for `.`
+    /// or `/` (UTS #46 maps U+3002, U+FF0E and U+FF61 to a dot, so no
+    /// honest A-label spells one), or it mixes scripts.
+    private static func decodedLabelProblem(_ text: String) -> String? {
+        if text.unicodeScalars.first.map(isMark) == true { return "hidden character in punycode label" }
+        if text.unicodeScalars.contains(where: isSeparatorLookalike) { return "look-alike dot or slash in punycode label" }
+        if mixedScripts(in: text) { return "mixed scripts in punycode label" }
+        return nil
+    }
+
+    /// Passes for `.` or `/` (`asciiLookalike`).
+    private static func isSeparatorLookalike(_ scalar: Unicode.Scalar) -> Bool {
+        guard let ascii = asciiLookalike(scalar) else { return false }
+        return ascii == "." || ascii == "/"
+    }
+
+    /// Mn, Mc or Me: drawn on the scalar before it.
+    static func isMark(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.properties.generalCategory {
+        case .nonspacingMark, .spacingMark, .enclosingMark: return true
+        default: return false
+        }
     }
 
     /// `xn--` and something after it, in any case.
@@ -240,8 +322,9 @@ public enum Confusables {
         // Fullwidth ASCII and ideographic space
         case 0xFF01...0xFF5E: ascii = UInt8(scalar.value - 0xFEE0)
         case 0x3000: ascii = UInt8(ascii: " ")
-        // One dot leader, ideographic full stop; division and fraction slashes
-        case 0x2024, 0x3002: ascii = UInt8(ascii: ".")
+        // One dot leader, ideographic and halfwidth ideographic full stops;
+        // division and fraction slashes
+        case 0x2024, 0x3002, 0xFF61: ascii = UInt8(ascii: ".")
         case 0x2044, 0x2215: ascii = UInt8(ascii: "/")
         // Hyphen through horizontal bar, minus sign, small hyphen-minus
         case 0x2010...0x2015, 0x2212, 0xFE63: ascii = UInt8(ascii: "-")

@@ -126,7 +126,7 @@ func noSkeletonWithoutLookalikes(s: String) {
         #expect(ascii.isASCII)
         #expect(Confusables.asciiLookalike(ascii) == nil)
     }
-    #expect(count == 94 + 1 + 4 + 8 + 74, "fullwidth block, ideographic space, dots and slashes, dashes, letters")
+    #expect(count == 94 + 1 + 5 + 8 + 74, "fullwidth block, ideographic space, dots and slashes, dashes, letters")
 }
 
 // MARK: - Hosts

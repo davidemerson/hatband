@@ -50,14 +50,17 @@ public enum FieldValidator {
     }
 
     /// A pasted `signal.me` link: `#p/+E.164` (discloses the number) or
-    /// `#eu/<username token>`.
+    /// `#eu/<username token>`. The prefix is matched byte by byte in any
+    /// ASCII letter case; the fragment keeps its case.
     public static func signalURL(_ s: String, limits: Limits) -> Verdict {
         if let failure = asciiPrelude(s, maxBytes: limits.signalURL) { return failure }
         let verdict = URLPolicy.verdict(for: s)
         guard verdict.isAccepted else { return verdict }
-        let lower = s.lowercased()
-        guard lower.hasPrefix("https://signal.me/#") else { return .reject("not a signal.me link") }
-        let fragment = Array(s.utf8.dropFirst("https://signal.me/#".utf8.count))
+        let head = "https://signal.me/#".utf8
+        let bytes = Array(s.utf8)
+        guard bytes.prefix(head.count).elementsEqual(head, by: { asciiLowercased($0) == $1 })
+        else { return .reject("not a signal.me link") }
+        let fragment = bytes[head.count...]
         if fragment.starts(with: "p/".utf8), URLPolicy.isE164(fragment.dropFirst(2)) { return verdict }
         if fragment.starts(with: "eu/".utf8), fragment.count > 3, fragment.dropFirst(3).allSatisfy(isBase64URLByte) { return verdict }
         return .reject("not a signal.me link")
@@ -187,6 +190,10 @@ public enum FieldValidator {
 
     private static func isDigit(_ b: UInt8) -> Bool {
         (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(b)
+    }
+
+    private static func asciiLowercased(_ b: UInt8) -> UInt8 {
+        (UInt8(ascii: "A")...UInt8(ascii: "Z")).contains(b) ? b | 0x20 : b
     }
 
     private static func isBase64URLByte(_ b: UInt8) -> Bool {

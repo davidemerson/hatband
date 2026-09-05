@@ -31,7 +31,7 @@ public enum TextCheck {
     }
 
     /// Why a scalar is never allowed in card text, or nil. Shared by the URL
-    /// and host checks so every string gets the same scan. Three invisibles
+    /// and host checks so every string gets the same scan. Four invisibles
     /// are allowed in context by `problem(in:)`, never alone.
     static func problem(_ scalar: Unicode.Scalar, allowNewlines: Bool = false) -> String? {
         switch scalar.value {
@@ -68,12 +68,13 @@ public enum TextCheck {
         }
     }
 
-    /// The first problem in `s`, or nil. Three invisibles are allowed where
+    /// The first problem in `s`, or nil. Four invisibles are allowed where
     /// they do their job and nowhere else: a variation selector right after
     /// a base it has a standardized sequence with (`isVariationSequence`), a
-    /// ZWJ between two pictographs (the rainbow flag, a family), and a ZWNJ
-    /// between two Arabic letters (Persian and Urdu spell with it; RFC 5892
-    /// Appendix A.1 allows the same).
+    /// Mongolian free variation selector right after a Mongolian letter
+    /// (`isMongolianLetter`), a ZWJ between two pictographs (the rainbow
+    /// flag, a family), and a ZWNJ between two Arabic letters (Persian and
+    /// Urdu spell with it; RFC 5892 Appendix A.1 allows the same).
     static func problem(in s: String, allowNewlines: Bool = false) -> String? {
         let scalars = s.unicodeScalars
         var previous: Unicode.Scalar?
@@ -87,6 +88,8 @@ public enum TextCheck {
             switch scalar.value {
             case 0xFE00...0xFE0F, 0xE0100...0xE01EF:
                 allowed = previous.map { isVariationSequence(base: $0, selector: scalar) } ?? false
+            case 0x180B...0x180D, 0x180F:
+                allowed = previous.map(isMongolianLetter) ?? false
             case 0x200D:
                 allowed = base.map(isPictograph) == true && next.map(isPictograph) == true
             case 0x200C:
@@ -114,21 +117,37 @@ public enum TextCheck {
     /// sequence (StandardizedVariants.txt, emoji-variation-sequences.txt,
     /// the Ideographic Variation Database), near enough: U+FE0E and U+FE0F
     /// after an emoji, the keycap bases `#`, `*` and the digits included;
-    /// the rest of U+FE00–FE0F after a CJK ideograph, a Mongolian or
-    /// Phags-pa letter or a mathematical operator; U+E0100–E01EF after an
-    /// ideograph only. Any other pairing is a hidden byte on a visible
-    /// letter, 256 values deep.
+    /// the rest of U+FE00–FE0F after a CJK ideograph, a Phags-pa letter or
+    /// a mathematical operator (the Mathematical Operators block, and the
+    /// eight Supplemental Mathematical Operators the file lists); U+E0100–
+    /// E01EF after an ideograph only. Mongolian takes none of these: its
+    /// forms are chosen by the free variation selectors, see `problem(in:)`.
+    /// Any other pairing is a hidden byte on a visible letter, 256 values
+    /// deep.
     private static func isVariationSequence(base: Unicode.Scalar, selector: Unicode.Scalar) -> Bool {
         switch selector.value {
         case 0xFE0E, 0xFE0F:
             return base.properties.isEmoji
         case 0xFE00...0xFE0D:
             switch base.value {
-            case 0x1800...0x18AF, 0xA840...0xA87F, 0x2200...0x22FF: return true
-            default: return base.properties.isIdeographic
+            case 0xA840...0xA87F, 0x2200...0x22FF,
+                 0x2A3C, 0x2A3D, 0x2A9D, 0x2A9E, 0x2AAC, 0x2AAD, 0x2ACB, 0x2ACC:
+                return true
+            default:
+                return base.properties.isIdeographic
             }
         default:
             return base.properties.isIdeographic
+        }
+    }
+
+    /// A letter of the Mongolian block, U+1820–U+1878 or U+1880–U+18AA:
+    /// what FVS1–FVS4 (U+180B–U+180D, U+180F) choose a form of, and the
+    /// only thing one may follow.
+    private static func isMongolianLetter(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x1820...0x1878, 0x1880...0x18AA: return true
+        default: return false
         }
     }
 
