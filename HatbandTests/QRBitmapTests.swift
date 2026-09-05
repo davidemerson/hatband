@@ -46,8 +46,10 @@ struct QRBitmapTests {
         // Bottom-left finder corner.
         let bottom = (4 + code.size - 1) * pixelsPerModule
         #expect(try gray(image, x: origin, y: bottom) == 0)
-        // Bottom-right has no finder: its corner module is light.
-        #expect(try gray(image, x: right, y: bottom) == 255)
+        // Bottom-right has no finder: its corner module is data, so it must
+        // match the symbol either way.
+        let corner = code.module(x: code.size - 1, y: code.size - 1)
+        #expect(try gray(image, x: right, y: bottom) == (corner ? 0 : 255))
     }
 
     @Test func quietZoneIsWhite() throws {

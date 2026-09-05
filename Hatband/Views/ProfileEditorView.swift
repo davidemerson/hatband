@@ -220,8 +220,9 @@ import UIKit
                     .frame(width: 56, height: 56)
                     .clipShape(RoundedRectangle(cornerRadius: Theme.radius))
             }
+            let photoTitle = draft.photo == nil ? "Choose photo" : "Change photo"
             PhotosPicker(selection: $pickedPhoto, matching: .images) {
-                Label(draft.photo == nil ? "Choose photo" : "Change photo", systemImage: "person.crop.square")
+                Label(photoTitle, systemImage: "person.crop.square")
             }
             .buttonStyle(.borderless)
             if draft.photo != nil {

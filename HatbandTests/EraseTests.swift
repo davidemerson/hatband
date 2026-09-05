@@ -42,10 +42,12 @@ import Testing
         await model.eraseEverything()
         let dbkey = try #require(events.firstIndex(of: "delete dbkey"))
         let seed = try #require(events.firstIndex(of: "delete seed"))
+        let index = try #require(events.firstIndex(of: "delete persona-index"))
         let erase = try #require(events.firstIndex(of: "erase"))
         #expect(dbkey < seed)
-        #expect(seed < erase)
-        #expect(ownerStillThere == [true, true])
+        #expect(seed < index)
+        #expect(index < erase)
+        #expect(ownerStillThere == [true, true, true])
     }
 
     @Test func afterEraseNothingRemains() async throws {

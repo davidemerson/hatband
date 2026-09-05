@@ -15,11 +15,15 @@ jobs:
       - run: brew install xcodegen
       - run: scripts/lint-boundaries.sh --no-stubs
       - run: xcodegen generate --spec project.yml
-      - run: >
-          xcodebuild test -project Hatband.xcodeproj -scheme Hatband
-          -destination 'platform=iOS Simulator,name=iPhone 17'
-          CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" HATBAND_COMMIT=${GITHUB_SHA::7}
-          -skipPackagePluginValidation -quiet
+      - name: xcodebuild test
+        run: |
+          set -o pipefail
+          xcodebuild test -project Hatband.xcodeproj -scheme Hatband \
+            -destination 'platform=iOS Simulator,name=iPhone 17' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" HATBAND_COMMIT=${GITHUB_SHA::7} \
+            -skipPackagePluginValidation 2>&1 \
+            | grep -E --line-buffered 'error:|warning:|✘|✔ Test run|◇ Test run|Expectation failed|recorded an issue|Test Suite|Executed|Failing tests|^\s+[A-Za-z]+Tests\.|\*\* TEST|Fatal|crash' \
+            | grep -vE 'Test run started' | cut -c1-400
       - name: package allow-list
         run: |
           f=Hatband.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
