@@ -6,7 +6,7 @@ Named for the card Bloom keeps in his hatband in *Ulysses*, bearing the name of 
 
 ## Status
 
-The format library, its test vectors and the fallback site exist; the iPhone app does not yet.
+The format library, its test vectors, the fallback site and the iPhone app exist. The app has only ever been built by CI; it has not run on a phone.
 
 ## Layout
 
@@ -26,6 +26,18 @@ swift test --package-path Packages/HatbandCore
 ```
 
 The app requires Xcode 26 and is generated from `project.yml` with XcodeGen.
+
+## App
+
+- **Card.** The selected persona's signed card as a QR in a white panel, brightness raised while it shows and hidden while the screen is recorded. A byte meter warns past version 20 and offers the file form when no code fits. Share as a hatband.link link or a `.hatband` file; print as SVG, PNG or a PDF card. "What's in this QR" lists every field and the exact size of the code on screen.
+- **Profile and personas.** Every field commits through the library's normalizers and validators, so nothing unnormalized is stored. SSH keys are pasted as an `authorized_keys` line; a GPG certificate is kept only when it hashes to the typed fingerprint; a headshot is reduced to 256 pixels and 12 KB with its Exif stripped. A persona shares a subset of the profile under its own derived key and colour, or is an alias with a profile of its own. Key indices are never reused; `seq` rises only when a card's content changes.
+- **Lock Screen.** "Share my card" starts a Live Activity for 30 minutes, 2 or 8 hours. Only the Lock Screen presentation carries the compact QR and, if you choose, your name; the Dynamic Island, Watch, CarPlay and paired-Mac presentations show a hat glyph and "Sharing" at most. The activity goes stale at its end time and stopping in the app ends it at once. Always-On shows "Tap to show card" unless you allow the QR there. The Home Screen widget is opt-in and reads one file in the App Group container, deleted when the widget is turned off.
+- **Scanning.** The camera reads QR codes only; a screenshot goes through Vision instead. Every payload is screened field by field before the review sheet shows it: rejected fields are listed, warnings stay on their field, and any field can be switched off before saving. Saving notes one reduced-accuracy fix, about a city, with a place, a note and tags. Where draws one circle per meeting over a map that loads only when the tab opens. Forget deletes at once with ten seconds to undo.
+- **Trust.** A person is pinned to the first key seen for their persona id, or to the 8-byte fingerprint of a Lock Screen card. A later card updates the record only under the pinned key with a higher sequence number; a different key is a warning and replaces nothing unless you choose "Trust new key". A GPG certificate riding in a file or link is kept only when it hashes to the card's fingerprint.
+- **Storage and lock.** One SwiftData store in a Class A directory. Your own card sits in one plaintext blob, so showing it never prompts; each scanned person is AES-GCM sealed under a 32-byte key in the Keychain, bound to its persona id. App lock, on by default, puts that key behind Face ID or the passcode; People, Where and Settings stay locked until then, and the key leaves memory in the background. The store stays out of backups unless you opt in, and the toggle says what that means without Advanced Data Protection.
+- **Export, import, erase.** A `.hatband-export` holds the seed, your card and every person, sealed under six EFF words or a passphrase of your own. Restore makes a fresh install into that phone; merge keeps the local seed and pins and takes the higher `seq`. Erase deletes the Keychain keys first, then activities, the widget file and the store.
+- **What leaves the phone.** Nothing, unless you tap a button that names its host: WKD, keys.openpgp.org, GitHub and a Mastodon instance for key and link checks; Safari and Apple Maps for hand-offs. One ephemeral session, no cookies, 15 seconds, TLS 1.2, same-host redirects only, 256 KB. `scripts/lint-boundaries.sh` keeps networking, storage, pasteboard, screen and location behind one file each and forbids UserDefaults, so `PrivacyInfo.xcprivacy` declares nothing. MetricKit diagnostics stay on the phone and show in About.
+- **Building and testing.** `brew install xcodegen && xcodegen generate`, then Xcode 26; `Info.plist` and the entitlements are generated, never committed. `xcodebuild test -project Hatband.xcodeproj -scheme Hatband -destination 'platform=iOS Simulator,name=iPhone 17'`. CI lints the boundaries, generates, tests, and refuses any package beyond swift-crypto and swift-asn1. Device validation, TestFlight and the export-compliance question are still open.
 
 ## Wire format (HB1)
 

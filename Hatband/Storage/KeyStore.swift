@@ -18,4 +18,6 @@ nonisolated enum KeyStoreError: Error, Equatable {
 nonisolated enum KeyName {
     static let seed = "seed"
     static let database = "dbkey"
+    /// Next persona key index; indices are never reused.
+    static let personaIndex = "persona-index"
 }

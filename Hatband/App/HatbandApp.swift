@@ -16,6 +16,7 @@ struct HatbandApp: App {
                     model.handle(url: url)
                 }
         }
+        .onAppear { Diagnostics.subscribe() }
         .onChange(of: scenePhase) { _, phase in
             model.scenePhase(phase)
         }

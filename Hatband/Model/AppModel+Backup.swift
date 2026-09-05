@@ -201,6 +201,7 @@ extension AppModel {
         do {
             try keys.delete(KeyName.database)
             try keys.delete(KeyName.seed)
+            try keys.delete(KeyName.personaIndex)
         } catch {
             Log.failure("erase keys", error)
         }

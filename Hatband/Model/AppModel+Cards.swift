@@ -6,7 +6,7 @@ import HatbandCore
 extension AppModel {
     /// Key-store item holding the next persona key index, so a deleted
     /// persona's key is never derived again for another one.
-    static let personaIndexKey = "persona-index"
+    static let personaIndexKey = KeyName.personaIndex
 
     /// Days since 2020-01-01 for today in the current calendar; never negative.
     func issuedDay() -> UInt32 {
