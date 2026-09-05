@@ -56,6 +56,14 @@ extension AppModel {
         sharing = current
     }
 
+    /// After `showNameOnLockScreen` or `alwaysOnQR` changes: the running
+    /// activity, if any, is rebuilt from the new settings, so a name the
+    /// user just hid leaves the Lock Screen now rather than at the end time.
+    func updateSharingActivity() async {
+        guard let sharing, let persona = personas.first(where: { $0.id == sharing.personaID }) else { return }
+        await updateActivity(for: persona)
+    }
+
     /// Pushes the persona's current card into its running activity, if any,
     /// keeping the end time.
     func updateActivity(for persona: Persona) async {

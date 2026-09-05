@@ -34,6 +34,12 @@ import UIKit
     var route = Route()
     /// The forget buffer, kept for `undoWindow`.
     var undo: Person?
+    /// Advances on every `forget` and `restoreForgotten`, so an expiry timer
+    /// started for an earlier forget never clears a later one.
+    var undoGeneration = 0
+    /// A card, export or route that arrived before `phase` allowed it,
+    /// performed once by `performDeferredOpen()`.
+    var deferredOpen: DeferredOpen?
     var error: AppError?
     /// `PrivacyCover`: scene inactive or screen captured.
     var covered = false
@@ -139,6 +145,7 @@ import UIKit
         }
         await reconcileActivities()
         refreshWidget()
+        performDeferredOpen()
     }
 
     /// Reads the database key, prompting when app lock is on, and decrypts
@@ -202,6 +209,7 @@ import UIKit
         people = []
         locked = false
         phase = .ready
+        performDeferredOpen()
     }
 
     /// Encodes the owner blob into the single `OwnerRecord` and saves.
@@ -251,6 +259,8 @@ import UIKit
         pendingImport = nil
         route = Route()
         undo = nil
+        undoGeneration += 1
+        deferredOpen = nil
         error = nil
         covered = false
         dbKey = nil

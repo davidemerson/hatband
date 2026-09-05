@@ -78,12 +78,14 @@ import SwiftUI
             if model.settings.showNameOnLockScreen != value {
                 model.settings.showNameOnLockScreen = value
                 persist()
+                Task { await model.updateSharingActivity() }
             }
         }
         .onChange(of: alwaysOn) { _, value in
             if model.settings.alwaysOnQR != value {
                 model.settings.alwaysOnQR = value
                 persist()
+                Task { await model.updateSharingActivity() }
             }
         }
         .onChange(of: minutes) { _, value in

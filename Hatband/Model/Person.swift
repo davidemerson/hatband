@@ -9,16 +9,32 @@ nonisolated enum Trust: Hashable, Sendable {
 }
 
 /// A coarse location: hundredths of a degree and whole metres. The only
-/// initializer rounds, so nothing finer is ever stored.
+/// initializer rounds, so nothing finer is ever stored, and clamps, so a
+/// value that is not a place (NaN, infinity, a corrupt record decoded as
+/// `Int.max`) can never trap the `Int` conversion.
 nonisolated struct Fix: Hashable, Sendable {
+    /// Earth's circumference: no fix is less certain than that.
+    static let maxAccuracyMetres: Double = 40_075_000
+
     let latitudeHundredths: Int
     let longitudeHundredths: Int
     let accuracyMetres: Int
 
     init(latitude: Double, longitude: Double, accuracy: Double) {
-        latitudeHundredths = Int((latitude * 100).rounded())
-        longitudeHundredths = Int((longitude * 100).rounded())
-        accuracyMetres = Int(accuracy.rounded())
+        latitudeHundredths = Fix.hundredths(latitude, limit: 90)
+        longitudeHundredths = Fix.hundredths(longitude, limit: 180)
+        accuracyMetres = Fix.metres(accuracy)
+    }
+
+    /// Non-finite counts as zero; beyond the limit is the limit.
+    private static func hundredths(_ degrees: Double, limit: Double) -> Int {
+        guard degrees.isFinite else { return 0 }
+        return Int((min(max(degrees, -limit), limit) * 100).rounded())
+    }
+
+    private static func metres(_ accuracy: Double) -> Int {
+        guard accuracy.isFinite else { return 0 }
+        return Int(min(max(accuracy, 0), maxAccuracyMetres).rounded())
     }
 }
 

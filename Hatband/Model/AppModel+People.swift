@@ -2,6 +2,19 @@ import CryptoKit
 import Foundation
 import HatbandCore
 
+/// What `handle(url:)` or `receive` found. Performed at once when `phase`
+/// allows, otherwise kept in `AppModel.deferredOpen` until it does: an
+/// `onOpenURL` can arrive before `load()` has read the owner, and a card
+/// link tapped during onboarding has no store to save into yet.
+nonisolated enum DeferredOpen: Equatable, Sendable {
+    /// A decoded card and where it came from; becomes `pendingReview`.
+    case card(Card, source: CardSource)
+    /// A `.hatband-export`; becomes `pendingImport`.
+    case export(Data)
+    /// `hatband://show?persona=` or `hatband://scan`.
+    case scheme(URL)
+}
+
 /// Receiving, reviewing, keeping and forgetting people. Every person body
 /// is sealed under the database key before it touches the store.
 extension AppModel {
@@ -13,7 +26,7 @@ extension AppModel {
         } catch {
             throw AppError(error)
         }
-        pendingReview = Review.make(card: card, source: source, people: people)
+        perform(.card(card, source: source))
     }
 
     /// A `.hatband` file.
@@ -24,18 +37,19 @@ extension AppModel {
         } catch {
             throw AppError(error)
         }
-        pendingReview = Review.make(card: card, source: .file, people: people)
+        perform(.card(card, source: .file))
     }
 
     /// The five kinds of URL the app opens: a `.hatband` file, a
     /// `.hatband-export` file, `hatband://show?persona=`, `hatband://scan`
-    /// and an `https://hatband.link/#` link.
+    /// and an `https://hatband.link/#` link. Malformed input is reported at
+    /// once; a valid open waits for `phase` when it must.
     func handle(url: URL) {
         do {
             if url.isFileURL {
                 try handleFile(url)
             } else if url.scheme?.lowercased() == "hatband" {
-                handleScheme(url)
+                perform(.scheme(url))
             } else {
                 try receive(text: url.absoluteString, source: .link)
             }
@@ -43,6 +57,14 @@ extension AppModel {
             self.error = AppError(error)
             Log.failure("open url", error)
         }
+    }
+
+    /// Performs `deferredOpen` if `phase` now allows it. Called when
+    /// `load()` finishes, when onboarding completes and after a restore.
+    func performDeferredOpen() {
+        guard let open = deferredOpen, canPerform(open) else { return }
+        deferredOpen = nil
+        perform(open)
     }
 
     /// Unlocks first when locked. When unlocking reveals the person is
@@ -93,10 +115,14 @@ extension AppModel {
         }
         people.removeAll { $0.personaID == person.personaID }
         undo = person
+        undoGeneration += 1
+        let generation = undoGeneration
         let window = undoWindow
         Task { [weak self] in
             try? await Task.sleep(for: window)
-            guard let self, let pending = self.undo, pending == person else { return }
+            // Only the timer of the latest forget clears the buffer: the
+            // same person forgotten again after an undo gets a full window.
+            guard let self, self.undoGeneration == generation else { return }
             self.undo = nil
         }
     }
@@ -107,6 +133,7 @@ extension AppModel {
         try persist(person, key: key)
         replace(person)
         undo = nil
+        undoGeneration += 1
     }
 
     /// Most recently updated first; every whitespace-separated term must
@@ -196,9 +223,38 @@ extension AppModel {
             guard data.count <= HB1.maxBytes + HB1.fileMagic.count else { throw AppError.tooLarge }
             try receive(fileBytes: Array(data))
         case "hatband-export":
-            pendingImport = data
+            perform(.export(data))
         default:
             throw AppError.notHatband
+        }
+    }
+
+    /// An export can be restored from onboarding; everything else needs the
+    /// owner loaded, so a `hatband://show` tap on a cold launch selects the
+    /// persona it names instead of an empty list.
+    private func canPerform(_ open: DeferredOpen) -> Bool {
+        switch open {
+        case .export:
+            return phase == .onboarding || phase == .ready
+        case .card, .scheme:
+            return phase == .ready
+        }
+    }
+
+    /// Acts on the open now, or keeps it for `performDeferredOpen()`. A
+    /// later open replaces an earlier one still waiting.
+    private func perform(_ open: DeferredOpen) {
+        guard canPerform(open) else {
+            deferredOpen = open
+            return
+        }
+        switch open {
+        case .card(let card, let source):
+            pendingReview = Review.make(card: card, source: source, people: people)
+        case .export(let data):
+            pendingImport = data
+        case .scheme(let url):
+            handleScheme(url)
         }
     }
 

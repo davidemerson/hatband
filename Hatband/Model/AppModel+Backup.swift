@@ -112,6 +112,7 @@ extension AppModel {
         locked = false
         phase = .ready
         refreshWidget()
+        performDeferredOpen()
         Log.event("restore")
         return ImportSummary(personas: personas.count, people: imported.count,
                              encounters: imported.reduce(0) { $0 + $1.encounters.count }, keyChanges: 0)
