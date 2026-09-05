@@ -419,8 +419,8 @@ import Testing
             #expect(first.bytes > 0)
             #expect(first.characters > first.bytes)
         }
-        #expect(!events.isEmpty)
-        #expect(events.allSatisfy { $0 == "read " + KeyName.seed })
+        // The seed is held in memory since load(); a budget never touches the Keychain.
+        #expect(events.isEmpty)
         #expect(keys.prompts.count == promptsBefore)
         #expect(model.personas == personas)
         #expect(model.profile == profile)

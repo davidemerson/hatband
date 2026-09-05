@@ -42,7 +42,7 @@ import SwiftUI
                 }
                 Section {
                     if let sharing = model.sharing {
-                        Text("Sharing until ") + Text(sharing.endsAt, style: .time).font(Theme.mono)
+                        Text("Sharing until \(Text(sharing.endsAt, style: .time).font(Theme.mono))")
                         Button("Stop sharing", role: .destructive) {
                             stop()
                         }
