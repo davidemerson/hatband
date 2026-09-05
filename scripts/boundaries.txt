@@ -1,0 +1,16 @@
+# Boundaries: regex<TAB>allowed path prefixes (space separated), or - for none.
+# Read by scripts/lint-boundaries.sh; grep -E over Hatband, HatbandWidgets, Shared.
+URLSession|NWConnection|NWBrowser	Hatband/Platform/ExplicitFetch.swift
+import SwiftData|ModelContainer|ModelContext|@Model|FetchDescriptor|#Predicate	Hatband/Storage/
+SecItem|SecAccessControl|kSec	Hatband/Storage/KeychainStore.swift
+UIPasteboard	Hatband/Platform/Pasteboard.swift
+Logger\(|os_log|(^|[^A-Za-z])print\(	Hatband/Platform/Log.swift
+UIScreen|\.brightness	Hatband/Platform/Screen.swift
+CLLocation	Hatband/Platform/Location.swift Hatband/Views/WhereView.swift
+import MapKit	Hatband/Views/WhereView.swift
+containerURL\(forSecurityApplicationGroupIdentifier	Shared/WidgetFeed.swift
+Activity<|import ActivityKit	Hatband/Model/AppModel+Sharing.swift Shared/ HatbandWidgets/
+openURL|UIApplication\.shared\.open	Hatband/Views/PersonView.swift Hatband/Views/AboutView.swift
+CNContactStore\(	Hatband/Views/UnknownContactView.swift
+UserDefaults|@AppStorage|@SceneStorage|modificationDate|creationDate|attributesOfItem	-
+CoreSpotlight|CSSearchable|UserNotifications|UNUserNotificationCenter|CloudKit|CKContainer|NSUbiquitous|WebKit|WKWebView|SafariServices|StoreKit|AdSupport|AppTrackingTransparency|unifiedContacts|CNSaveRequest|enumerateContacts|kSecUseAuthenticationUI	-

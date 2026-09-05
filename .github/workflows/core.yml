@@ -2,9 +2,9 @@ name: core
 on:
   workflow_dispatch:
   push:
-    paths: ["Packages/**", "spec/**", ".github/workflows/core.yml"]
+    paths: ["Packages/**", "spec/**", "Hatband/**", "Shared/**", "HatbandWidgets/**", "scripts/**", ".github/workflows/core.yml"]
   pull_request:
-    paths: ["Packages/**", "spec/**", ".github/workflows/core.yml"]
+    paths: ["Packages/**", "spec/**", "Hatband/**", "Shared/**", "HatbandWidgets/**", "scripts/**", ".github/workflows/core.yml"]
 jobs:
   linux:
     runs-on: ubuntu-24.04
@@ -22,3 +22,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: swift test --package-path Packages/HatbandCore
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/lint-boundaries.sh --self-test
