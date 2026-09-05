@@ -16,8 +16,9 @@ public struct VCard: Sendable, Hashable {
         }
     }
 
-    /// Rendered as `X-HATBAND-<NAME>:<value>`. The name is uppercased and
-    /// reduced to letters, digits and hyphens when the extension is made.
+    /// Rendered as `X-HATBAND-<NAME>:<value>`. The name is ASCII-uppercased
+    /// and reduced to ASCII letters, digits and hyphens when the extension
+    /// is made.
     public struct Extension: Sendable, Hashable {
         public let name: String
         public var value: String
@@ -139,11 +140,12 @@ public struct VCard: Sendable, Hashable {
         return out
     }
 
-    /// Full uppercase mapping (so `ß` becomes `SS`), then only ASCII letters,
-    /// digits and hyphens survive, scalar by scalar: a mark on a letter is
-    /// dropped and the letter kept.
+    /// `a`-`z` uppercased, then only ASCII letters, digits and hyphens
+    /// survive, scalar by scalar: a mark on a letter is dropped and the
+    /// letter kept. The case mapping is ASCII only, so `ß` and `ﬁ` are
+    /// dropped rather than spelt out as `SS` and `FI`.
     static func propertyName(_ name: String) -> String {
-        String(name.uppercased().unicodeScalars.filter { $0.isASCIIAlphanumeric || $0 == "-" })
+        String(name.asciiUppercased().unicodeScalars.filter { $0.isASCIIAlphanumeric || $0 == "-" })
     }
 
     // MARK: Parsing

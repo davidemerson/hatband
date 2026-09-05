@@ -344,12 +344,12 @@ private func lookAlike(in reason: String) -> [Unicode.Scalar]? {
     // MARK: - Whitespace
 
     /// A mark or a reph beside a space leaves the space a space: a URL is
-    /// refused for whitespace still, a name with an interior space keeps
-    /// its verdict, a leading space is trimmed and the mark after it
-    /// stays. After a trailing space the mark is the last scalar, so
-    /// nothing trails and no warning is given, and a mark inside a run of
-    /// spaces splits the run: pinned as design, since a floating accent
-    /// draws, so nothing hides; the warnings are for what cannot be seen.
+    /// refused for whitespace still, and a name with an interior space
+    /// keeps its verdict. The reph is a letter and is text wherever it
+    /// lands. A mark after a space is drawn on that space and goes with
+    /// it: the leading and trailing whitespace warning strips it too, and
+    /// a run of spaces runs on through it, so a floating accent cannot
+    /// dodge either warning.
     @Test func aMarkBesideASpaceIsText() {
         for scalar in ["\u{301}", "\u{D4E}"] as [Unicode.Scalar] {
             #expect(URLPolicy.verdict(for: "https://example.com/a \(scalar)b") == .reject("whitespace"))
@@ -358,13 +358,18 @@ private func lookAlike(in reason: String) -> [Unicode.Scalar]? {
             #expect(URLPolicy.verdict(for: "mailto:a%20\(scalar)b@c.ie") == .reject("whitespace"))
             #expect(TextCheck.check("David \(scalar)Emerson", maxBytes: 64) == .ok)
             #expect(TextCheck.check("David\(scalar) Emerson", maxBytes: 64) == .ok)
-            #expect(TextCheck.check(" \(scalar)David", maxBytes: 64)
-                == .warning("leading or trailing whitespace, use “\(scalar)David”"))
             #expect(TextCheck.check("David\(scalar) ", maxBytes: 64)
                 == .warning("leading or trailing whitespace, use “David\(scalar)”"))
-            #expect(TextCheck.check("David \(scalar)", maxBytes: 64) == .ok)
-            #expect(TextCheck.check("a  \(scalar)  b", maxBytes: 64) == .ok)
         }
+        let reph: Unicode.Scalar = "\u{D4E}"
+        #expect(TextCheck.check(" \(reph)David", maxBytes: 64)
+            == .warning("leading or trailing whitespace, use “\(reph)David”"))
+        #expect(TextCheck.check("David \(reph)", maxBytes: 64) == .ok)
+        #expect(TextCheck.check("a  \(reph)  b", maxBytes: 64) == .ok)
+        let mark: Unicode.Scalar = "\u{301}"
+        #expect(TextCheck.check(" \(mark)David", maxBytes: 64) == .warning("leading or trailing whitespace, use “David”"))
+        #expect(TextCheck.check("David \(mark)", maxBytes: 64) == .warning("leading or trailing whitespace, use “David”"))
+        #expect(TextCheck.check("a  \(mark)  b", maxBytes: 64) == .warning("run of spaces"))
         #expect(TextCheck.check("a    b", maxBytes: 64) == .warning("run of spaces"))
         #expect(TextCheck.check(" \u{301} ", maxBytes: 64) == .reject("empty"))
         for scalar in fusing.dropFirst().prefix(3) {

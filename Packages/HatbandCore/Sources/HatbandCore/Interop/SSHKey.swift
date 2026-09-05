@@ -168,7 +168,8 @@ public struct SSHPublicKey: Sendable, Hashable {
             inline = key
             bits = 256
         case .ecdsaP256, .ecdsaP384, .ecdsaP521:
-            guard try reader.string() == kind.curveName else { throw Error.malformedBlob }
+            // Byte-exact, as sshd compares: no canonical equivalence.
+            guard let curve = kind.curveName, try reader.string().utf8.elementsEqual(curve.utf8) else { throw Error.malformedBlob }
             let point = try reader.field()
             try Self.checkPoint(point, kind: kind)
             inline = point

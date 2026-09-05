@@ -1,18 +1,21 @@
+import Foundation  // canonical decomposition, for `homographLabel`
+
 /// Look-alike detection for names and hosts, after UTS #39 in spirit but
 /// with small tables: the stdlib exposes no Script property, and a business
 /// card needs the well-known cases, not the full confusables list.
 public enum Confusables {
     /// True when any word mixes letters from two of Latin, Cyrillic, Greek
     /// and Armenian, the scripts with look-alikes among themselves. Words
-    /// split on whitespace and punctuation; digits and marks belong to no
-    /// script. Han, kana and Hangul are scripts of their own but never
-    /// count: Japanese and Korean text carries Latin brand names routinely,
-    /// and CJK has no Latin look-alikes. Mixing across words is fine, so a
-    /// bilingual "David Дэвид" passes.
+    /// split on whitespace and punctuation; digits, marks and format
+    /// controls belong to no script and end no word (UAX #29 WB4), so a
+    /// joiner cannot cut "Дavid" in two. Han, kana and Hangul are scripts
+    /// of their own but never count: Japanese and Korean text carries
+    /// Latin brand names routinely, and CJK has no Latin look-alikes.
+    /// Mixing across words is fine, so a bilingual "David Дэвид" passes.
     public static func mixedScripts(in s: String) -> Bool {
         var scripts: Set<Script> = []
         for scalar in s.unicodeScalars {
-            guard isWordCharacter(scalar.properties.generalCategory) else {
+            guard isWordInternal(scalar) else {
                 scripts.removeAll()
                 continue
             }
@@ -138,24 +141,42 @@ public enum Confusables {
 
     /// The ASCII a label imitates when every scalar in it is ASCII or has
     /// an ASCII twin, at least one a twin (`аpple`, `gіthub`, `ｇｉｔｈｕｂ`,
-    /// `аррӏе́`). A mark (Mn, Mc, Me) belongs to the scalar before it and
-    /// is dropped: `applé` is `apple` to the eye. Nil for an honest label,
-    /// one keeping a letter no ASCII host has (`москва`, `ελλάδα`,
-    /// `münchen`; UTS #39 §4, whole-script confusables), and for one with
-    /// nothing before a mark.
+    /// `аррӏе́`). Judged on the label's canonical decomposition (NFD), so
+    /// the rule is closed under canonical equivalence: a precomposed
+    /// letter is its base and marks (`ѐ` is `е` then U+0300, so `аррӏѐ`
+    /// is `apple` in either spelling), and a singleton whose decomposition
+    /// is ASCII (the Kelvin sign is `K`) is a twin. A mark (Mn, Mc, Me)
+    /// belongs to the scalar before it and is dropped: `applé` is `apple`
+    /// to the eye. Nil for an honest label, one keeping a letter no ASCII
+    /// host has (`москва`, `ελλάδα`, `münchen`; UTS #39 §4, whole-script
+    /// confusables), and for one with nothing before a mark.
     static func homographLabel(_ label: String) -> String? {
         var skeleton = String.UnicodeScalarView()
         var twins = false
         for scalar in label.unicodeScalars {
             if scalar.isASCII {
                 skeleton.append(scalar)
-            } else if let twin = asciiLookalike(scalar) {
-                skeleton.append(twin)
-                twins = true
-            } else if isMark(scalar), !skeleton.isEmpty {
                 continue
-            } else {
-                return nil
+            }
+            // Scalar by scalar is the label's NFD: canonical reordering only
+            // moves marks, and marks are dropped.
+            let decomposed = String(scalar).decomposedStringWithCanonicalMapping.unicodeScalars
+            if decomposed.count == 1, let single = decomposed.first, single.isASCII {
+                skeleton.append(single)
+                twins = true
+                continue
+            }
+            for part in decomposed {
+                if part.isASCII {
+                    skeleton.append(part)
+                } else if let twin = asciiLookalike(part) {
+                    skeleton.append(twin)
+                    twins = true
+                } else if isMark(part), !skeleton.isEmpty {
+                    continue
+                } else {
+                    return nil
+                }
             }
         }
         return twins ? String(skeleton) : nil
@@ -220,15 +241,17 @@ public enum Confusables {
         isDigit(b) || (UInt8(ascii: "a")...UInt8(ascii: "f")).contains(b) || (UInt8(ascii: "A")...UInt8(ascii: "F")).contains(b)
     }
 
-    /// Letters, marks and numbers stay in a word; everything else ends it.
-    private static func isWordCharacter(_ category: Unicode.GeneralCategory) -> Bool {
-        switch category {
+    /// Letters and numbers stay in a word, and so does what UAX #29 WB4
+    /// skips over: Extend (marks, emoji modifiers) and Format (Cf: ZWJ,
+    /// ZWNJ, U+0600–U+0605 and kin). Everything else ends it.
+    private static func isWordInternal(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.properties.generalCategory {
         case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter,
-             .nonspacingMark, .spacingMark, .enclosingMark,
+             .nonspacingMark, .spacingMark, .enclosingMark, .format,
              .decimalNumber, .letterNumber, .otherNumber:
             return true
         default:
-            return false
+            return scalar.properties.isEmojiModifier
         }
     }
 

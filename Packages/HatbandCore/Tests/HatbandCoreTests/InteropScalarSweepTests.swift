@@ -566,39 +566,44 @@ private extension String {
     }
 }
 
-// MARK: - Observations, pinned
+// MARK: - Observations, closed
 
-/// Scalar-correct per RFC 5891 §4.2.3.1 and the digit rule, and so
-/// accepted: a mark after a trailing hyphen or after an all-digit last label
-/// makes a label that neither ends with a hyphen nor is all digits. The
-/// plain spellings are refused. Both are valid U-labels; whether a mark
-/// that hides a hyphen or a number should be judged is `Validate`'s
-/// look-alike verdict, and this records the interop layer's answer.
-@Test func marksAfterHyphenOrDigitsMakeAnotherLabel() throws {
+/// The hyphen rule (RFC 5891 §4.2.3.1) and the digit rule are judged with
+/// trailing marks set aside: a mark on a trailing hyphen or on the digits
+/// of a last label changes what is drawn, not what the label is, so the
+/// marked spellings are refused as the plain ones are. A letter after the
+/// digit, the Prepend one included, still makes a name.
+@Test func marksAfterHyphenOrDigitsHideNothing() throws {
     #expect(throws: Normalize.Error.invalidHost) { try Normalize.website("nnix.com-") }
     #expect(throws: Normalize.Error.invalidHost) { try Normalize.website("nnix.1") }
     #expect(throws: Normalize.Error.invalidHost) { try Normalize.website("1.2.3.4") }
-    #expect(try Normalize.website("nnix.com-\(mark)").address == "nnix.com-\(mark)")
-    #expect(try Normalize.website("nnix.1\(mark)").address == "nnix.1\(mark)")
-    #expect(try Normalize.website("1.2.3.4\(mark)").address == "1.2.3.4\(mark)")
-    // The Prepend letter is a letter, so the same holds for it, as for any letter.
+    #expect(throws: Normalize.Error.invalidHost) { try Normalize.website("nnix.com-\(mark)") }
+    #expect(throws: Normalize.Error.invalidHost) { try Normalize.website("nnix.1\(mark)") }
+    #expect(throws: Normalize.Error.invalidHost) { try Normalize.website("1.2.3.4\(mark)") }
     #expect(try Normalize.website("nnix.1\(reph)").address == "nnix.1\(reph)")
     // A hyphen after a leading mark is still refused, in that order.
     #expect(throws: Normalize.Error.invalidHost) { try Normalize.website("nnix.\(mark)-com") }
     #expect(throws: Normalize.Error.invalidHost) { try Normalize.website("nnix.-\(mark)com") }
 }
 
-/// `Pasted(hosts:subdomains:)` matches the suffix and discards whatever
-/// precedes `.linkedin.com` without judging it as a hostname, so a probe
-/// there vanishes with the subdomain. Only the slug is stored, so nothing
-/// hidden reaches the card; recorded as the one place a hidden scalar is
-/// dropped from an accepted URL.
-@Test func linkedinSubdomainsAreDiscardedUnjudged() throws {
+/// `Pasted(hosts:subdomains:)` judges what precedes `.linkedin.com` as a
+/// hostname before discarding it: a hidden scalar or a space there is
+/// refused, while a mark inside a label or a Prepend letter is a label
+/// scalar and goes with the subdomain. Only the slug is stored either way.
+@Test func linkedinSubdomainsAreJudgedThenDiscarded() throws {
     for scalar in probes {
-        #expect(try Normalize.linkedin("https://ie\(scalar).linkedin.com/in/bloom") == "bloom")
-        #expect(try Normalize.linkedin("https://\(scalar).linkedin.com/in/bloom") == "bloom")
+        if visible.contains(scalar) {
+            #expect(try Normalize.linkedin("https://ie\(scalar).linkedin.com/in/bloom") == "bloom", "\(scalars(String(scalar)))")
+        } else {
+            #expect(throws: Normalize.Error.invalidHost, "\(scalars(String(scalar)))") { try Normalize.linkedin("https://ie\(scalar).linkedin.com/in/bloom") }
+        }
+        if String(scalar) == reph {
+            #expect(try Normalize.linkedin("https://\(scalar).linkedin.com/in/bloom") == "bloom")
+        } else {
+            #expect(throws: Normalize.Error.invalidHost, "\(scalars(String(scalar)))") { try Normalize.linkedin("https://\(scalar).linkedin.com/in/bloom") }
+        }
     }
-    #expect(try Normalize.linkedin("https://a b.linkedin.com/in/bloom") == "bloom")
+    #expect(throws: Normalize.Error.invalidHost) { try Normalize.linkedin("https://a b.linkedin.com/in/bloom") }
     // The apex and the slug are still judged scalar by scalar.
     #expect(throws: Normalize.Error.wrongHost("ie.linkedin.com\(mark)")) { try Normalize.linkedin("https://ie.linkedin.com\(mark)/in/bloom") }
     #expect(throws: Normalize.Error.wrongHost("ie.linkedin\(reph).com")) { try Normalize.linkedin("https://ie.linkedin\(reph).com/in/bloom") }

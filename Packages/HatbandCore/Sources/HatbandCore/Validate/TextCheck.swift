@@ -180,22 +180,43 @@ public enum TextCheck {
         }
     }
 
-    /// Unicode White_Space stripped from both ends.
+    /// A mark drawn on the scalar before it: Mn, Mc or Me, less the default
+    /// ignorables (variation selectors, the grapheme joiner), which draw
+    /// nothing and are `problem(in:)`'s to refuse.
+    private static func isDrawnMark(_ scalar: Unicode.Scalar) -> Bool {
+        Confusables.isMark(scalar) && !scalar.properties.isDefaultIgnorableCodePoint
+    }
+
+    /// Unicode White_Space stripped from both ends, marks included: a mark
+    /// after whitespace is drawn on it and goes with it, so `David ́` trails
+    /// whitespace as `David ` does. A mark on a letter stays.
     private static func trimmed(_ scalars: String.UnicodeScalarView) -> String.UnicodeScalarView.SubSequence {
         var start = scalars.startIndex
         var end = scalars.endIndex
-        while start < end, scalars[start].properties.isWhitespace { start = scalars.index(after: start) }
-        while start < end, scalars[scalars.index(before: end)].properties.isWhitespace { end = scalars.index(before: end) }
+        while start < end, scalars[start].properties.isWhitespace {
+            start = scalars.index(after: start)
+            while start < end, isDrawnMark(scalars[start]) { start = scalars.index(after: start) }
+        }
+        while start < end {
+            var space = end
+            while space > start, isDrawnMark(scalars[scalars.index(before: space)]) { space = scalars.index(before: space) }
+            guard space > start, scalars[scalars.index(before: space)].properties.isWhitespace else { break }
+            end = scalars.index(before: space)
+        }
         return scalars[start..<end]
     }
 
-    /// More than three consecutive spaces of any kind, newlines aside.
+    /// More than three consecutive spaces of any kind, newlines aside. A
+    /// mark after a space is part of that space: it neither ends the run
+    /// nor lengthens it.
     private static func hasSpaceRun(_ scalars: String.UnicodeScalarView) -> Bool {
         var run = 0
         for scalar in scalars {
             if scalar.properties.isWhitespace, scalar.value != 0x0A {
                 run += 1
                 if run > 3 { return true }
+            } else if run > 0, isDrawnMark(scalar) {
+                continue
             } else {
                 run = 0
             }

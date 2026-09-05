@@ -488,7 +488,9 @@ enum Hex {
 /// on U+002E only, each 1 to 63 octets of UTF-8 and the whole at most 253;
 /// a label holds letters, digits, marks and ASCII hyphens, with no hyphen at
 /// either end and no mark first. At least two labels, the last not all
-/// digits. Whitespace, controls, format characters, default ignorables,
+/// digits. Trailing marks are set aside for the hyphen and digit rules: a
+/// mark on the hyphen or digit changes what is drawn, not what the label
+/// is. Whitespace, controls, format characters, default ignorables,
 /// punctuation, symbols and the dot look-alikes are refused, never folded.
 /// ASCII letters are lowercased, as is any scalar whose lowercase is a
 /// single scalar; IDNA's mapping step and the look-alike verdict stay with
@@ -503,7 +505,7 @@ enum Hostname {
         var scalars = input.unicodeScalars
         if scalars.last == "." { scalars = scalars.dropLast() }
         let labels = scalars.split(separator: ".", omittingEmptySubsequences: false)
-        guard labels.count >= 2, let last = labels.last, !last.allSatisfy(\.isDigit) else { return nil }
+        guard labels.count >= 2, let last = labels.last, !unmarked(last).allSatisfy(\.isDigit) else { return nil }
         var out = ""
         for (i, label) in labels.enumerated() {
             guard let normalizedLabel = normalizedLabel(label) else { return nil }
@@ -515,7 +517,7 @@ enum Hostname {
     }
 
     private static func normalizedLabel(_ label: Substring.UnicodeScalarView) -> String? {
-        guard let first = label.first, first != "-", label.last != "-", !first.isMark else { return nil }
+        guard let first = label.first, first != "-", unmarked(label).last != "-", !first.isMark else { return nil }
         var out = ""
         for scalar in label {
             guard scalar == "-" || scalar.isIDNALetterDigitOrMark else { return nil }
@@ -523,6 +525,14 @@ enum Hostname {
         }
         guard out.utf8.count <= maxLabelOctets else { return nil }
         return out
+    }
+
+    /// The label without its trailing marks, so `com-́` ends in a hyphen and
+    /// `4́` is all digits.
+    private static func unmarked(_ label: Substring.UnicodeScalarView) -> Substring.UnicodeScalarView.SubSequence {
+        var end = label.endIndex
+        while end > label.startIndex, label[label.index(before: end)].isMark { end = label.index(before: end) }
+        return label[..<end]
     }
 
     /// ASCII case folded; another script's letter only when its lowercase
@@ -578,7 +588,9 @@ struct Pasted {
     /// An http(s) URL on one of the given hosts (or any host when nil),
     /// with userinfo and other schemes refused. Hosts are compared scalar
     /// by scalar after ASCII case folding: `linkedin.com` spelt with a
-    /// Kelvin sign or a mark is another host.
+    /// Kelvin sign or a mark is another host. A subdomain is judged as a
+    /// hostname before it is discarded, so a hidden scalar or a space in
+    /// it is refused rather than dropped.
     init(_ text: Substring, hosts: [String]?, subdomains: Bool = false) throws {
         self.init(text)
         switch scheme {
@@ -590,6 +602,7 @@ struct Pasted {
             let host = authority.asciiLowercased()
             guard hosts.contains(where: { host.unicodeScalars.elementsEqual($0.unicodeScalars) || subdomains && host.ends(withScalars: "." + $0) })
             else { throw Normalize.Error.wrongHost(String(authority)) }
+            guard Hostname.normalized(authority) != nil else { throw Normalize.Error.invalidHost }
         } else {
             guard Hostname.normalized(authority) != nil else { throw Normalize.Error.invalidHost }
         }

@@ -1162,7 +1162,7 @@ private func vCardFuzzString(_ rng: inout Xorshift, maxFragments: Int = 12) -> S
 @Test func vCardExtensionNamesAreSanitized() {
     #expect(VCard.Extension(name: "a:b;c.d,e f\r\ng", value: "").name == "ABCDEFG")
     #expect(VCard.Extension(name: "item1.URL", value: "").name == "ITEM1URL")
-    #expect(VCard.Extension(name: "ß-ﬁ", value: "").name == "SS-FI")
+    #expect(VCard.Extension(name: "ß-ﬁ", value: "").name == "-", "ASCII case folding: never SS-FI")
     #expect(VCard.Extension(name: "水", value: "").name == "")
     var card = VCard(formattedName: "x")
     card.extensions = [VCard.Extension(name: "", value: "empty"), VCard.Extension(name: "SEQ", value: "1"), VCard.Extension(name: "SEQ", value: "2")]
