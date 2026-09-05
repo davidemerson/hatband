@@ -1,5 +1,6 @@
 name: site
 on:
+  workflow_dispatch:
   push:
     paths: ["site/**", "spec/vectors/**"]
   pull_request:

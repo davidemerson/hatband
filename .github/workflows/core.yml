@@ -1,5 +1,6 @@
 name: core
 on:
+  workflow_dispatch:
   push:
     paths: ["Packages/**", "spec/**", ".github/workflows/core.yml"]
   pull_request:

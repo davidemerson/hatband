@@ -1,5 +1,6 @@
 name: ios
 on:
+  workflow_dispatch:
   push:
     paths: [project.yml, "Hatband/**", "HatbandWidgets/**", "Shared/**", "HatbandTests/**", "Packages/**", "spec/vectors/**", "scripts/**", ".github/workflows/ios.yml"]
   pull_request:
