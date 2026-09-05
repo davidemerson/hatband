@@ -1,0 +1,110 @@
+# Single source for the Xcode project. Hatband.xcodeproj, both Info.plist
+# files and both .entitlements files are written by `xcodegen generate` and
+# gitignored. Stage 0: HatbandTests bundles spec/vectors/cards.json.
+name: Hatband
+options:
+  bundleIdPrefix: link.hatband
+  deploymentTarget: { iOS: "26.0" }
+  xcodeVersion: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGN_STYLE: Automatic
+    GENERATE_INFOPLIST_FILE: "NO"
+    MARKETING_VERSION: 0.1.0
+    CURRENT_PROJECT_VERSION: 1
+    ENABLE_USER_SCRIPT_SANDBOXING: "YES"
+    HATBAND_COMMIT: dev
+packages:
+  HatbandCore: { path: Packages/HatbandCore }
+targets:
+  Hatband:
+    type: application
+    platform: iOS
+    sources: [Hatband, Shared]
+    dependencies:
+      - package: HatbandCore
+      - target: HatbandWidgets
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: link.hatband.ios
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: "YES"
+    info:
+      path: Hatband/Info.plist
+      properties:
+        CFBundleDisplayName: Hatband
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIApplicationSceneManifest: { UIApplicationSupportsMultipleScenes: false }
+        NSSupportsLiveActivities: true
+        NSSupportsLiveActivitiesFrequentUpdates: false
+        NSCameraUsageDescription: Hatband uses the camera only to read a card's QR code.
+        NSLocationWhenInUseUsageDescription: When you save a scanned card, Hatband notes roughly where you were. It stays on this phone.
+        NSLocationDefaultAccuracyReduced: true
+        NSFaceIDUsageDescription: Unlock the people you have scanned.
+        LSSupportsOpeningDocumentsInPlace: false
+        HatbandCommit: $(HATBAND_COMMIT)
+        CFBundleURLTypes:
+          - { CFBundleURLName: link.hatband.ios, CFBundleURLSchemes: [hatband], CFBundleTypeRole: Viewer }
+        CFBundleDocumentTypes:
+          - { CFBundleTypeName: Hatband card, LSHandlerRank: Owner, LSItemContentTypes: [link.hatband.card] }
+          - { CFBundleTypeName: Hatband export, LSHandlerRank: Owner, LSItemContentTypes: [link.hatband.export] }
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: link.hatband.card
+            UTTypeDescription: Hatband card
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification: { public.filename-extension: [hatband], public.mime-type: [application/vnd.hatband.card] }
+          - UTTypeIdentifier: link.hatband.export
+            UTTypeDescription: Hatband export
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification: { public.filename-extension: [hatband-export], public.mime-type: [application/vnd.hatband.export] }
+    entitlements:
+      path: Hatband/Hatband.entitlements
+      properties:
+        com.apple.security.application-groups: [group.link.hatband]
+        com.apple.developer.associated-domains: ["applinks:hatband.link"]
+  HatbandWidgets:
+    type: app-extension
+    platform: iOS
+    sources: [HatbandWidgets, Shared]
+    dependencies:
+      - package: HatbandCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: link.hatband.ios.widgets
+        SKIP_INSTALL: "YES"
+    info:
+      path: HatbandWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Hatband
+        NSExtension: { NSExtensionPointIdentifier: com.apple.widgetkit-extension }
+    entitlements:
+      path: HatbandWidgets/HatbandWidgets.entitlements
+      properties:
+        com.apple.security.application-groups: [group.link.hatband]
+  HatbandTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - HatbandTests
+      - { path: spec/vectors/cards.json, buildPhase: resources }
+    dependencies:
+      - target: Hatband
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: link.hatband.ios.tests
+        GENERATE_INFOPLIST_FILE: "YES"
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: "YES"
+schemes:
+  Hatband:
+    build:
+      targets: { Hatband: all, HatbandWidgets: all, HatbandTests: [test] }
+    run: { config: Debug }
+    test: { config: Debug, targets: [HatbandTests] }

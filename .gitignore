@@ -10,6 +10,11 @@ xcuserdata/
 *.dSYM/
 *.ipa
 
+# Written by xcodegen from project.yml
+Hatband/Info.plist
+HatbandWidgets/Info.plist
+*.entitlements
+
 # Site
 node_modules/
 site/dist/

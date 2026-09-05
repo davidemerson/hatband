@@ -1,0 +1,26 @@
+name: ios
+on:
+  push:
+    paths: [project.yml, "Hatband/**", "HatbandWidgets/**", "Shared/**", "HatbandTests/**", "Packages/**", "spec/vectors/**", "scripts/**", ".github/workflows/ios.yml"]
+  pull_request:
+    paths: [project.yml, "Hatband/**", "HatbandWidgets/**", "Shared/**", "HatbandTests/**", "Packages/**", "spec/vectors/**", "scripts/**", ".github/workflows/ios.yml"]
+jobs:
+  test:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - run: xcodebuild -version
+      - run: brew install xcodegen
+      - run: xcodegen generate --spec project.yml
+      - run: >
+          xcodebuild test -project Hatband.xcodeproj -scheme Hatband
+          -destination 'platform=iOS Simulator,name=iPhone 17'
+          CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" HATBAND_COMMIT=${GITHUB_SHA::7}
+          -skipPackagePluginValidation -quiet
+      - name: package allow-list
+        run: |
+          f=Hatband.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          test -f "$f" || exit 0
+          bad=$(jq -r '.pins[].identity' "$f" | grep -vE '^(swift-crypto|swift-asn1)$' || true)
+          [ -z "$bad" ] || { echo "unexpected packages: $bad"; exit 1; }
