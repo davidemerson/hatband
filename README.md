@@ -74,7 +74,7 @@ A card is a CBOR map with small integer keys, encoded deterministically (RFC 894
 | 22 | min reader | uint | |
 | 23 | gpg key | bytes | binary certificate; file and URL only; must hash to key 12 |
 
-Readers ignore unknown keys. Keys 24 and up are reserved. Every form is signed over exactly its own content; a full card is about 256 bytes, the ceiling for any form is 32 KB. Test vectors live in `spec/vectors`.
+Readers ignore unknown keys but carry them through unchanged, so a signature over a newer card still verifies. Keys 24 and up are reserved. Every form is signed over exactly its own content; a full card is about 256 bytes, the ceiling for any form is 32 KB. Test vectors live in `spec/vectors`.
 
 ## Core
 

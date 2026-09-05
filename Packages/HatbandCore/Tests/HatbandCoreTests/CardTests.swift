@@ -67,6 +67,24 @@ private func fullCard() -> Card {
     #expect(decoded.name == "Leopold Bloom")
     #expect(decoded.flags.contains(.compact))
     #expect(decoded.flags.rawValue & (1 << 40) != 0)
+    #expect(decoded.unknown == [99: "future"])
+}
+
+/// Unknown entries ride through a decode and re-encode untouched, so the
+/// canonical bytes, and any signature over them, survive a reader that
+/// predates the key.
+@Test func unknownKeysSurviveRoundTrip() throws {
+    var map = fullCard().cbor.mapValue!
+    map[27] = .bytes([1, 2, 3])
+    map["x-vendor"] = ["a", 1]
+    let bytes = CBOR.map(map).encoded
+    let decoded = try Card(cbor: CBOR.decode(bytes))
+    #expect(decoded.cbor.encoded == bytes)
+    #expect(decoded.unknown.count == 2)
+    var stripped = decoded
+    stripped.unknown = [:]
+    #expect(stripped.cbor.encoded != bytes)
+    #expect(stripped == fullCard())
 }
 
 @Test(arguments: [

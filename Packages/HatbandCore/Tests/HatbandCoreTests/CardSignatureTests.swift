@@ -299,3 +299,19 @@ private func fullCard() -> Card {
     smallOrder.signature = [UInt8](repeating: 0, count: 64)
     #expect(smallOrder.isSigned && !smallOrder.signatureIsValid)
 }
+
+
+/// A newer card may carry keys this reader does not know; its signature
+/// covers them, and verification must still succeed after a round trip.
+@Test func signedCardWithUnknownKeyVerifiesAfterDecode() throws {
+    let identity = try Identity(seed: (0..<32).map { UInt8($0) })
+    var card = Card(personaID: [1, 2, 3, 4, 5, 6, 7, 8], issuedDay: 2438)
+    card.name = "Leopold Bloom"
+    card.unknown = [30: .text("v2 field"), .unsigned(31): .unsigned(7)]
+    let signed = try card.signed(with: identity.personaSigningKey(index: 1))
+    #expect(signed.signatureIsValid)
+    let decoded = try HB1.decode(url: HB1.url(for: signed))
+    #expect(decoded.unknown.count == 2)
+    #expect(decoded.signatureIsValid)
+    #expect(try HB1.decode(file: HB1.fileBytes(for: signed)).signatureIsValid)
+}

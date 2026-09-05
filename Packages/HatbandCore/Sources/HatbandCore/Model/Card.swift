@@ -31,6 +31,10 @@ public struct Card: Sendable, Hashable {
     public var seq: UInt32 = 0
     public var minReader: UInt8?
     public var gpgKey: [UInt8]?
+    /// Map entries this version does not know. Kept verbatim so re-encoding
+    /// reproduces the received map and a newer card's signature still
+    /// verifies; readers ignore their meaning.
+    public var unknown: [CBOR: CBOR] = [:]
 
     public init(personaID: [UInt8], issuedDay: UInt32) {
         self.personaID = personaID
@@ -92,6 +96,7 @@ extension Card {
         put(.seq, seq == 0 ? nil : .unsigned(UInt64(seq)))
         put(.minReader, minReader.map { .unsigned(UInt64($0)) })
         put(.gpgKey, gpgKey.map(CBOR.bytes))
+        for (key, value) in unknown where map[key] == nil { map[key] = value }
         return .map(map)
     }
 
@@ -170,6 +175,8 @@ extension Card {
         seq = UInt32(try unsigned(.seq, max: UInt64(UInt32.max)) ?? 0)
         minReader = try unsigned(.minReader, max: UInt64(UInt8.max)).map(UInt8.init)
         gpgKey = try bytes(.gpgKey)
+        let known = Set(FieldKey.allCases.map { CBOR.unsigned($0.rawValue) })
+        unknown = map.filter { !known.contains($0.key) }
     }
 
     /// Canonical bytes a signature covers: the map without key 15.
