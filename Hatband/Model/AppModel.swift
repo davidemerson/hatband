@@ -32,7 +32,7 @@ import UIKit
     /// Drives the import passphrase sheet.
     var pendingImport: Data?
     var route = Route()
-    /// The forget buffer, kept for `undoWindow`.
+    /// The forget buffer, kept for `undoWindow`; emptied by `lock()`.
     var undo: Person?
     /// Advances on every `forget` and `restoreForgotten`, so an expiry timer
     /// started for an earlier forget never clears a later one.
@@ -45,6 +45,16 @@ import UIKit
     var covered = false
     /// Nil while locked.
     var dbKey: SymmetricKey?
+    /// The signing identity: read from the Keychain by `load()`, set by
+    /// onboarding and restore, dropped by an erase. Held so a card is built
+    /// without a Keychain call; the seed item never prompts.
+    var signingIdentity: Identity?
+    /// The persona-index counter as stored, nil until a persona has been
+    /// added after onboarding: read by `load()`, written through by
+    /// `storePersonaIndex`. `personaIndexKnown` stays false until a read
+    /// has succeeded, so an index is never allotted on a guess.
+    var personaIndexCounter: UInt32?
+    var personaIndexKnown = false
     /// Nil means the App Group container.
     var widgetDirectory: URL?
     var undoWindow: Duration = .seconds(10)
@@ -53,6 +63,12 @@ import UIKit
     private(set) var store: Store?
     var protectedDataAvailable: () -> Bool
     private let makeStore: () throws -> Store
+    /// The activation in flight, shared by a second `.active` that lands
+    /// before it settles, so `load()` cannot run twice.
+    @ObservationIgnored private var activation: Task<Void, Never>?
+    /// The unlock in flight, shared by every caller until it settles, so a
+    /// second tap while the prompt is up does not ask again.
+    @ObservationIgnored private var unlocking: Task<Bool, Never>?
 
     init(keys: any KeyStore, makeStore: @escaping () throws -> Store) {
         self.keys = keys
@@ -86,6 +102,14 @@ import UIKit
         return bytes
     }
 
+    /// Four big-endian bytes, as `storePersonaIndex` writes them; nil for
+    /// anything else.
+    nonisolated static func personaIndex(from data: Data?) -> UInt32? {
+        guard let data, data.count == 4 else { return nil }
+        let bytes = Array(data)
+        return UInt32(bytes[0]) << 24 | UInt32(bytes[1]) << 16 | UInt32(bytes[2]) << 8 | UInt32(bytes[3])
+    }
+
     // MARK: - Lifecycle
 
     func scenePhase(_ phase: ScenePhase) {
@@ -103,17 +127,34 @@ import UIKit
         }
     }
 
+    /// Loads on the first activation; afterwards re-asserts protection,
+    /// reads what a failed Keychain read left behind, and reconciles
+    /// activities. Calls that overlap share one run.
     func activate() async {
+        if let activation {
+            return await activation.value
+        }
+        let task = Task { await self.performActivation() }
+        activation = task
+        await task.value
+        activation = nil
+    }
+
+    private func performActivation() async {
         if store == nil {
             await load()
-        } else {
-            store?.reassertProtection()
-            await reconcileActivities()
+            return
         }
+        store?.reassertProtection()
+        if (phase == .ready && signingIdentity == nil) || !personaIndexKnown {
+            await loadKeychainState()
+        }
+        await reconcileActivities()
     }
 
     /// Opens the store once protected data is available, waiting for the
-    /// notification otherwise, and reads the owner blob.
+    /// notification otherwise, reads the Keychain items that never prompt,
+    /// and reads the owner blob.
     func load() async {
         guard protectedDataAvailable() else {
             phase = .protectedDataUnavailable
@@ -122,6 +163,8 @@ import UIKit
         }
         do {
             let store = try openStore()
+            // Before `.ready`, so the Card tab never draws without them.
+            await loadKeychainState()
             if let record = try store.owner() {
                 let owner = try OwnerCodec.decode(Array(record.blob))
                 profile = owner.profile
@@ -148,11 +191,42 @@ import UIKit
         performDeferredOpen()
     }
 
-    /// Reads the database key, prompting when app lock is on, and decrypts
-    /// every person. False, with `error` set, when that fails.
-    func unlock() async -> Bool {
+    /// Reads the seed and the persona-index counter into memory. A failed
+    /// read is logged, not fatal: `identity()` and `storedPersonaIndex()`
+    /// throw until `activate()` reads again.
+    func loadKeychainState() async {
         do {
-            guard let data = try keys.read(KeyName.database, prompt: "Unlock the people you have scanned.") else {
+            let data = try await keys.read(KeyName.seed, prompt: nil)
+            signingIdentity = try data.map { try Identity(seed: Array($0)) }
+        } catch {
+            Log.failure("read seed", error)
+        }
+        do {
+            let data = try await keys.read(KeyName.personaIndex, prompt: nil)
+            personaIndexCounter = AppModel.personaIndex(from: data)
+            personaIndexKnown = true
+        } catch {
+            Log.failure("read persona index", error)
+        }
+    }
+
+    /// Reads the database key, prompting when app lock is on, and decrypts
+    /// every person. False, with `error` set, when that fails. Calls that
+    /// overlap share one prompt and one answer.
+    func unlock() async -> Bool {
+        if let unlocking {
+            return await unlocking.value
+        }
+        let task = Task { await self.performUnlock() }
+        unlocking = task
+        let unlocked = await task.value
+        unlocking = nil
+        return unlocked
+    }
+
+    private func performUnlock() async -> Bool {
+        do {
+            guard let data = try await keys.read(KeyName.database, prompt: "Unlock the people you have scanned.") else {
                 throw AppError.storage("No database key")
             }
             let key = SymmetricKey(data: data)
@@ -175,11 +249,14 @@ import UIKit
         }
     }
 
-    /// No-op when app lock is off.
+    /// No-op when app lock is off. The forget buffer goes with the people:
+    /// a decrypted person does not outlive the lock.
     func lock() {
         guard settings.appLock else { return }
         dbKey = nil
         people = []
+        undo = nil
+        undoGeneration += 1
         locked = true
     }
 
@@ -195,6 +272,7 @@ import UIKit
         let key = SymmetricKey(size: .bits256)
         let keyData = key.withUnsafeBytes { Data($0) }
         try keys.write(KeyName.database, keyData, access: .database(appLock: appLock, includeInBackup: false))
+        signingIdentity = identity
         let persona = Persona(id: AppModel.randomPersonaID(), label: "Personal", keyIndex: 0, color: 1,
                               channels: profile.presentChannels)
         var settings = Settings()
@@ -225,9 +303,11 @@ import UIKit
         store.reassertProtection()
     }
 
+    /// The identity `load()` read, or onboarding or a restore set. Throws
+    /// until then.
     func identity() throws -> Identity {
-        guard let data = try keys.read(KeyName.seed, prompt: nil) else { throw AppError.storage("No identity") }
-        return try Identity(seed: Array(data))
+        guard let signingIdentity else { throw AppError.storage("No identity") }
+        return signingIdentity
     }
 
     /// The database key, unlocking first when needed. `.cancelled` when
@@ -241,7 +321,8 @@ import UIKit
     }
 
     /// After `store.erase()`: drops the store, removes its directory and
-    /// resets every piece of state.
+    /// resets every piece of state. The Keychain items are gone, so the
+    /// counter is known to be absent.
     func resetAfterErase() {
         let directory = store?.directory
         store = nil
@@ -264,6 +345,9 @@ import UIKit
         error = nil
         covered = false
         dbKey = nil
+        signingIdentity = nil
+        personaIndexCounter = nil
+        personaIndexKnown = true
         phase = .onboarding
     }
 

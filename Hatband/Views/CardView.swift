@@ -9,6 +9,9 @@ import SwiftUI
     @Environment(\.scenePhase) private var scenePhase
     /// Read from `Screen.isCaptured` on appear and on every scene change.
     @State private var captured = false
+    /// Between `onAppear` and `onDisappear`: the tab on screen, so a scene
+    /// change should touch the brightness.
+    @State private var visible = false
     /// The signed card, its code and the file share, rebuilt only when
     /// `renderKey` changes: Ed25519 signatures are randomised, so signing
     /// on every body evaluation would redraw a different code each time.
@@ -60,14 +63,24 @@ import SwiftUI
             }
         }
         .onAppear {
+            visible = true
             captured = Screen.isCaptured
             Screen.raiseBrightness()
         }
         .onDisappear {
+            visible = false
             Screen.restoreBrightness()
         }
-        .onChange(of: scenePhase) { _, _ in
+        .onChange(of: scenePhase) { _, phase in
             captured = Screen.isCaptured
+            switch CardView.backlight(for: phase, visible: visible) {
+            case .raise?:
+                Screen.raiseBrightness()
+            case .restore?:
+                Screen.restoreBrightness()
+            case nil:
+                break
+            }
         }
         .onChange(of: renderKey, initial: true) { _, _ in
             shown = rendered()
@@ -248,6 +261,28 @@ import SwiftUI
                             fileURL: HB1.url(for: file), fileBytes: HB1.fileBytes(for: file), problem: nil)
         } catch {
             return Rendered(problem: AppError(error).message)
+        }
+    }
+
+    nonisolated enum Backlight: Equatable {
+        case raise, restore
+    }
+
+    /// What a scene change does to the screen's backlight while this tab
+    /// is on screen: raised again on `.active`, since the background let
+    /// it go; let go on `.background`; left alone on `.inactive`, which
+    /// also precedes a Face ID prompt. Nothing while another tab shows.
+    nonisolated static func backlight(for phase: ScenePhase, visible: Bool) -> Backlight? {
+        guard visible else { return nil }
+        switch phase {
+        case .active:
+            return .raise
+        case .background:
+            return .restore
+        case .inactive:
+            return nil
+        @unknown default:
+            return nil
         }
     }
 

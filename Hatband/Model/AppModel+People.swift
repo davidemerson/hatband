@@ -95,9 +95,14 @@ extension AppModel {
         route.tab = .card
     }
 
-    /// Re-seals and saves an edited person.
+    /// Re-seals and saves an edited person. Refused for one no longer in
+    /// `people`: an answer that arrives after a Forget must not put the
+    /// record back.
     func update(_ person: Person) throws {
         guard let key = dbKey else { throw AppError.storage("Unlock first.") }
+        guard people.contains(where: { $0.personaID == person.personaID }) else {
+            throw AppError.storage("This person is no longer on your phone.")
+        }
         var updated = person
         updated.updatedAt = AppModel.wholeSecondsNow()
         try persist(updated, key: key)

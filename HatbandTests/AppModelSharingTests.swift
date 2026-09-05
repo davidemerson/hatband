@@ -138,9 +138,11 @@ import Testing
         let before = Date()
         do {
             try await model.startSharing(persona: persona, minutes: 30)
-        } catch is ActivityAuthorizationError {
+        } catch is AppError {
             // The simulator reports activities enabled, but the test host
-            // may still be refused; there is nothing to prove then.
+            // may still be refused; there is nothing to prove then but
+            // that no session was left behind.
+            #expect(model.sharing == nil)
             return
         }
         let sharing = try #require(model.sharing)
@@ -155,5 +157,71 @@ import Testing
         #expect(model.sharing == nil)
         await model.reconcileActivities()
         #expect(model.sharing == nil)
+    }
+
+    /// A refusal from ActivityKit lands after the previous session has
+    /// been ended, so nothing is sharing any more: `sharing` is nil, the
+    /// duration is not saved, and the error is a sentence. A request that
+    /// goes through sets both.
+    @Test func refusedRequestLeavesNoSharing() async throws {
+        let model = try await onboarded()
+        let persona = try #require(model.personas.first)
+        defer { AppModel.activityRequest = nil }
+        model.sharing = AppModel.Sharing(personaID: persona.id, endsAt: Date().addingTimeInterval(600))
+        AppModel.activityRequest = { _, _ in throw ActivityAuthorizationError.denied }
+        await #expect(throws: AppError.activitiesDisabled) {
+            try await model.startSharing(persona: persona, minutes: 30)
+        }
+        #expect(model.sharing == nil)
+        #expect(model.settings.durationMinutes == 120)
+
+        model.sharing = AppModel.Sharing(personaID: persona.id, endsAt: Date().addingTimeInterval(600))
+        AppModel.activityRequest = { _, _ in throw ActivityAuthorizationError.targetMaximumExceeded }
+        await #expect(throws: AppError.storage("Too many Live Activities are running. End one and try again.")) {
+            try await model.startSharing(persona: persona, minutes: 30)
+        }
+        #expect(model.sharing == nil)
+
+        var requested: [HatbandAttributes.ContentState] = []
+        AppModel.activityRequest = { _, state in requested.append(state) }
+        let before = Date()
+        try await model.startSharing(persona: persona, minutes: 30)
+        let sharing = try #require(model.sharing)
+        #expect(sharing.personaID == persona.id)
+        #expect(sharing.endsAt >= before.addingTimeInterval(30 * 60))
+        #expect(requested.count == 1)
+        #expect(requested.first?.endsAt == sharing.endsAt)
+        #expect(model.settings.durationMinutes == 30)
+    }
+
+    /// Every ActivityKit refusal reads as one line for the alert, never as
+    /// the case name or a description; other errors map as they always did.
+    @Test func sharingErrorsReadAsSentences() {
+        #expect(AppModel.sharingError(ActivityAuthorizationError.denied) == .activitiesDisabled)
+        #expect(AppModel.sharingError(ActivityAuthorizationError.unsupported)
+            == .storage("Live Activities are not available on this iPhone."))
+        #expect(AppModel.sharingError(ActivityAuthorizationError.unentitled)
+            == .storage("Live Activities are not available on this iPhone."))
+        #expect(AppModel.sharingError(ActivityAuthorizationError.attributesTooLarge)
+            == .storage("The card is too large for the Lock Screen."))
+        #expect(AppModel.sharingError(ActivityAuthorizationError.globalMaximumExceeded)
+            == .storage("Too many Live Activities are running. End one and try again."))
+        #expect(AppModel.sharingError(ActivityAuthorizationError.visibility)
+            == .storage("Bring Hatband to the front and try again."))
+        #expect(AppModel.sharingError(ActivityAuthorizationError.persistenceFailure)
+            == .storage("The Lock Screen card could not start. Try again."))
+        #expect(AppModel.sharingError(AppError.tooBigForLockScreen) == .tooBigForLockScreen)
+        #expect(AppModel.sharingError(KeyStoreError.cancelled) == .cancelled)
+        let refusals: [ActivityAuthorizationError] = [
+            .denied, .unsupported, .unentitled, .unsupportedTarget, .attributesTooLarge, .globalMaximumExceeded,
+            .targetMaximumExceeded, .visibility, .persistenceFailure, .reconnectNotPermitted,
+            .malformedActivityIdentifier, .missingProcessIdentifier,
+        ]
+        for refusal in refusals {
+            let message = AppModel.sharingError(refusal).message
+            #expect(message.hasSuffix("."))
+            #expect(!message.contains("Error"))
+            #expect(!message.contains(String(describing: refusal)))
+        }
     }
 }

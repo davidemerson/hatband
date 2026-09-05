@@ -94,6 +94,7 @@ extension AppModel {
         let key = SymmetricKey(size: .bits256)
         let keyData = key.withUnsafeBytes { Data($0) }
         try keys.write(KeyName.seed, Data(identity.seed), access: .seed)
+        signingIdentity = identity
         try keys.write(KeyName.database, keyData,
                        access: .database(appLock: owner.settings.appLock, includeInBackup: owner.settings.includeInBackup))
         // The counter travels with the seed, so an index a deleted persona
@@ -174,7 +175,7 @@ extension AppModel {
     /// access, then persists the setting.
     func setAppLock(_ on: Bool) async throws {
         do {
-            let data = try readDatabaseKeyWithPrompt()
+            let data = try await readDatabaseKeyWithPrompt()
             try keys.write(KeyName.database, data, access: .database(appLock: on, includeInBackup: settings.includeInBackup))
             settings.appLock = on
             try saveOwner()
@@ -186,7 +187,7 @@ extension AppModel {
     /// As `setAppLock`, and the store follows the choice.
     func setIncludeInBackup(_ on: Bool) async throws {
         do {
-            let data = try readDatabaseKeyWithPrompt()
+            let data = try await readDatabaseKeyWithPrompt()
             try keys.write(KeyName.database, data, access: .database(appLock: settings.appLock, includeInBackup: on))
             settings.includeInBackup = on
             try saveOwner()
@@ -237,8 +238,8 @@ extension AppModel {
 
     // MARK: - Private
 
-    private func readDatabaseKeyWithPrompt() throws -> Data {
-        guard let data = try keys.read(KeyName.database, prompt: AppModel.protectionPrompt) else {
+    private func readDatabaseKeyWithPrompt() async throws -> Data {
+        guard let data = try await keys.read(KeyName.database, prompt: AppModel.protectionPrompt) else {
             throw AppError.storage("No database key")
         }
         return data

@@ -1,6 +1,7 @@
 import Foundation
 import HatbandCore
 import Testing
+import UIKit
 @testable import Hatband
 
 /// Runtime paths the simulator suite did not reach: an open that lands
@@ -200,6 +201,170 @@ import Testing
         // The content a refreshed activity would carry follows the setting.
         let content = try model.sharingContent(for: persona, minutes: 30, now: Date())
         #expect(content.state.name == nil)
+    }
+
+    // MARK: - Lifecycle
+
+    /// Two `.active` phases before the first has settled, as a cold launch
+    /// under a system prompt produces, share one load: one store is made.
+    @Test func overlappingActivationsLoadOnce() async throws {
+        var stores = 0
+        let model = AppModel(keys: MemoryKeyStore(), makeStore: {
+            stores += 1
+            return try Store.inMemory()
+        })
+        model.protectedDataAvailable = { false }
+        let first = Task { await model.activate() }
+        let second = Task { await model.activate() }
+        var spins = 0
+        while model.phase != .protectedDataUnavailable, spins < 1000 {
+            await Task.yield()
+            spins += 1
+        }
+        #expect(model.phase == .protectedDataUnavailable)
+        model.protectedDataAvailable = { true }
+        NotificationCenter.default.post(name: UIApplication.protectedDataDidBecomeAvailableNotification, object: nil)
+        await first.value
+        await second.value
+        #expect(stores == 1)
+        #expect(model.phase == .onboarding)
+        #expect(model.store != nil)
+        // With the store open, a later activation reconciles and loads no more.
+        await model.activate()
+        #expect(stores == 1)
+        #expect(model.phase == .onboarding)
+    }
+
+    /// Two unlocks while the prompt is up share it: one prompt, one answer.
+    @Test func overlappingUnlocksShareOnePrompt() async throws {
+        let model = try await onboarded(appLock: true)
+        let keys = try #require(model.keys as? MemoryKeyStore)
+        model.lock()
+        keys.readDelay = .milliseconds(50)
+        let first = Task { await model.unlock() }
+        let second = Task { await model.unlock() }
+        let results = await [first.value, second.value]
+        #expect(results == [true, true])
+        #expect(keys.prompts == ["Unlock the people you have scanned."])
+        #expect(!model.locked)
+        #expect(model.dbKey != nil)
+    }
+
+    /// The forget buffer holds a decrypted person; the lock empties it,
+    /// and the forget stands. Without app lock there is nothing to empty.
+    @Test func lockDropsTheUndoBuffer() async throws {
+        let sharer = try await onboarded()
+        let scanner = try await onboarded(name: "Henry Flower", appLock: true)
+        scanner.undoWindow = .seconds(5)
+        let person = try await scanAndSave(scanner, try signedLink(from: sharer))
+        try scanner.forget(person)
+        #expect(scanner.undo == person)
+        scanner.lock()
+        #expect(scanner.undo == nil)
+        #expect(scanner.people.isEmpty)
+        try scanner.restoreForgotten()
+        #expect(scanner.undo == nil)
+        #expect(await scanner.unlock())
+        #expect(scanner.people.isEmpty)
+        #expect(try scanner.store?.people().isEmpty == true)
+
+        let open = try await onboarded(name: "Molly")
+        open.undoWindow = .seconds(5)
+        let other = try await scanAndSave(open, try signedLink(from: sharer))
+        try open.forget(other)
+        open.lock()
+        #expect(!open.locked)
+        #expect(open.undo == other)
+    }
+
+    /// The identity is read once, at load, never through a prompt, and is
+    /// in hand before `.ready`; building a card reads nothing more.
+    @Test func identityIsReadAtLoadWithoutAPrompt() async throws {
+        let model = try await onboarded(appLock: true)
+        let keys = try #require(model.keys as? MemoryKeyStore)
+        var reads: [String] = []
+        keys.onEvent = { event in
+            if event.hasPrefix("read ") {
+                reads.append(event)
+            }
+        }
+        let again = try relaunched(model)
+        #expect(throws: AppError.self) {
+            try again.identity()
+        }
+        await again.load()
+        #expect(again.phase == .ready)
+        #expect(try again.identity() == model.identity())
+        #expect(reads == ["read seed", "read persona-index"])
+        #expect(keys.prompts.isEmpty)
+        let persona = try #require(again.personas.first)
+        #expect(try again.card(for: persona, form: .fullQR).signatureIsValid)
+        #expect(reads.count == 2)
+    }
+
+    /// A seed the Keychain would not give at load is said on the Card tab,
+    /// not as an alert, and read again at the next activation.
+    @Test func failedSeedReadIsRetriedOnActivation() async throws {
+        let model = try await onboarded(appLock: true)
+        let keys = try #require(model.keys as? MemoryKeyStore)
+        let again = try relaunched(model)
+        keys.failNextRead = .notAvailable
+        await again.load()
+        #expect(again.phase == .ready)
+        #expect(again.error == nil)
+        #expect(throws: AppError.storage("No identity")) {
+            try again.identity()
+        }
+        await again.activate()
+        #expect(try again.identity() == model.identity())
+    }
+
+    /// A counter the Keychain would not give is never guessed: adding a
+    /// persona waits for a read that succeeds, so no index is reused.
+    @Test func unreadPersonaCounterRefusesToAllot() async throws {
+        let model = try await onboarded()
+        _ = try model.addPersona(label: "Work", alias: false)
+        let keys = try #require(model.keys as? MemoryKeyStore)
+        #expect(keys.items[KeyName.personaIndex]?.data == Data([0, 0, 0, 2]))
+        let again = try relaunched(model)
+        keys.onEvent = { event in
+            if event == "read persona-index" {
+                keys.failNextRead = .notAvailable
+            }
+        }
+        await again.load()
+        keys.onEvent = nil
+        #expect(again.phase == .ready)
+        #expect(!again.locked)
+        #expect(!again.personaIndexKnown)
+        #expect(throws: AppError.self) {
+            try again.addPersona(label: "Club", alias: false)
+        }
+        #expect(again.personas.count == 2)
+        await again.activate()
+        #expect(again.personaIndexKnown)
+        #expect(again.personaIndexCounter == 2)
+        #expect(try again.addPersona(label: "Club", alias: false).keyIndex == 2)
+        #expect(keys.items[KeyName.personaIndex]?.data == Data([0, 0, 0, 3]))
+    }
+
+    /// A Keychain write that fails leaves the key and the setting as they
+    /// were, on this launch and the next.
+    @Test func failedKeyRewriteChangesNothing() async throws {
+        let model = try await onboarded(appLock: true)
+        let keys = try #require(model.keys as? MemoryKeyStore)
+        let before = try #require(keys.items[KeyName.database])
+        keys.failNextWrite = .failed(-25299)
+        await #expect(throws: AppError.keychain(-25299)) {
+            try await model.setAppLock(false)
+        }
+        #expect(keys.items[KeyName.database]?.data == before.data)
+        #expect(keys.items[KeyName.database]?.access == before.access)
+        #expect(model.settings.appLock)
+        let again = try relaunched(model)
+        await again.load()
+        #expect(again.settings.appLock)
+        #expect(again.locked)
     }
 }
 

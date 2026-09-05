@@ -22,13 +22,28 @@ import UIKit
                                    description: Text("This person is no longer on your phone."))
         }
     }
+
+    /// Edits are committed as the scene leaves the foreground: at
+    /// `.inactive`, which comes before `.background` and the lock that
+    /// empties `people`, and again at `.background` for good measure.
+    nonisolated static func commitsEdits(entering phase: ScenePhase) -> Bool {
+        phase != .active
+    }
+
+    /// Whether a fetch that has just come back may be shown and stored: only
+    /// while unlocked and while the person is still on the phone. A lock or
+    /// a Forget during the fetch drops the answer.
+    nonisolated static func keepsFetchResult(locked: Bool, people: [Person], personID: String) -> Bool {
+        !locked && people.contains { $0.id == personID }
+    }
 }
 
-/// Holds the editable copy; commits on submit, on leaving, and on every
-/// action that is not typing.
+/// Holds the editable copy; commits on submit, on leaving, when the scene
+/// leaves the foreground, and on every action that is not typing.
 @MainActor private struct PersonDetail: View {
     let person: Person
     @Environment(AppModel.self) private var model
+    @Environment(\.scenePhase) private var scenePhase
     @State private var edited: Person
     @State private var newTag = ""
     @State private var busy: FetchTarget.Kind?
@@ -60,6 +75,11 @@ import UIKit
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear {
             commit()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if PersonView.commitsEdits(entering: phase) {
+                commit()
+            }
         }
         .sheet(isPresented: $showingContact) {
             UnknownContactView(person: person, met: person.encounters.first?.date)
@@ -381,12 +401,16 @@ import UIKit
 
     // MARK: - Actions
 
+    /// The answer is dropped, unshown and unstored, when a lock or a
+    /// Forget happened while it was out.
     private func fetch(_ target: FetchTarget, check: @escaping @MainActor (Data) -> String) {
         busy = target.kind
         Task {
             do {
                 let data = try await ExplicitFetch.get(target)
-                messages.append(check(data))
+                if PersonView.keepsFetchResult(locked: model.locked, people: model.people, personID: person.id) {
+                    messages.append(check(data))
+                }
             } catch {
                 messages.append("\(target.host): \(PersonDetail.describe(error))")
             }
@@ -394,10 +418,14 @@ import UIKit
         }
     }
 
+    /// Only onto the person as they are now: still on the phone, still
+    /// without a key.
     private func store(_ bytes: [UInt8]) {
-        guard person.gpgKey == nil else { return }
+        guard !model.locked, let current = model.people.first(where: { $0.id == person.id }), current.gpgKey == nil else {
+            return
+        }
         do {
-            try model.storeVerifiedGPGKey(bytes, for: model.people.first { $0.id == person.id } ?? person)
+            try model.storeVerifiedGPGKey(bytes, for: current)
         } catch {
             model.error = AppError(error)
         }

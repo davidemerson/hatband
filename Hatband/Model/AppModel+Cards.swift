@@ -9,17 +9,19 @@ extension AppModel {
     static let personaIndexKey = KeyName.personaIndex
 
     /// The stored counter, four big-endian bytes; nil until a persona has
-    /// been added after onboarding.
+    /// been added after onboarding. Read once by `load()` and held; throws
+    /// while that read has not succeeded.
     func storedPersonaIndex() throws -> UInt32? {
-        guard let data = try keys.read(AppModel.personaIndexKey, prompt: nil), data.count == 4 else { return nil }
-        let bytes = Array(data)
-        return UInt32(bytes[0]) << 24 | UInt32(bytes[1]) << 16 | UInt32(bytes[2]) << 8 | UInt32(bytes[3])
+        guard personaIndexKnown else { throw AppError.storage("The persona counter could not be read. Try again.") }
+        return personaIndexCounter
     }
 
     func storePersonaIndex(_ next: UInt32) throws {
         let data = Data([UInt8(next >> 24 & 0xFF), UInt8(next >> 16 & 0xFF),
                          UInt8(next >> 8 & 0xFF), UInt8(next & 0xFF)])
         try keys.write(AppModel.personaIndexKey, data, access: .seed)
+        personaIndexCounter = next
+        personaIndexKnown = true
     }
 
     /// One past the highest index in use or ever handed out: what the next

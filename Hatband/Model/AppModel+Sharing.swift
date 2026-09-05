@@ -9,6 +9,10 @@ import WidgetKit
 extension AppModel {
     /// Test hook, nil in production: fires after every widget reload.
     static var onWidgetReload: (() -> Void)?
+    /// Test hook, nil in production: stands in for ActivityKit's request
+    /// and its authorization check, so the paths after a refusal run
+    /// without a Lock Screen.
+    static var activityRequest: (@MainActor (HatbandAttributes, HatbandAttributes.ContentState) throws -> Void)?
 
     /// The ActivityKit-free half of `startSharing`: the compact card as a
     /// URL, the name when shown, and the end time.
@@ -21,18 +25,54 @@ extension AppModel {
     }
 
     /// Requests the Live Activity for `minutes`, ending any other first.
+    /// Once the other has ended, `sharing` is nil until the request
+    /// succeeds: a refusal leaves no session behind, and reads as a
+    /// sentence rather than ActivityKit's description.
     func startSharing(persona: Persona, minutes: Int) async throws {
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { throw AppError.activitiesDisabled }
+        guard AppModel.activityRequest != nil || ActivityAuthorizationInfo().areActivitiesEnabled else {
+            throw AppError.activitiesDisabled
+        }
         let content = try sharingContent(for: persona, minutes: minutes, now: Date())
         await ActivityDriver.endAll()
-        _ = try Activity<HatbandAttributes>.request(
-            attributes: content.attributes,
-            content: ActivityContent(state: content.state, staleDate: content.state.endsAt, relevanceScore: 100),
-            pushType: nil)
+        sharing = nil
+        do {
+            if let request = AppModel.activityRequest {
+                try request(content.attributes, content.state)
+            } else {
+                _ = try Activity<HatbandAttributes>.request(
+                    attributes: content.attributes,
+                    content: ActivityContent(state: content.state, staleDate: content.state.endsAt, relevanceScore: 100),
+                    pushType: nil)
+            }
+        } catch {
+            throw AppModel.sharingError(error)
+        }
         sharing = Sharing(personaID: persona.id, endsAt: content.state.endsAt)
         if settings.durationMinutes != minutes {
             settings.durationMinutes = minutes
             try saveOwner()
+        }
+    }
+
+    /// ActivityKit's refusals as one line each; anything else through
+    /// `AppError.init`.
+    nonisolated static func sharingError(_ error: any Error) -> AppError {
+        guard let refusal = error as? ActivityAuthorizationError else { return AppError(error) }
+        switch refusal {
+        case .denied:
+            return .activitiesDisabled
+        case .unsupported, .unentitled, .unsupportedTarget:
+            return .storage("Live Activities are not available on this iPhone.")
+        case .attributesTooLarge:
+            return .storage("The card is too large for the Lock Screen.")
+        case .globalMaximumExceeded, .targetMaximumExceeded:
+            return .storage("Too many Live Activities are running. End one and try again.")
+        case .visibility:
+            return .storage("Bring Hatband to the front and try again.")
+        case .persistenceFailure, .reconnectNotPermitted, .malformedActivityIdentifier, .missingProcessIdentifier:
+            return .storage("The Lock Screen card could not start. Try again.")
+        @unknown default:
+            return .storage("The Lock Screen card could not start. Try again.")
         }
     }
 

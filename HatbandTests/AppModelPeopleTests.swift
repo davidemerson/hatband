@@ -378,6 +378,38 @@ import Testing
         #expect(scanner.people.isEmpty)
     }
 
+    /// An answer that comes back after a Forget must not put the record
+    /// back, and one that comes back after a lock has no key to seal with.
+    @Test func updateAfterForgetOrLockIsRefused() async throws {
+        let certificate = syntheticV4Certificate()
+        let sharer = try await onboarded { $0.gpgFingerprint = certificate.fingerprint }
+        let scanner = try await onboarded(name: "Henry Flower", email: "henry@flower.ie", appLock: true)
+        scanner.undoWindow = .seconds(5)
+        try await scanAndSave(scanner, try signedURL(from: sharer))
+        let person = try #require(scanner.people.first)
+        try scanner.forget(person)
+        #expect(throws: AppError.storage("This person is no longer on your phone.")) {
+            try scanner.storeVerifiedGPGKey(certificate.packet, for: person)
+        }
+        var edited = person
+        edited.note = "late"
+        #expect(throws: AppError.storage("This person is no longer on your phone.")) {
+            try scanner.update(edited)
+        }
+        #expect(scanner.people.isEmpty)
+        #expect(try scanner.store?.people().isEmpty == true)
+        try scanner.restoreForgotten()
+        #expect(scanner.people == [person])
+
+        scanner.lock()
+        #expect(throws: AppError.storage("Unlock first.")) {
+            try scanner.storeVerifiedGPGKey(certificate.packet, for: person)
+        }
+        #expect(await scanner.unlock())
+        #expect(scanner.people.first?.gpgKey == nil)
+        #expect(scanner.people.first?.note == "")
+    }
+
     // MARK: - Index and re-sealing
 
     @Test func searchAndTags() async throws {
