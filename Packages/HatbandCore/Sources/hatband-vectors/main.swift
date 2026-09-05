@@ -139,7 +139,13 @@ func jsonMap(_ value: CBOR) -> String {
     return render(value)
 }
 
-var out = "{\n  \"format\": \"HB1\",\n  \"version\": 1,\n  \"urlPrefix\": " + jsonString(HB1.urlPrefix) + ",\n  \"fileMagic\": \"" + hex(HB1.fileMagic) + "\",\n  \"identitySeed\": \"" + hex(seed) + "\",\n  \"signingDomain\": " + jsonString("hatband-card-v1") + ",\n  \"vectors\": [\n"
+// Plain appends: one long `+` chain is too slow for the type checker.
+var out = "{\n  \"format\": \"HB1\",\n  \"version\": 1,\n"
+out += "  \"urlPrefix\": " + jsonString(HB1.urlPrefix) + ",\n"
+out += "  \"fileMagic\": \"" + hex(HB1.fileMagic) + "\",\n"
+out += "  \"identitySeed\": \"" + hex(seed) + "\",\n"
+out += "  \"signingDomain\": " + jsonString("hatband-card-v1") + ",\n"
+out += "  \"vectors\": [\n"
 for (i, v) in vectors.enumerated() {
     var card = v.card
     if let index = v.keyIndex {
@@ -162,8 +168,12 @@ for (i, v) in vectors.enumerated() {
     ]
     if let key = card.publicKey { fields.append(("publicKey", "\"" + hex(key) + "\"")) }
     if let sig = card.signature { fields.append(("signature", "\"" + hex(sig) + "\"")) }
-    fields.append(("budget", "{\"bytes\":\(cbor.count),\"qrVersion\":\(Budget(card: card).version.map(String.init) ?? "null")}"))
-    out += "    {\n" + fields.map { "      " + jsonString($0.0) + ": " + $0.1 }.joined(separator: ",\n") + "\n    }" + (i == vectors.count - 1 ? "\n" : ",\n")
+    let version = Budget(card: card).version.map(String.init) ?? "null"
+    fields.append(("budget", "{\"bytes\":\(cbor.count),\"qrVersion\":\(version)}"))
+    let body = fields.map { "      " + jsonString($0.0) + ": " + $0.1 }.joined(separator: ",\n")
+    out += "    {\n"
+    out += body
+    out += i == vectors.count - 1 ? "\n    }\n" : "\n    },\n"
 }
 out += "  ]\n}\n"
 print(out, terminator: "")
