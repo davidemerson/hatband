@@ -101,4 +101,48 @@ import Testing
         #expect(model.store == nil)
         #expect(model.phase == .onboarding)
     }
+
+    /// The next onboarding recreates the directory; it must start outside
+    /// backups at once, not at the next launch.
+    @Test func reonboardAfterEraseExcludesStoreFromBackup() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Erase-" + UUID().uuidString, isDirectory: true)
+        defer { Store.removeDirectory(at: directory) }
+        let model = AppModel(keys: MemoryKeyStore(), makeStore: { try Store.onDisk(at: directory) })
+        model.protectedDataAvailable = { true }
+        await model.load()
+        try model.finishOnboarding(profile: sampleProfile(), appLock: false)
+        await model.eraseEverything()
+        #expect(!FileManager.default.fileExists(atPath: directory.path))
+        try model.finishOnboarding(profile: sampleProfile(), appLock: false)
+        #expect(FileManager.default.fileExists(atPath: directory.path))
+        let values = try URL(fileURLWithPath: directory.path).resourceValues(forKeys: [.isExcludedFromBackupKey])
+        #expect(values.isExcludedFromBackup == true)
+    }
+
+    /// The Home Screen widget keeps its last entry until WidgetKit is
+    /// told; erase tells it once the feed is gone.
+    @Test func eraseReloadsWidgetAfterRemovingFeed() async throws {
+        let (model, _) = try await onboarded()
+        try model.setHomeWidget(true)
+        let directory = try #require(model.widgetDirectory)
+        let path = WidgetFeed.fileURL(in: directory).path
+        #expect(FileManager.default.fileExists(atPath: path))
+        var feedPresentAtReload: [Bool] = []
+        AppModel.onWidgetReload = { feedPresentAtReload.append(FileManager.default.fileExists(atPath: path)) }
+        defer { AppModel.onWidgetReload = nil }
+        await model.eraseEverything()
+        #expect(feedPresentAtReload == [false])
+    }
+
+    /// A file written for the share sheet (a card, a vCard, an export)
+    /// does not outlive an erase.
+    @Test func eraseSweepsSharedFiles() async throws {
+        let (model, _) = try await onboarded()
+        let shared = try TransferredFiles.write([0x42, 0x45, 0x47, 0x49, 0x4E], name: "someone.vcf")
+        #expect(FileManager.default.fileExists(atPath: shared.path))
+        await model.eraseEverything()
+        #expect(!FileManager.default.fileExists(atPath: shared.path))
+        #expect(!FileManager.default.fileExists(atPath: shared.deletingLastPathComponent().path))
+    }
 }

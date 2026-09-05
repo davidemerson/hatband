@@ -108,6 +108,17 @@ struct LinksTests {
         #expect(Links.domain(of: "tel:+1") == nil)
     }
 
+    @Test func metNoteNamesTheDayNotThePlace() {
+        let encounter = Encounter(id: UUID(), date: Date(timeIntervalSince1970: 1_781_568_000),
+                                  fix: Fix(latitude: 53.34, longitude: -6.26, accuracy: 5000),
+                                  label: "Davy Byrne's", note: "Gorgonzola")
+        let note = Links.metNote(for: encounter)
+        #expect(note.hasPrefix("Met "))
+        #expect(!note.contains("Davy"))
+        #expect(!note.contains("Gorgonzola"))
+        #expect(!note.contains("53"))
+    }
+
     @Test func vcardParsesBack() throws {
         let card = try Vectors.card("typical-signed")
         let person = Person(personaID: card.personaID, cardBytes: try Vectors.cbor("typical-signed"), card: card,

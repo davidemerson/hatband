@@ -74,6 +74,7 @@ import SwiftUI
         }
         .sheet(item: cardSheet) { which in
             presented(which)
+                .privacyCovered()
         }
     }
 

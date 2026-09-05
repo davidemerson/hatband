@@ -7,6 +7,9 @@ import WidgetKit
 /// inside `ActivityDriver`, off the main actor; the model only ever sees
 /// persona ids and dates.
 extension AppModel {
+    /// Test hook, nil in production: fires after every widget reload.
+    static var onWidgetReload: (() -> Void)?
+
     /// The ActivityKit-free half of `startSharing`: the compact card as a
     /// URL, the name when shown, and the end time.
     func sharingContent(for persona: Persona, minutes: Int, now: Date) throws
@@ -84,7 +87,19 @@ extension AppModel {
         } else {
             WidgetFeed.remove(from: directory)
         }
+        reloadWidgetTimelines()
+    }
+
+    /// Removes the feed and tells WidgetKit, so a widget on a `.never`
+    /// policy stops showing a card the phone no longer holds.
+    func clearWidget() {
+        WidgetFeed.remove(from: widgetDirectory ?? WidgetFeed.container)
+        reloadWidgetTimelines()
+    }
+
+    private func reloadWidgetTimelines() {
         WidgetCenter.shared.reloadTimelines(ofKind: WidgetFeed.kind)
+        AppModel.onWidgetReload?()
     }
 
     /// The compact card as Lock Screen content. `.tooBigForLockScreen`

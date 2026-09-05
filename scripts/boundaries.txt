@@ -14,3 +14,4 @@ openURL|UIApplication\.shared\.open	Hatband/Views/PersonView.swift Hatband/Views
 CNContactStore\(	Hatband/Views/UnknownContactView.swift
 UserDefaults|@AppStorage|@SceneStorage|modificationDate|creationDate|attributesOfItem	-
 CoreSpotlight|CSSearchable|UserNotifications|UNUserNotificationCenter|CloudKit|CKContainer|NSUbiquitous|WebKit|WKWebView|SafariServices|StoreKit|AdSupport|AppTrackingTransparency|unifiedContacts|CNSaveRequest|enumerateContacts|kSecUseAuthenticationUI	-
+\.textSelection\(	-

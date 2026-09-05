@@ -63,6 +63,7 @@ import UIKit
         }
         .sheet(isPresented: $showingContact) {
             UnknownContactView(person: person, met: person.encounters.first?.date)
+                .privacyCovered()
         }
         .confirmationDialog("Forget \(card.name ?? "this person")?", isPresented: $confirmingForget, titleVisibility: .visible) {
             Button("Forget", role: .destructive) {
@@ -147,7 +148,6 @@ import UIKit
                 } else {
                     Text(row.text)
                         .font(row.mono ? Theme.mono : .body)
-                        .textSelection(.enabled)
                 }
                 if let domain = row.domain {
                     Text(domain)
@@ -426,11 +426,10 @@ import UIKit
 
     // MARK: - Text
 
+    /// The note says the day you met and nothing else, as the footer
+    /// above promises: never the place.
     private var vcardFile: VCardFile {
-        let met = person.encounters.first.map { encounter in
-            let day = encounter.date.formatted(date: .abbreviated, time: .omitted)
-            return encounter.label.isEmpty ? "Met " + day : "Met " + day + " at " + encounter.label
-        }
+        let met = person.encounters.first.map { Links.metNote(for: $0) }
         let text = model.vcard(for: person, met: met).text
         let base = (card.name ?? "card").replacingOccurrences(of: "/", with: "-")
         return VCardFile(bytes: Array(text.utf8), name: base + ".vcf")

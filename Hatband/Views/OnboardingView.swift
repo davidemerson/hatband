@@ -87,6 +87,7 @@ import UniformTypeIdentifiers
                 email = profile.email ?? ""
                 door = .type
             }
+            .privacyCovered()
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.hatbandExport]) { result in
             restore(result)

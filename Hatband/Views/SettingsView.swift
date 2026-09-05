@@ -63,9 +63,11 @@ import UniformTypeIdentifiers
                 }
                 .sheet(isPresented: $editingProfile) {
                     ProfileEditorView()
+                        .privacyCovered()
                 }
                 .sheet(isPresented: $editingPersonas) {
                     PersonaListView()
+                        .privacyCovered()
                 }
                 .fileImporter(isPresented: $importing, allowedContentTypes: [.hatbandExport]) { result in
                     receiveImport(result)

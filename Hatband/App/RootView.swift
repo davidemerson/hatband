@@ -58,9 +58,11 @@ import SwiftUI
         }
         .sheet(item: $model.pendingReview) { review in
             ReviewSheet(review: review)
+                .privacyCovered()
         }
         .sheet(isPresented: importPresented) {
             ImportSheet()
+                .privacyCovered()
         }
         .alert("Hatband", isPresented: errorPresented) {
             Button("OK") {}

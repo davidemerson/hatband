@@ -22,4 +22,12 @@ struct TrustFactsTests {
         #expect(hosts.contains("Apple Maps"))
         #expect(TrustFacts.egress.allSatisfy { $0.when.contains("tap") })
     }
+
+    /// Where opens a map, which loads Apple's tiles; there is no hand-off
+    /// to the Maps app, so the row must not describe one.
+    @Test func mapsDescribesTileLoadingOnWhere() {
+        #expect(TrustFacts.maps.when.contains("Where"))
+        #expect(TrustFacts.maps.when.contains("tiles"))
+        #expect(!TrustFacts.maps.when.contains("Maps opens"))
+    }
 }

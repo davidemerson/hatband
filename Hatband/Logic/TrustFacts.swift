@@ -1,8 +1,9 @@
 import Foundation
 
 /// Every way bytes leave the phone, for the trust page: one row per
-/// `FetchTarget.Kind`, then the two hand-offs to Apple's own apps. Each
-/// happens only on a tap whose button names the host.
+/// `FetchTarget.Kind`, then Safari for a tapped link and Apple's map
+/// tiles when the Where tab is chosen. Each follows a tap, and the row
+/// names the host.
 nonisolated enum TrustFacts {
     nonisolated struct Egress: Equatable, Sendable {
         let host: String
@@ -17,7 +18,7 @@ nonisolated enum TrustFacts {
 
     static let maps = Egress(
         host: "Apple Maps",
-        when: "You tap a place on Where. Maps opens at the coarse position Hatband kept, nothing finer.")
+        when: "You tap the Where tab. The map asks Apple for tiles around the coarse positions Hatband kept, nothing finer; the timeline under it needs nothing from anywhere.")
 
     static func egress(for kind: FetchTarget.Kind) -> Egress {
         switch kind {

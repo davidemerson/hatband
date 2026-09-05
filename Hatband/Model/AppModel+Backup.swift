@@ -195,8 +195,9 @@ extension AppModel {
     // MARK: - Erase
 
     /// Keys first, so the sealed rows are unreadable even if the rest
-    /// fails; then activities, the widget feed, the store and its
-    /// directory. Ends at onboarding.
+    /// fails; then activities, the widget feed (and its reload), files
+    /// left for the share sheet, the store and its directory. Ends at
+    /// onboarding.
     func eraseEverything() async {
         do {
             try keys.delete(KeyName.database)
@@ -206,7 +207,8 @@ extension AppModel {
             Log.failure("erase keys", error)
         }
         await stopSharing()
-        WidgetFeed.remove(from: widgetDirectory ?? WidgetFeed.container)
+        clearWidget()
+        TransferredFiles.sweep()
         if let store {
             do {
                 try store.erase()

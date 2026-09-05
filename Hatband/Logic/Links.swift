@@ -88,6 +88,12 @@ nonisolated enum Links {
         return vcard
     }
 
+    /// The vCard note: the day of the meeting and nothing else, so a card
+    /// passed on never says where you met.
+    static func metNote(for encounter: Encounter) -> String {
+        "Met " + encounter.date.formatted(date: .abbreviated, time: .omitted)
+    }
+
     /// What the editors and inspector call a channel.
     static func label(for key: FieldKey) -> String {
         switch key {

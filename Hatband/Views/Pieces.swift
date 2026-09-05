@@ -61,7 +61,9 @@ import SwiftUI
     }
 }
 
-/// Keys, ids and metadata in SF Mono.
+/// Keys, ids and metadata in SF Mono. Not selectable: a copy goes
+/// through `Pasteboard` (local, expiring), which the system Copy menu
+/// would bypass.
 @MainActor struct MonoText: View {
     let text: String
 
@@ -72,7 +74,6 @@ import SwiftUI
     var body: some View {
         Text(text)
             .font(Theme.mono)
-            .textSelection(.enabled)
     }
 }
 
@@ -89,6 +90,29 @@ import SwiftUI
     }
 }
 
+/// `PrivacyCover` over a presented sheet. A sheet is presented above
+/// `RootView`, so the cover there never reaches it; every sheet root
+/// wears this instead.
+@MainActor struct PrivacyCovered: ViewModifier {
+    @Environment(AppModel.self) private var model
+
+    func body(content: Content) -> some View {
+        ZStack {
+            content
+            if model.covered {
+                PrivacyCover()
+            }
+        }
+    }
+}
+
+extension View {
+    /// The privacy cover over this view while `AppModel.covered`.
+    @MainActor func privacyCovered() -> some View {
+        modifier(PrivacyCovered())
+    }
+}
+
 /// A fingerprint as uppercase hex in groups of four, eight to a line.
 @MainActor struct FingerprintText: View {
     let bytes: [UInt8]
@@ -96,7 +120,6 @@ import SwiftUI
     var body: some View {
         Text(FingerprintText.display(bytes))
             .font(Theme.mono)
-            .textSelection(.enabled)
     }
 
     nonisolated static func display(_ bytes: [UInt8]) -> String {

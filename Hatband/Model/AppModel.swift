@@ -268,6 +268,9 @@ import UIKit
         let store = try makeStore()
         self.store = store
         store.reassertProtection()
+        // A directory created here (onboarding again after an erase) must
+        // start outside backups now, not at the next launch.
+        try store.setExcludedFromBackup(!settings.includeInBackup)
         return store
     }
 }
