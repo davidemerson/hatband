@@ -15,8 +15,8 @@ struct HatbandApp: App {
                 .onOpenURL { url in
                     model.handle(url: url)
                 }
+                .onAppear { Diagnostics.subscribe() }
         }
-        .onAppear { Diagnostics.subscribe() }
         .onChange(of: scenePhase) { _, phase in
             model.scenePhase(phase)
         }
