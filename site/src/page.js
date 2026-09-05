@@ -6,7 +6,7 @@ import {
   CustomKind, HB1Error, base64Encode, calendlyURI, cardFromMap, cardVCard, dayToCivil, emailURI,
   githubURI, gpgFingerprintFormatted, hb1DecodeURL, isJPEG, isTappable, isoDate, keyFingerprintDisplay,
   linkedinURI, mastodonURI, paletteIndex, phoneURI, sha256, signalURI, signatureStatus, sshDisplay,
-  urlVerdict, websiteURI,
+  textProblem, textProblemIn, urlVerdict, websiteURI,
 } from './hb1.js';
 
 /** Placeholder until the listing exists. */
@@ -36,9 +36,10 @@ export function hostOf(uri) {
   return '';
 }
 
-/** A link when the allow-list permits, the bare text otherwise. */
+/** A link when the allow-list permits and the text it shows hides nothing;
+    the bare text otherwise. */
 export function linkNode(doc, uri, label) {
-  if (!uri || !isTappable(uri)) return doc.createTextNode(label);
+  if (!uri || textProblemIn(label) || !isTappable(uri)) return doc.createTextNode(label);
   const fragment = doc.createDocumentFragment();
   const a = el(doc, 'a', null, label);
   a.setAttribute('href', uri);
@@ -105,10 +106,12 @@ export function badgeText(card, signature) {
   }
 }
 
-/** Controls, bidi overrides and path characters stripped: a name cannot
-    disguise the extension or escape a folder. */
+/** Everything `textProblem` flags and every path character stripped: a
+    name cannot disguise the extension or escape a folder. */
 export function vcardFileName(card) {
-  const stem = (card.name || '').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff/\\:*?"<>|]/g, '').trim().slice(0, 60);
+  const stem = [...(card.name || '')]
+    .filter((ch) => textProblem(ch.codePointAt(0)) === null && !'/\\:*?"<>|'.includes(ch))
+    .slice(0, 60).join('').trim();
   return (stem || 'card') + '.vcf';
 }
 

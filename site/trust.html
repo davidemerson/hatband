@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-2WCIAverkUApkNt/JYuKtBASuoa2Hn1VVmHUJWWFseY='; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-b9JL0JAETaDWN++7oh0eHS20YcflE4UeScfmx0fqU+Y='; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light dark">
@@ -44,6 +44,8 @@ code { white-space: pre-wrap; overflow-wrap: anywhere; }
 ul { list-style: none; margin: 0; padding: 0; }
 li { position: relative; padding: 0.3rem 0 0.3rem 1.25rem; overflow-wrap: anywhere; }
 li::before { content: "+"; position: absolute; left: 0; color: var(--mute); font-family: var(--mono); }
+/* A bidi override in one span must not reorder the host printed beside it. */
+.card li > * { unicode-bidi: isolate; }
 
 .card { background: var(--panel); border-radius: var(--radius); overflow: hidden; }
 .band { height: 8px; }
@@ -108,7 +110,7 @@ footer a + a::before { content: " · "; text-decoration: none; display: inline-b
 </ul>
 <h2>Content-Security-Policy</h2>
 <p>Script and style are admitted by hash only; nothing may be fetched or posted.</p>
-<code class="csp">default-src 'none'; script-src 'sha256-zrAWCDaZM21t451TJmLkScTKUteqfCA3NTZV2TmejuU='; style-src 'sha256-2WCIAverkUApkNt/JYuKtBASuoa2Hn1VVmHUJWWFseY='; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'</code></main>
+<code class="csp">default-src 'none'; script-src 'sha256-vA2uBKDq3t2neSnVet0t/1VQl5auCWgXemomd/BWUrQ='; style-src 'sha256-b9JL0JAETaDWN++7oh0eHS20YcflE4UeScfmx0fqU+Y='; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'</code></main>
 <footer><a href="/">hatband.link</a><a href="/privacy">privacy</a><a href="/trust">trust</a><a href="/support">support</a><a href="https://github.com/davidemerson/hatband">source</a></footer>
 </body>
 </html>

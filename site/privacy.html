@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-2WCIAverkUApkNt/JYuKtBASuoa2Hn1VVmHUJWWFseY='; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-b9JL0JAETaDWN++7oh0eHS20YcflE4UeScfmx0fqU+Y='; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light dark">
@@ -44,6 +44,8 @@ code { white-space: pre-wrap; overflow-wrap: anywhere; }
 ul { list-style: none; margin: 0; padding: 0; }
 li { position: relative; padding: 0.3rem 0 0.3rem 1.25rem; overflow-wrap: anywhere; }
 li::before { content: "+"; position: absolute; left: 0; color: var(--mute); font-family: var(--mono); }
+/* A bidi override in one span must not reorder the host printed beside it. */
+.card li > * { unicode-bidi: isolate; }
 
 .card { background: var(--panel); border-radius: var(--radius); overflow: hidden; }
 .band { height: 8px; }

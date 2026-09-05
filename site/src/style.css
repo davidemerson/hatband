@@ -35,6 +35,8 @@ code { white-space: pre-wrap; overflow-wrap: anywhere; }
 ul { list-style: none; margin: 0; padding: 0; }
 li { position: relative; padding: 0.3rem 0 0.3rem 1.25rem; overflow-wrap: anywhere; }
 li::before { content: "+"; position: absolute; left: 0; color: var(--mute); font-family: var(--mono); }
+/* A bidi override in one span must not reorder the host printed beside it. */
+.card li > * { unicode-bidi: isolate; }
 
 .card { background: var(--panel); border-radius: var(--radius); overflow: hidden; }
 .band { height: 8px; }

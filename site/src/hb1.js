@@ -372,6 +372,9 @@ const HB1_POSSIBLE_TAGS = new Set(['0', '1', '8', '9']);
 export const HB1_FILE_MAGIC = Uint8Array.of(0x48, 0x42, 0x31, 0x00);
 /** Hard ceiling on any form, in CBOR bytes. */
 export const HB1_MAX_BYTES = 32768;
+/** Base32 characters that ceiling can need; a longer fragment is refused
+    before anything is allocated for it. */
+export const HB1_MAX_FRAGMENT = Math.ceil(HB1_MAX_BYTES * 8 / 5);
 
 const WHITESPACE_EDGES = /^\p{White_Space}+|\p{White_Space}+$/gu;
 
@@ -391,6 +394,9 @@ export function hb1Fragment(text) {
   const tag = s.slice(0, 1);
   if (!HB1_POSSIBLE_TAGS.has(tag)) throw new HB1Error('notHatband');
   if (tag !== HB1_FORMAT_TAG) throw new HB1Error('unsupportedFormat', 'unsupported format', { tag });
+  let end = s.length;
+  while (end > 1 && s.charCodeAt(end - 1) === 0x3d) end--;
+  if (end - 1 > HB1_MAX_FRAGMENT) throw new HB1Error('tooLarge', 'too large', { characters: end - 1 });
   try {
     return base32Decode(s.slice(1));
   } catch {
@@ -846,7 +852,7 @@ export function vcardPropertyName(name) {
 
 /** The last word is the family name, a guess Contacts lets the user fix. */
 export function vcardNameParts(formattedName) {
-  const words = formattedName.split(/\s+/u).filter((w) => w.length > 0);
+  const words = formattedName.split(/\p{White_Space}+/u).filter((w) => w.length > 0);
   if (words.length > 1) return { familyName: words[words.length - 1], givenName: words.slice(0, -1).join(' ') };
   return { familyName: '', givenName: words[0] || '' };
 }

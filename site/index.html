@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-zrAWCDaZM21t451TJmLkScTKUteqfCA3NTZV2TmejuU='; style-src 'sha256-2WCIAverkUApkNt/JYuKtBASuoa2Hn1VVmHUJWWFseY='; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-vA2uBKDq3t2neSnVet0t/1VQl5auCWgXemomd/BWUrQ='; style-src 'sha256-b9JL0JAETaDWN++7oh0eHS20YcflE4UeScfmx0fqU+Y='; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light dark">
@@ -45,6 +45,8 @@ code { white-space: pre-wrap; overflow-wrap: anywhere; }
 ul { list-style: none; margin: 0; padding: 0; }
 li { position: relative; padding: 0.3rem 0 0.3rem 1.25rem; overflow-wrap: anywhere; }
 li::before { content: "+"; position: absolute; left: 0; color: var(--mute); font-family: var(--mono); }
+/* A bidi override in one span must not reorder the host printed beside it. */
+.card li > * { unicode-bidi: isolate; }
 
 .card { background: var(--panel); border-radius: var(--radius); overflow: hidden; }
 .band { height: 8px; }
@@ -477,6 +479,9 @@ const HB1_POSSIBLE_TAGS = new Set(['0', '1', '8', '9']);
 const HB1_FILE_MAGIC = Uint8Array.of(0x48, 0x42, 0x31, 0x00);
 /** Hard ceiling on any form, in CBOR bytes. */
 const HB1_MAX_BYTES = 32768;
+/** Base32 characters that ceiling can need; a longer fragment is refused
+    before anything is allocated for it. */
+const HB1_MAX_FRAGMENT = Math.ceil(HB1_MAX_BYTES * 8 / 5);
 
 const WHITESPACE_EDGES = /^\p{White_Space}+|\p{White_Space}+$/gu;
 
@@ -496,6 +501,9 @@ function hb1Fragment(text) {
   const tag = s.slice(0, 1);
   if (!HB1_POSSIBLE_TAGS.has(tag)) throw new HB1Error('notHatband');
   if (tag !== HB1_FORMAT_TAG) throw new HB1Error('unsupportedFormat', 'unsupported format', { tag });
+  let end = s.length;
+  while (end > 1 && s.charCodeAt(end - 1) === 0x3d) end--;
+  if (end - 1 > HB1_MAX_FRAGMENT) throw new HB1Error('tooLarge', 'too large', { characters: end - 1 });
   try {
     return base32Decode(s.slice(1));
   } catch {
@@ -951,7 +959,7 @@ function vcardPropertyName(name) {
 
 /** The last word is the family name, a guess Contacts lets the user fix. */
 function vcardNameParts(formattedName) {
-  const words = formattedName.split(/\s+/u).filter((w) => w.length > 0);
+  const words = formattedName.split(/\p{White_Space}+/u).filter((w) => w.length > 0);
   if (words.length > 1) return { familyName: words[words.length - 1], givenName: words.slice(0, -1).join(' ') };
   return { familyName: '', givenName: words[0] || '' };
 }
@@ -1256,9 +1264,10 @@ function hostOf(uri) {
   return '';
 }
 
-/** A link when the allow-list permits, the bare text otherwise. */
+/** A link when the allow-list permits and the text it shows hides nothing;
+    the bare text otherwise. */
 function linkNode(doc, uri, label) {
-  if (!uri || !isTappable(uri)) return doc.createTextNode(label);
+  if (!uri || textProblemIn(label) || !isTappable(uri)) return doc.createTextNode(label);
   const fragment = doc.createDocumentFragment();
   const a = el(doc, 'a', null, label);
   a.setAttribute('href', uri);
@@ -1325,10 +1334,12 @@ function badgeText(card, signature) {
   }
 }
 
-/** Controls, bidi overrides and path characters stripped: a name cannot
-    disguise the extension or escape a folder. */
+/** Everything `textProblem` flags and every path character stripped: a
+    name cannot disguise the extension or escape a folder. */
 function vcardFileName(card) {
-  const stem = (card.name || '').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff/\\:*?"<>|]/g, '').trim().slice(0, 60);
+  const stem = [...(card.name || '')]
+    .filter((ch) => textProblem(ch.codePointAt(0)) === null && !'/\\:*?"<>|'.includes(ch))
+    .slice(0, 60).join('').trim();
   return (stem || 'card') + '.vcf';
 }
 
