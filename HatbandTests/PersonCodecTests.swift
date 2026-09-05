@@ -96,6 +96,26 @@ struct PersonCodecTests {
         }
     }
 
+    /// Key 13: the photo kept beside a card that came without one. Absent
+    /// when nil, so photo-less people and older bodies encode as before,
+    /// and the card bytes under key 1 are untouched by it.
+    @Test func keptPhotoRidesUnderKey13() throws {
+        let photo: [UInt8] = [0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 0xff, 0xd9]
+        var person = try samplePerson()
+        #expect(try CBOR.decode(PersonCodec.encode(person))[13] == nil)
+        person.photo = photo
+        let root = try CBOR.decode(PersonCodec.encode(person))
+        #expect(root[13]?.bytesValue == photo)
+        #expect(root[1]?.bytesValue == person.cardBytes)
+        let decoded = try PersonCodec.decode(PersonCodec.encode(person))
+        #expect(decoded == person)
+        #expect(decoded.photo == photo)
+        #expect(decoded.currentPhoto == photo)
+        #expect(decoded.card.photo == nil)
+        #expect(decoded.card.signatureIsValid)
+        #expect(PersonCodec.encode(decoded) == PersonCodec.encode(person))
+    }
+
     @Test func unknownKeysIgnored() throws {
         let person = try samplePerson()
         var root = try #require(CBOR.decode(PersonCodec.encode(person)).mapValue)

@@ -201,6 +201,84 @@ private func byID(_ people: [Person]) -> [Person] {
         #expect(again.people.first?.publicKey == mine.publicKey)
     }
 
+    /// Key indices are never reused, on this phone or one restored from it:
+    /// the counter rides in the export, so a persona added after a restore
+    /// takes an index above every one the old phone ever handed out. An
+    /// export from before the counter travelled starts past what it carries.
+    @Test func restoreCarriesThePersonaIndexCounter() async throws {
+        let (source, sourceKeys) = try await onboarded()
+        let work = try source.addPersona(label: "Work", alias: false)
+        let other = try source.addPersona(label: "Other", alias: false)
+        #expect(work.keyIndex == 1 && other.keyIndex == 2)
+        try source.delete(persona: other)
+        #expect(source.personas.map { $0.keyIndex } == [0, 1])
+        #expect(sourceKeys.items[KeyName.personaIndex]?.data == Data([0, 0, 0, 3]))
+        let data = try await source.exportData(passphrase: passphrase)
+        let bundle = try ExportBundle.open(Array(data), passphrase: passphrase)
+        #expect(bundle.nextKeyIndex == 3)
+
+        let restored = try AppModel.inMemory()
+        await restored.load()
+        _ = try await restored.importData(data, passphrase: passphrase, mode: .restore)
+        let restoredKeys = try #require(restored.keys as? MemoryKeyStore)
+        #expect(restoredKeys.items[KeyName.personaIndex]?.data == Data([0, 0, 0, 3]))
+        #expect(restoredKeys.items[KeyName.personaIndex]?.access == .seed)
+        let added = try restored.addPersona(label: "New", alias: false)
+        #expect(added.keyIndex == 3)
+        #expect(added.keyIndex > other.keyIndex)
+        let deletedKey = Array(try source.identity().personaSigningKey(index: other.keyIndex).publicKey.rawRepresentation)
+        #expect(try restored.card(for: added, form: .fullQR).publicKey != deletedKey)
+        #expect(restoredKeys.items[KeyName.personaIndex]?.data == Data([0, 0, 0, 4]))
+
+        var older = bundle
+        older.nextKeyIndex = nil
+        let olderData = Data(try ExportBundle.seal(older, passphrase: passphrase,
+                                                   iterations: ExportContainer.iterationRange.lowerBound))
+        let legacy = try AppModel.inMemory()
+        await legacy.load()
+        _ = try await legacy.importData(olderData, passphrase: passphrase, mode: .restore)
+        let legacyKeys = try #require(legacy.keys as? MemoryKeyStore)
+        #expect(legacyKeys.items[KeyName.personaIndex]?.data == Data([0, 0, 0, 2]))
+        #expect(try legacy.addPersona(label: "New", alias: false).keyIndex == 2)
+    }
+
+    /// Merging takes the higher of the two counters: a persona moved off a
+    /// colliding index lands above both, the next one added above that,
+    /// and a lower imported counter leaves the local one alone.
+    @Test func mergeTakesTheHigherCounter() async throws {
+        let (source, _) = try await onboarded(name: "Leopold Bloom")
+        let (target, targetKeys) = try await onboarded(name: "Henry Flower")
+        for label in ["Work", "Club", "Press", "Lodge"] {
+            _ = try source.addPersona(label: label, alias: false)
+        }
+        while source.personas.count > 1 {
+            let last = try #require(source.personas.last)
+            try source.delete(persona: last)
+        }
+        #expect(source.personas.map { $0.keyIndex } == [0])
+        let data = try await source.exportData(passphrase: passphrase)
+        #expect(try ExportBundle.open(Array(data), passphrase: passphrase).nextKeyIndex == 5)
+        let spare = try target.addPersona(label: "Spare", alias: false)
+        try target.delete(persona: spare)
+        #expect(targetKeys.items[KeyName.personaIndex]?.data == Data([0, 0, 0, 2]))
+
+        let summary = try await target.importData(data, passphrase: passphrase, mode: .merge)
+        #expect(summary.personas == 1)
+        #expect(target.personas.map { $0.keyIndex } == [0, 5])
+        #expect(targetKeys.items[KeyName.personaIndex]?.data == Data([0, 0, 0, 6]))
+        #expect(try target.addPersona(label: "New", alias: false).keyIndex == 6)
+
+        let (fresh, _) = try await onboarded(name: "Molly Bloom")
+        let freshData = try await fresh.exportData(passphrase: passphrase)
+        #expect(try ExportBundle.open(Array(freshData), passphrase: passphrase).nextKeyIndex == 1)
+        _ = try await target.importData(freshData, passphrase: passphrase, mode: .merge)
+        #expect(target.personas.map { $0.keyIndex } == [0, 5, 6, 7])
+        #expect(targetKeys.items[KeyName.personaIndex]?.data == Data([0, 0, 0, 8]))
+        let again = try await relaunched(target, keys: targetKeys)
+        #expect(again.personas.map { $0.keyIndex } == [0, 5, 6, 7])
+        #expect(try again.addPersona(label: "Later", alias: false).keyIndex == 8)
+    }
+
     @Test func importWrongPassphraseMapsToAppError() async throws {
         let (source, _) = try await onboarded()
         let data = try await source.exportData(passphrase: passphrase)

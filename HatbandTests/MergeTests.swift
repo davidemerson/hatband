@@ -252,6 +252,94 @@ struct MergeTests {
         #expect(refused.card.seq == 9)
     }
 
+    /// The bytes on file are always the bytes that were signed. A photo from
+    /// an earlier file share is kept beside a later QR card, never written
+    /// into it, so `signatureIsValid` holds on what is stored; a compact
+    /// re-scan touches neither; a new photo becomes the card's own; a card
+    /// accepted under a new key inherits none.
+    @Test func updateKeepsEarlierPhotoBesideTheSignedBytes() throws {
+        let photo: [UInt8] = [0xff, 0xd8, 0xff, 0xe0] + (0..<300).map { UInt8($0 & 0xff) } + [0xff, 0xd9]
+        let qr = try Vectors.card("typical-signed")
+        let publicKey = try #require(qr.publicKey)
+        var shared = qr
+        shared.photo = photo
+        shared.flags.insert(.photoAvailable)
+        let file = try signed(shared, index: 1)
+        let first = review(file, source: .file)
+        #expect(first.dropped.isEmpty)
+        let person = Merge.apply(existing: nil, review: first, fix: nil, label: "", note: "", tags: [],
+                                 acceptNewKey: false, now: now)
+        #expect(person.card.photo == photo)
+        #expect(person.photo == nil)
+        #expect(person.currentPhoto == photo)
+        #expect(try HB1.decode(cbor: person.cardBytes).signatureIsValid)
+
+        var newer = qr
+        newer.seq = qr.seq + 1
+        newer.flags.insert(.photoAvailable)
+        let rescan = try signed(newer, index: 1)
+        let second = review(rescan, source: .scan, people: [person])
+        guard case .update = second.outcome else {
+            Issue.record("expected .update, got \(second.outcome)")
+            return
+        }
+        let updated = Merge.apply(existing: person, review: second, fix: nil, label: "", note: "", tags: [],
+                                  acceptNewKey: false, now: now)
+        #expect(updated.cardBytes == rescan.cbor.encoded)
+        #expect(updated.card == rescan)
+        #expect(updated.card.photo == nil)
+        #expect(updated.photo == photo)
+        #expect(updated.currentPhoto == photo)
+        let stored = try HB1.decode(cbor: updated.cardBytes)
+        #expect(stored.signatureIsValid)
+        #expect(stored.photo == nil)
+        #expect(try PersonCodec.decode(PersonCodec.encode(updated)) == updated)
+
+        var compact = Card(personaID: qr.personaID, issuedDay: qr.issuedDay)
+        compact.flags = .compact
+        compact.name = qr.name
+        compact = compact.withKeyFingerprint(of: publicKey)
+        let third = review(compact, source: .scan, people: [updated])
+        #expect(third.outcome == .encounterOnly)
+        let met = Merge.apply(existing: updated, review: third, fix: nil, label: "Again", note: "", tags: [],
+                              acceptNewKey: false, now: now)
+        #expect(met.cardBytes == rescan.cbor.encoded)
+        #expect(met.photo == photo)
+        #expect(met.currentPhoto == photo)
+        #expect(try HB1.decode(cbor: met.cardBytes).signatureIsValid)
+        #expect(met.encounters.count == 3)
+
+        let replacement: [UInt8] = [0xff, 0xd8, 0xff, 0xdb] + (0..<200).map { UInt8($0 & 0xff) } + [0xff, 0xd9]
+        var again = shared
+        again.seq = newer.seq + 1
+        again.photo = replacement
+        let refreshed = try signed(again, index: 1)
+        let fourth = review(refreshed, source: .link, people: [met])
+        guard case .update = fourth.outcome else {
+            Issue.record("expected .update, got \(fourth.outcome)")
+            return
+        }
+        let renewed = Merge.apply(existing: met, review: fourth, fix: nil, label: "", note: "", tags: [],
+                                  acceptNewKey: false, now: now)
+        #expect(renewed.cardBytes == refreshed.cbor.encoded)
+        #expect(renewed.card.photo == replacement)
+        #expect(renewed.photo == nil)
+        #expect(renewed.currentPhoto == replacement)
+        #expect(renewed.card.signatureIsValid)
+
+        var stranger = qr
+        stranger.seq = again.seq + 1
+        let other = try signed(stranger, index: 7)
+        let fifth = review(other, source: .scan, people: [renewed])
+        #expect(fifth.outcome == .keyChanged)
+        let repinned = Merge.apply(existing: renewed, review: fifth, fix: nil, label: "", note: "", tags: [],
+                                   acceptNewKey: true, now: now)
+        #expect(repinned.cardBytes == other.cbor.encoded)
+        #expect(repinned.photo == nil)
+        #expect(repinned.currentPhoto == nil)
+        #expect(repinned.card.signatureIsValid)
+    }
+
     @Test func applyKeyChangedKeepsOldUnlessAccepted() throws {
         let card = try Vectors.card("typical-signed")
         let existing = pinnedPerson(card)

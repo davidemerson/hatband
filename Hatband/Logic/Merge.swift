@@ -111,17 +111,19 @@ nonisolated enum Merge {
 
     // MARK: - Private
 
+    /// The stored bytes are the incoming card's own: writing an earlier
+    /// photo into them would put an unsigned key 20 under the signature.
+    /// With `keepPhoto` the photo moves to `Person.photo` instead when the
+    /// new card has none; a card under a new key starts without one.
     private static func replaceCard(of person: inout Person, with incoming: Card, review: Review, keepPhoto: Bool) {
-        var card = incoming
-        if keepPhoto, card.photo == nil {
-            card.photo = person.card.photo
-        }
-        person.card = card
-        person.cardBytes = card.cbor.encoded
-        person.publicKey = card.publicKey
-        person.keyFingerprint = fingerprint(of: card) ?? person.keyFingerprint
+        let earlier = person.currentPhoto
+        person.card = incoming
+        person.cardBytes = incoming.cbor.encoded
+        person.photo = keepPhoto && incoming.photo == nil ? earlier : nil
+        person.publicKey = incoming.publicKey
+        person.keyFingerprint = fingerprint(of: incoming) ?? person.keyFingerprint
         person.source = review.source
-        if review.gpgKeyVerified, let key = card.gpgKey {
+        if review.gpgKeyVerified, let key = incoming.gpgKey {
             person.gpgKey = key
         }
     }

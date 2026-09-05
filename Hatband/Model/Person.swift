@@ -51,6 +51,7 @@ nonisolated struct Encounter: Identifiable, Hashable, Sendable {
 nonisolated struct Person: Identifiable, Hashable, Sendable {
     var id: String { Hex.string(personaID) }
     var personaID: [UInt8]
+    /// The received card's bytes, signature and all; never rewritten.
     var cardBytes: [UInt8]
     var card: Card
     var publicKey: [UInt8]?
@@ -60,9 +61,16 @@ nonisolated struct Person: Identifiable, Hashable, Sendable {
     var tags: [String]
     var note: String
     var gpgKey: [UInt8]?
+    /// A photo from an earlier card, kept when a later one arrived without
+    /// (no QR carries one). Nil while `card.photo` is the latest. Held here,
+    /// not in `cardBytes`, which stay exactly what was signed.
+    var photo: [UInt8]? = nil
     var createdAt: Date
     var updatedAt: Date
     var encounters: [Encounter]
+
+    /// The photo to show: the kept one, else the card's own.
+    var currentPhoto: [UInt8]? { photo ?? card.photo }
 }
 
 /// Lowercase hex, the form persona ids take in routes and `Person.id`.

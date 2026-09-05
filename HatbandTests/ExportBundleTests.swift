@@ -94,6 +94,34 @@ struct ExportBundleTests {
             try ExportBundle.seal(sampleBundle(), passphrase: passphrase, iterations: 1)
         }
     }
+
+    /// Key 4 carries the persona-index counter; an export from before it
+    /// travelled decodes to nil, and anything that is not a 32-bit count
+    /// is malformed.
+    @Test func nextKeyIndexRidesUnderKey4() throws {
+        let bundle = sampleBundle()
+        #expect(try CBOR.decode(ExportBundle.encode(bundle))[4] == nil)
+        var counted = bundle
+        counted.nextKeyIndex = 7
+        let bytes = ExportBundle.encode(counted)
+        #expect(try CBOR.decode(bytes)[4]?.unsignedValue == 7)
+        #expect(try ExportBundle.decode(bytes) == counted)
+        #expect(try ExportBundle.decode(bytes).nextKeyIndex == 7)
+        #expect(ExportBundle.encode(try ExportBundle.decode(bytes)) == bytes)
+        let older = try rebuilt(counted) { $0[.unsigned(4)] = nil }
+        #expect(try ExportBundle.decode(older).nextKeyIndex == nil)
+        #expect(try ExportBundle.decode(older) == bundle)
+        let tooBig = try rebuilt(counted) { $0[.unsigned(4)] = .unsigned(UInt64(UInt32.max) + 1) }
+        #expect(throws: CodecError.malformed) {
+            try ExportBundle.decode(tooBig)
+        }
+        let text = try rebuilt(counted) { $0[.unsigned(4)] = .text("7") }
+        #expect(throws: CodecError.malformed) {
+            try ExportBundle.decode(text)
+        }
+        let sealed = try ExportBundle.seal(counted, passphrase: passphrase, iterations: iterations)
+        #expect(try ExportBundle.open(sealed, passphrase: passphrase).nextKeyIndex == 7)
+    }
 }
 
 // MARK: - Merge
@@ -109,10 +137,11 @@ private func encounter(_ seconds: TimeInterval, _ label: String) -> Encounter {
 
 /// A signed file-form card from `identity`, stored the way a scan is.
 private func makePerson(identity: Identity, personaID: [UInt8], name: String, seq: UInt32,
-                        compact: Bool = false, encounters: [Encounter]) throws -> Person {
+                        compact: Bool = false, photo: [UInt8]? = nil, encounters: [Encounter]) throws -> Person {
     var profile = Profile()
     profile.name = name
     profile.email = "someone@example.ie"
+    profile.photo = photo
     let persona = Persona(id: personaID, label: "Personal", keyIndex: 0, color: 3, channels: [.email],
                           lockScreenChannels: [.email], seq: seq)
     let key = identity.personaSigningKey(index: 0)
@@ -157,6 +186,59 @@ struct BackupMergeTests {
         let distinct = Persona(id: mollyID, label: "Henry Flower", keyIndex: 5, seq: 1)
         #expect(BackupMerge.personas(local: [local], imported: [distinct]).personas[1].keyIndex == 5)
         #expect(BackupMerge.nextKeyIndex(after: []) == 0)
+    }
+
+    /// A colliding import takes an index no lower than the higher counter,
+    /// so it never lands on one a deleted persona held, and the result
+    /// reports the counter to store: above every index and both counters.
+    @Test func personasCollisionAllocatesFromTheCounter() {
+        let local = Persona(id: dedalusID, label: "Personal", keyIndex: 0, seq: 1)
+        let foreign = Persona(id: mollyID, label: "Henry Flower", keyIndex: 0, seq: 1)
+        let result = BackupMerge.personas(local: [local], imported: [foreign], nextKeyIndex: 5)
+        #expect(result.personas.map { $0.keyIndex } == [0, 5])
+        #expect(result.nextKeyIndex == 6)
+        let low = BackupMerge.personas(local: [local], imported: [foreign], nextKeyIndex: 1)
+        #expect(low.personas.map { $0.keyIndex } == [0, 1])
+        #expect(low.nextKeyIndex == 2)
+        let distinct = Persona(id: mollyID, label: "Henry Flower", keyIndex: 9, seq: 1)
+        let kept = BackupMerge.personas(local: [local], imported: [distinct], nextKeyIndex: 5)
+        #expect(kept.personas[1].keyIndex == 9)
+        #expect(kept.nextKeyIndex == 10)
+        #expect(BackupMerge.personas(local: [local], imported: [], nextKeyIndex: 3).nextKeyIndex == 3)
+        #expect(BackupMerge.personas(local: [local], imported: []).nextKeyIndex == 1)
+    }
+
+    /// A newer card without a photo replaces the stored one and the earlier
+    /// photo stays beside it, the stored bytes still the signed ones; a
+    /// photo is taken where there was none; never from a different key.
+    @Test func peopleKeepEarlierPhotoBesideTheNewerCard() throws {
+        let identity = Identity.generate()
+        let photo: [UInt8] = [0xff, 0xd8, 0xff, 0xe0] + (0..<100).map { UInt8($0 & 0xff) } + [0xff, 0xd9]
+        let local = try makePerson(identity: identity, personaID: dedalusID, name: "Stephen Dedalus", seq: 3,
+                                   photo: photo, encounters: [])
+        #expect(local.card.photo == photo)
+        let imported = try makePerson(identity: identity, personaID: dedalusID, name: "Stephen Dedalus", seq: 5,
+                                      encounters: [])
+        let result = BackupMerge.people(local: [local], imported: [imported], now: now)
+        let dedalus = try #require(result.people.first)
+        #expect(dedalus.cardBytes == imported.cardBytes)
+        #expect(dedalus.card.signatureIsValid)
+        #expect(dedalus.card.photo == nil)
+        #expect(dedalus.photo == photo)
+        #expect(dedalus.currentPhoto == photo)
+        #expect(try PersonCodec.decode(PersonCodec.encode(dedalus)) == dedalus)
+
+        let adopted = BackupMerge.people(local: [imported], imported: [local], now: now)
+        let filled = try #require(adopted.people.first)
+        #expect(filled.cardBytes == imported.cardBytes)
+        #expect(filled.photo == photo)
+        #expect(adopted.updated == 1)
+
+        let stranger = try makePerson(identity: Identity.generate(), personaID: dedalusID, name: "Stephen Dedalus",
+                                      seq: 9, photo: photo, encounters: [])
+        let refused = BackupMerge.people(local: [imported], imported: [stranger], now: now)
+        #expect(refused.people.first?.currentPhoto == nil)
+        #expect(refused.keyChanges == 1)
     }
 
     @Test func peopleUnionEncountersAndTakeNewerCard() throws {

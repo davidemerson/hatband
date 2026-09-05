@@ -79,7 +79,7 @@ import UIKit
     private var headerSection: some View {
         Section {
             HStack(alignment: .top, spacing: 12) {
-                if let photo = card.photo, let image = UIImage(data: Data(photo)) {
+                if let photo = person.currentPhoto, let image = UIImage(data: Data(photo)) {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFill()

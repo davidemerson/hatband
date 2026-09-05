@@ -25,8 +25,9 @@ extension AppModel {
 
     // MARK: - Export
 
-    /// Seed, owner blob and every person body, sealed under the passphrase
-    /// off the main actor. Unlocks first, so app lock prompts.
+    /// Seed, owner blob, every person body and the persona-index counter,
+    /// sealed under the passphrase off the main actor. Unlocks first, so
+    /// app lock prompts.
     func exportData(passphrase: String) async throws -> Data {
         guard phase == .ready else { throw AppError.storage("Nothing to export yet.") }
         _ = try await requireKey()
@@ -34,7 +35,9 @@ extension AppModel {
         do {
             let seed = try identity().seed
             let owner = OwnerCodec.encode(profile: profile, personas: personas, settings: settings)
-            bundle = ExportBundle(seed: seed, owner: owner, people: people.map { PersonCodec.encode($0) })
+            let nextKeyIndex = try nextPersonaIndex()
+            bundle = ExportBundle(seed: seed, owner: owner, people: people.map { PersonCodec.encode($0) },
+                                  nextKeyIndex: nextKeyIndex)
         } catch {
             throw AppError(error)
         }
@@ -69,20 +72,21 @@ extension AppModel {
             let imported = try bundle.people.map { try PersonCodec.decode($0) }
             switch mode {
             case .restore:
-                return try restore(seed: bundle.seed, owner: owner, people: imported)
+                return try restore(seed: bundle.seed, owner: owner, people: imported, nextKeyIndex: bundle.nextKeyIndex)
             case .merge:
-                return try await merge(owner: owner, people: imported)
+                return try await merge(owner: owner, people: imported, nextKeyIndex: bundle.nextKeyIndex)
             }
         } catch {
             throw AppError(error)
         }
     }
 
-    /// Onto a fresh Hatband: the seed and a fresh database key go into the
-    /// Keychain, the owner is replaced, every person is sealed under the
-    /// new key, and the model comes up ready and unlocked.
+    /// Onto a fresh Hatband: the seed, a fresh database key and the
+    /// persona-index counter go into the Keychain, the owner is replaced,
+    /// every person is sealed under the new key, and the model comes up
+    /// ready and unlocked.
     private func restore(seed: [UInt8], owner: (profile: Profile, personas: [Persona], settings: Settings),
-                         people imported: [Person]) throws -> ImportSummary {
+                         people imported: [Person], nextKeyIndex: UInt32?) throws -> ImportSummary {
         guard phase == .onboarding else {
             throw AppError.storage("Restore only into a fresh Hatband. Erase everything first, or merge instead.")
         }
@@ -92,6 +96,12 @@ extension AppModel {
         try keys.write(KeyName.seed, Data(identity.seed), access: .seed)
         try keys.write(KeyName.database, keyData,
                        access: .database(appLock: owner.settings.appLock, includeInBackup: owner.settings.includeInBackup))
+        // The counter travels with the seed, so an index a deleted persona
+        // held is never derived again here; an older export starts past
+        // the highest index it carries, and a counter left behind is kept.
+        let carried = nextKeyIndex ?? BackupMerge.nextKeyIndex(after: owner.personas)
+        let leftBehind = try storedPersonaIndex() ?? 0
+        try storePersonaIndex(max(carried, leftBehind))
         profile = owner.profile
         personas = owner.personas
         settings = owner.settings
@@ -119,18 +129,21 @@ extension AppModel {
     }
 
     /// Into what is here: the local seed stays, personas and people merge
-    /// by id (`BackupMerge`), and everything is re-sealed under this
-    /// device's key.
+    /// by id (`BackupMerge`), the persona-index counter becomes the higher
+    /// of the two, and everything is re-sealed under this device's key.
     private func merge(owner: (profile: Profile, personas: [Persona], settings: Settings),
-                       people imported: [Person]) async throws -> ImportSummary {
+                       people imported: [Person], nextKeyIndex: UInt32?) async throws -> ImportSummary {
         guard phase == .ready else { throw AppError.storage("Set up Hatband before merging an export.") }
         let key = try await requireKey()
-        let personaResult = BackupMerge.personas(local: personas, imported: owner.personas)
+        let ownCounter = try nextPersonaIndex()
+        let counter = max(ownCounter, nextKeyIndex ?? BackupMerge.nextKeyIndex(after: owner.personas))
+        let personaResult = BackupMerge.personas(local: personas, imported: owner.personas, nextKeyIndex: counter)
         // Whole seconds, as `PersonCodec` stores dates, so what is held in
         // memory equals what reloads.
         let now = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down))
         let peopleResult = BackupMerge.people(local: people, imported: imported, now: now)
         personas = personaResult.personas
+        try storePersonaIndex(personaResult.nextKeyIndex)
         try saveOwner()
         let store = try openedStore()
         var records: [Data: PersonRecord] = [:]

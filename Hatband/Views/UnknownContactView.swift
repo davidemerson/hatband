@@ -59,14 +59,24 @@ import UIKit
             urls.append(CNLabeledValue(label: row.label, value: url as NSString))
         }
         contact.urlAddresses = urls
-        if let photo = card.photo {
+        if let photo = person.currentPhoto {
             contact.imageData = Data(photo)
         }
         if let met {
-            let components = Calendar.current.dateComponents([.year, .month, .day], from: met)
-            contact.dates = [CNLabeledValue(label: "Met", value: components as NSDateComponents)]
+            contact.dates = [CNLabeledValue(label: "Met", value: metComponents(met) as NSDateComponents)]
         }
         return contact
+    }
+
+    /// Contacts dates are Gregorian year, month and day. Taken from a
+    /// Gregorian calendar and stamped with it, so a phone showing the
+    /// Buddhist or Japanese calendar files the meeting on the right day.
+    nonisolated static func metComponents(_ met: Date, timeZone: TimeZone = .current) -> DateComponents {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        var components = calendar.dateComponents([.year, .month, .day], from: met)
+        components.calendar = calendar
+        return components
     }
 
     /// `CNContactViewControllerDelegate` is not main-actor annotated, so the

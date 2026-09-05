@@ -3,9 +3,10 @@ import HatbandCore
 
 /// The person body, sealed under the database key:
 /// `{0 version, 1 cardBytes, 2 publicKey?, 3 keyFingerprint?, 4 trust uint, 5 previousKey?, 6 [tags],
-/// 7 note, 8 gpgKey?, 9 createdAt, 10 updatedAt, 11 source uint, 12 [encounter]}`;
+/// 7 note, 8 gpgKey?, 9 createdAt, 10 updatedAt, 11 source uint, 12 [encounter], 13 photo?}`;
 /// encounter `{0 uuid 16 bytes, 1 date, 2 latHundredths int?, 3 lonHundredths int?, 4 accuracyMetres uint?,
-/// 5 label, 6 note}`. Dates are whole unix seconds.
+/// 5 label, 6 note}`. Dates are whole unix seconds. Key 13 is the photo kept
+/// beside a card that came without one; older bodies lack it.
 nonisolated enum PersonCodec {
     static let version: UInt64 = 1
 
@@ -37,6 +38,9 @@ nonisolated enum PersonCodec {
         map[.unsigned(10)] = seconds(person.updatedAt)
         map[.unsigned(11)] = .unsigned(UInt64(person.source.rawValue))
         map[.unsigned(12)] = .array(person.encounters.map { encode($0) })
+        if let photo = person.photo {
+            map[.unsigned(13)] = .bytes(photo)
+        }
         return CBOR.map(map).encoded
     }
 
@@ -87,8 +91,8 @@ nonisolated enum PersonCodec {
         return Person(personaID: card.personaID, cardBytes: cardBytes, card: card,
                       publicKey: root[2]?.bytesValue, keyFingerprint: root[3]?.bytesValue,
                       trust: trust, source: source, tags: tags, note: root[7]?.textValue ?? "",
-                      gpgKey: root[8]?.bytesValue, createdAt: createdAt, updatedAt: updatedAt,
-                      encounters: encounters)
+                      gpgKey: root[8]?.bytesValue, photo: root[13]?.bytesValue,
+                      createdAt: createdAt, updatedAt: updatedAt, encounters: encounters)
     }
 
     // MARK: - Encounter

@@ -115,7 +115,7 @@ nonisolated enum Links {
         }
         vcard.links = links
         vcard.note = note.isEmpty ? nil : note.joined(separator: "\n")
-        if let photo = card.photo, isJPEG(photo) {
+        if let photo = person.currentPhoto, isJPEG(photo) {
             vcard.photoJPEG = photo
         }
         var extensions = [VCard.Extension(name: "PERSONA", value: Hex.string(card.personaID))]

@@ -1,15 +1,18 @@
 import Foundation
 import HatbandCore
 
-/// The export body, `{0 version, 1 seed, 2 owner blob, 3 [person body]}`,
-/// sealed in an `ExportContainer` under the passphrase. Unknown keys are
-/// ignored; another version is refused.
+/// The export body, `{0 version, 1 seed, 2 owner blob, 3 [person body],
+/// 4 next key index?}`, sealed in an `ExportContainer` under the
+/// passphrase. Unknown keys are ignored; another version is refused. Key 4
+/// is the persona-index counter, the next index the identity may hand out;
+/// an older export lacks it and starts one above the highest index it carries.
 nonisolated struct ExportBundle: Equatable, Sendable {
     static let version: UInt64 = 1
 
     var seed: [UInt8]
     var owner: [UInt8]
     var people: [[UInt8]]
+    var nextKeyIndex: UInt32? = nil
 
     static func encode(_ bundle: ExportBundle) -> [UInt8] {
         var map: [CBOR: CBOR] = [:]
@@ -17,6 +20,9 @@ nonisolated struct ExportBundle: Equatable, Sendable {
         map[.unsigned(1)] = .bytes(bundle.seed)
         map[.unsigned(2)] = .bytes(bundle.owner)
         map[.unsigned(3)] = .array(bundle.people.map { .bytes($0) })
+        if let next = bundle.nextKeyIndex {
+            map[.unsigned(4)] = .unsigned(UInt64(next))
+        }
         return CBOR.map(map).encoded
     }
 
@@ -38,7 +44,12 @@ nonisolated struct ExportBundle: Equatable, Sendable {
             guard let bytes = body.bytesValue else { throw CodecError.malformed }
             people.append(bytes)
         }
-        return ExportBundle(seed: seed, owner: owner, people: people)
+        var nextKeyIndex: UInt32?
+        if let value = root[4] {
+            guard let raw = value.unsignedValue, raw <= UInt64(UInt32.max) else { throw CodecError.malformed }
+            nextKeyIndex = UInt32(raw)
+        }
+        return ExportBundle(seed: seed, owner: owner, people: people, nextKeyIndex: nextKeyIndex)
     }
 
     static func seal(_ bundle: ExportBundle, passphrase: String,
@@ -58,6 +69,9 @@ nonisolated enum BackupMerge {
         var personas: [Persona]
         /// Added or replaced.
         var changed: Int
+        /// The counter afterwards: one above every index in the list and
+        /// no lower than what either phone had handed out.
+        var nextKeyIndex: UInt32
     }
 
     nonisolated struct PeopleResult: Equatable {
@@ -78,9 +92,10 @@ nonisolated enum BackupMerge {
     /// Imported personas join the local list by id. The same id with a
     /// higher `seq` replaces the local one but keeps the local `keyIndex`,
     /// so contacts who pinned that persona see the same key. A new persona
-    /// whose `keyIndex` a local one already uses gets a fresh index: two
-    /// personas never share a signing key.
-    static func personas(local: [Persona], imported: [Persona]) -> PersonaResult {
+    /// whose `keyIndex` a local one already uses gets a fresh index, no
+    /// lower than `nextKeyIndex` (the higher of the two phones' counters):
+    /// two personas never share a signing key, not even with a deleted one.
+    static func personas(local: [Persona], imported: [Persona], nextKeyIndex counter: UInt32 = 0) -> PersonaResult {
         var result = local
         var changed = 0
         for incoming in imported {
@@ -92,13 +107,14 @@ nonisolated enum BackupMerge {
                 changed += 1
             } else {
                 if result.contains(where: { $0.keyIndex == persona.keyIndex }) {
-                    persona.keyIndex = nextKeyIndex(after: result)
+                    persona.keyIndex = max(nextKeyIndex(after: result), counter)
                 }
                 result.append(persona)
                 changed += 1
             }
         }
-        return PersonaResult(personas: result, changed: changed)
+        return PersonaResult(personas: result, changed: changed,
+                             nextKeyIndex: max(nextKeyIndex(after: result), counter))
     }
 
     /// One above the highest index in use; 0 for an empty list.
@@ -138,9 +154,10 @@ nonisolated enum BackupMerge {
 
     /// The local pin always stays. A full imported card signed by the same
     /// key with a higher `seq` (or a full card where only a compact one was
-    /// held) replaces the stored card; a different key is counted and its
-    /// card ignored. Encounters are unioned by uuid, tags unioned, an empty
-    /// note filled, and a verified GPG key taken when there was none.
+    /// held) replaces the stored card, an earlier photo riding along beside
+    /// it as in `Merge`; a different key is counted and its card ignored.
+    /// Encounters are unioned by uuid, tags unioned, an empty note filled,
+    /// and a photo or verified GPG key taken when there was none.
     static func merge(local: Person, imported: Person, now: Date) -> Merged {
         let keyChanged = !keysMatch(local, imported)
         var person = local
@@ -149,8 +166,13 @@ nonisolated enum BackupMerge {
            local.card.isCompact || imported.card.seq > local.card.seq {
             person.cardBytes = imported.cardBytes
             person.card = imported.card
+            person.photo = imported.card.photo == nil ? (imported.photo ?? local.currentPhoto) : nil
             person.publicKey = imported.publicKey ?? local.publicKey
             person.keyFingerprint = imported.keyFingerprint ?? local.keyFingerprint
+            changed = true
+        }
+        if !keyChanged, person.currentPhoto == nil, let photo = imported.currentPhoto {
+            person.photo = photo
             changed = true
         }
         let known = Set(local.encounters.map { $0.id })

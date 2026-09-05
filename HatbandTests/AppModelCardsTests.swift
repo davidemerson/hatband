@@ -430,9 +430,43 @@ import Testing
         }
     }
 
+    /// The phone's display calendar never reaches key 17: the Buddhist and
+    /// Japanese calendars number the same instant 2569 and Reiwa 8, and
+    /// `issuedDay` still counts the Gregorian day.
+    @Test func issuedDayIgnoresTheDisplayCalendar() throws {
+        let utc = try #require(TimeZone(identifier: "UTC"))
+        let instant = Date(timeIntervalSince1970: 1_788_000_000)   // 2026-08-29T10:40:00Z
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = utc
+        var buddhist = Calendar(identifier: .buddhist)
+        buddhist.timeZone = utc
+        var japanese = Calendar(identifier: .japanese)
+        japanese.timeZone = utc
+        let civil = gregorian.dateComponents([.year, .month, .day], from: instant)
+        let thai = buddhist.dateComponents([.year, .month, .day], from: instant)
+        let reiwa = japanese.dateComponents([.year, .month, .day], from: instant)
+        let year = try #require(civil.year)
+        let month = try #require(civil.month)
+        let dayOfMonth = try #require(civil.day)
+        #expect(year == 2026 && month == 8 && dayOfMonth == 29)
+        let thaiYear = try #require(thai.year)
+        let reiwaYear = try #require(reiwa.year)
+        #expect(thaiYear == 2569 && reiwaYear == 8)
+        #expect(thai.month == month && thai.day == dayOfMonth)
+        #expect(reiwa.month == month && reiwa.day == dayOfMonth)
+        let day = Int(AppModel.issuedDay(on: instant, timeZone: utc))
+        #expect(day == Day.number(year: year, month: month, day: dayOfMonth))
+        #expect(day == 2432)
+        // What the display calendars' years would have produced instead.
+        #expect(Day.number(year: thaiYear, month: month, day: dayOfMonth) > day + 500 * 365)
+        #expect(Day.number(year: reiwaYear, month: month, day: dayOfMonth) < 0)
+    }
+
     @Test func issuedDayIsToday() async throws {
         let model = try await onboarded()
-        let parts = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = .current
+        let parts = gregorian.dateComponents([.year, .month, .day], from: Date())
         let year = try #require(parts.year)
         let month = try #require(parts.month)
         let day = try #require(parts.day)

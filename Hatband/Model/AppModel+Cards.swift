@@ -8,6 +8,28 @@ extension AppModel {
     /// persona's key is never derived again for another one.
     static let personaIndexKey = KeyName.personaIndex
 
+    /// The stored counter, four big-endian bytes; nil until a persona has
+    /// been added after onboarding.
+    func storedPersonaIndex() throws -> UInt32? {
+        guard let data = try keys.read(AppModel.personaIndexKey, prompt: nil), data.count == 4 else { return nil }
+        let bytes = Array(data)
+        return UInt32(bytes[0]) << 24 | UInt32(bytes[1]) << 16 | UInt32(bytes[2]) << 8 | UInt32(bytes[3])
+    }
+
+    func storePersonaIndex(_ next: UInt32) throws {
+        let data = Data([UInt8(next >> 24 & 0xFF), UInt8(next >> 16 & 0xFF),
+                         UInt8(next >> 8 & 0xFF), UInt8(next & 0xFF)])
+        try keys.write(AppModel.personaIndexKey, data, access: .seed)
+    }
+
+    /// One past the highest index in use or ever handed out: what the next
+    /// persona gets, and what an export carries so a restore continues
+    /// from it.
+    func nextPersonaIndex() throws -> UInt32 {
+        let stored = try storedPersonaIndex() ?? 0
+        return max((personas.map { $0.keyIndex }.max() ?? 0) + 1, stored)
+    }
+
     /// Days since 2020-01-01 for today, in the local time zone; never negative.
     func issuedDay() -> UInt32 {
         AppModel.issuedDay(on: Date(), timeZone: .current)
@@ -178,19 +200,10 @@ extension AppModel {
 
     // MARK: - Private
 
-    /// One past the highest index in use or ever handed out, and the
-    /// counter advanced past it.
+    /// `nextPersonaIndex()`, with the counter advanced past it.
     private func nextKeyIndex() throws -> UInt32 {
-        var next = (personas.map { $0.keyIndex }.max() ?? 0) + 1
-        if let data = try keys.read(AppModel.personaIndexKey, prompt: nil), data.count == 4 {
-            let bytes = Array(data)
-            let stored = UInt32(bytes[0]) << 24 | UInt32(bytes[1]) << 16 | UInt32(bytes[2]) << 8 | UInt32(bytes[3])
-            next = max(next, stored)
-        }
-        let following = next + 1
-        let data = Data([UInt8(following >> 24 & 0xFF), UInt8(following >> 16 & 0xFF),
-                         UInt8(following >> 8 & 0xFF), UInt8(following & 0xFF)])
-        try keys.write(AppModel.personaIndexKey, data, access: .seed)
+        let next = try nextPersonaIndex()
+        try storePersonaIndex(next + 1)
         return next
     }
 
