@@ -208,6 +208,32 @@ struct BackupMergeTests {
         #expect(BackupMerge.personas(local: [local], imported: []).nextKeyIndex == 1)
     }
 
+    /// Under another seed an imported index names no key here and may be
+    /// one a deleted local persona held, so every persona added from a
+    /// different identity takes a fresh index from the counter; under the
+    /// same seed only a live collision moves one. A replacement by id keeps
+    /// the local index either way.
+    @Test func personasFromAnotherSeedTakeFreshIndices() {
+        let local = Persona(id: dedalusID, label: "Personal", keyIndex: 0, seq: 1)
+        let work = Persona(id: mollyID, label: "Work", keyIndex: 1, seq: 1)
+        let club = Persona(id: [3, 3, 3, 3, 3, 3, 3, 3], label: "Club", keyIndex: 2, seq: 1)
+        // Local counter 3: indices 1 and 2 were handed out here and retired.
+        let foreign = BackupMerge.personas(local: [local], imported: [work, club], nextKeyIndex: 3, sameSeed: false)
+        #expect(foreign.personas.map { $0.id } == [dedalusID, mollyID, club.id])
+        #expect(foreign.personas.map { $0.keyIndex } == [0, 3, 4])
+        #expect(foreign.nextKeyIndex == 5)
+        #expect(foreign.changed == 2)
+        let own = BackupMerge.personas(local: [local], imported: [work, club], nextKeyIndex: 3, sameSeed: true)
+        #expect(own.personas.map { $0.keyIndex } == [0, 1, 2])
+        #expect(own.nextKeyIndex == 3)
+        #expect(BackupMerge.personas(local: [local], imported: [work, club], nextKeyIndex: 3) == own)
+        let renamed = Persona(id: dedalusID, label: "Renamed", keyIndex: 9, seq: 2)
+        let replaced = BackupMerge.personas(local: [local], imported: [renamed], nextKeyIndex: 3, sameSeed: false)
+        #expect(replaced.personas.map { $0.keyIndex } == [0])
+        #expect(replaced.personas[0].label == "Renamed")
+        #expect(replaced.nextKeyIndex == 3)
+    }
+
     /// A newer card without a photo replaces the stored one and the earlier
     /// photo stays beside it, the stored bytes still the signed ones; a
     /// photo is taken where there was none; never from a different key.

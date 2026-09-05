@@ -92,10 +92,13 @@ nonisolated enum BackupMerge {
     /// Imported personas join the local list by id. The same id with a
     /// higher `seq` replaces the local one but keeps the local `keyIndex`,
     /// so contacts who pinned that persona see the same key. A new persona
-    /// whose `keyIndex` a local one already uses gets a fresh index, no
-    /// lower than `nextKeyIndex` (the higher of the two phones' counters):
-    /// two personas never share a signing key, not even with a deleted one.
-    static func personas(local: [Persona], imported: [Persona], nextKeyIndex counter: UInt32 = 0) -> PersonaResult {
+    /// gets a fresh index, no lower than `nextKeyIndex` (the higher of the
+    /// two phones' counters), when its own collides with a local one or,
+    /// with `sameSeed` false, always: an index from another seed names no
+    /// key here and may be one a deleted local persona held. Two personas
+    /// never share a signing key, not even with a deleted one.
+    static func personas(local: [Persona], imported: [Persona], nextKeyIndex counter: UInt32 = 0,
+                         sameSeed: Bool = true) -> PersonaResult {
         var result = local
         var changed = 0
         for incoming in imported {
@@ -106,7 +109,7 @@ nonisolated enum BackupMerge {
                 result[index] = persona
                 changed += 1
             } else {
-                if result.contains(where: { $0.keyIndex == persona.keyIndex }) {
+                if !sameSeed || result.contains(where: { $0.keyIndex == persona.keyIndex }) {
                     persona.keyIndex = max(nextKeyIndex(after: result), counter)
                 }
                 result.append(persona)

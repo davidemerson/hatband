@@ -74,7 +74,7 @@ extension AppModel {
             case .restore:
                 return try restore(seed: bundle.seed, owner: owner, people: imported, nextKeyIndex: bundle.nextKeyIndex)
             case .merge:
-                return try await merge(owner: owner, people: imported, nextKeyIndex: bundle.nextKeyIndex)
+                return try await merge(seed: bundle.seed, owner: owner, people: imported, nextKeyIndex: bundle.nextKeyIndex)
             }
         } catch {
             throw AppError(error)
@@ -132,13 +132,17 @@ extension AppModel {
     /// Into what is here: the local seed stays, personas and people merge
     /// by id (`BackupMerge`), the persona-index counter becomes the higher
     /// of the two, and everything is re-sealed under this device's key.
-    private func merge(owner: (profile: Profile, personas: [Persona], settings: Settings),
+    /// Personas from another seed take fresh indices: theirs name no key
+    /// under this one, and one may be an index a deleted persona held here.
+    private func merge(seed: [UInt8], owner: (profile: Profile, personas: [Persona], settings: Settings),
                        people imported: [Person], nextKeyIndex: UInt32?) async throws -> ImportSummary {
         guard phase == .ready else { throw AppError.storage("Set up Hatband before merging an export.") }
         let key = try await requireKey()
         let ownCounter = try nextPersonaIndex()
         let counter = max(ownCounter, nextKeyIndex ?? BackupMerge.nextKeyIndex(after: owner.personas))
-        let personaResult = BackupMerge.personas(local: personas, imported: owner.personas, nextKeyIndex: counter)
+        let sameSeed = try identity().seed == seed
+        let personaResult = BackupMerge.personas(local: personas, imported: owner.personas, nextKeyIndex: counter,
+                                                 sameSeed: sameSeed)
         // Whole seconds, as `PersonCodec` stores dates, so what is held in
         // memory equals what reloads.
         let now = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down))

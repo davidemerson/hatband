@@ -444,7 +444,7 @@ import Testing
         japanese.timeZone = utc
         let civil = gregorian.dateComponents([.year, .month, .day], from: instant)
         let thai = buddhist.dateComponents([.year, .month, .day], from: instant)
-        let reiwa = japanese.dateComponents([.year, .month, .day], from: instant)
+        let reiwa = japanese.dateComponents([.era, .year, .month, .day], from: instant)
         let year = try #require(civil.year)
         let month = try #require(civil.month)
         let dayOfMonth = try #require(civil.day)
@@ -460,6 +460,16 @@ import Testing
         // What the display calendars' years would have produced instead.
         #expect(Day.number(year: thaiYear, month: month, day: dayOfMonth) > day + 500 * 365)
         #expect(Day.number(year: reiwaYear, month: month, day: dayOfMonth) < 0)
+        // The civil day a Buddhist phone shows, read back through its own
+        // calendar, is the same instant and so the same number.
+        var thaiMidday = thai
+        thaiMidday.hour = 12
+        let viaBuddhist = try #require(buddhist.date(from: thaiMidday))
+        #expect(AppModel.issuedDay(on: viaBuddhist, timeZone: utc) == 2432)
+        var reiwaMidday = reiwa
+        reiwaMidday.hour = 12
+        let viaJapanese = try #require(japanese.date(from: reiwaMidday))
+        #expect(AppModel.issuedDay(on: viaJapanese, timeZone: utc) == 2432)
     }
 
     @Test func issuedDayIsToday() async throws {

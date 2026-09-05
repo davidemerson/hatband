@@ -279,6 +279,47 @@ private func byID(_ people: [Person]) -> [Person] {
         #expect(try again.addPersona(label: "Later", alias: false).keyIndex == 8)
     }
 
+    /// A persona merged from another phone's identity never lands on an
+    /// index this phone retired: under the seed that stays, that index is
+    /// the deleted persona's key. Merged from this identity, an index still
+    /// names the key it always did and is kept.
+    @Test func mergeFromAnotherSeedNeverReusesARetiredIndex() async throws {
+        let (source, _) = try await onboarded(name: "Leopold Bloom")
+        _ = try source.addPersona(label: "Work", alias: false)
+        #expect(source.personas.map { $0.keyIndex } == [0, 1])
+        let data = try await source.exportData(passphrase: passphrase)
+
+        let (target, targetKeys) = try await onboarded(name: "Henry Flower")
+        let spare = try target.addPersona(label: "Spare", alias: false)
+        try target.delete(persona: spare)
+        let retiredCard = try target.card(for: spare, form: .fullQR)
+        let retired = try #require(retiredCard.publicKey)
+        #expect(targetKeys.items[KeyName.personaIndex]?.data == Data([0, 0, 0, 2]))
+        #expect(try target.identity() != source.identity())
+        let summary = try await target.importData(data, passphrase: passphrase, mode: .merge)
+        #expect(summary.personas == 2)
+        #expect(target.personas.map { $0.label } == ["Personal", "Personal", "Work"])
+        #expect(target.personas.map { $0.keyIndex } == [0, 2, 3])
+        #expect(targetKeys.items[KeyName.personaIndex]?.data == Data([0, 0, 0, 4]))
+        for persona in target.personas {
+            #expect(try target.card(for: persona, form: .fullQR).publicKey != retired)
+        }
+        #expect(try target.addPersona(label: "New", alias: false).keyIndex == 4)
+
+        let twin = try AppModel.inMemory()
+        await twin.load()
+        _ = try await twin.importData(data, passphrase: passphrase, mode: .restore)
+        #expect(try twin.identity() == source.identity())
+        let work = try #require(twin.personas.first { $0.label == "Work" })
+        try twin.delete(persona: work)
+        #expect(twin.personas.map { $0.keyIndex } == [0])
+        let back = try await twin.importData(data, passphrase: passphrase, mode: .merge)
+        #expect(back.personas == 1)
+        #expect(twin.personas.map { $0.keyIndex } == [0, 1])
+        #expect(twin.personas.last?.id == work.id)
+        #expect(try twin.card(for: work, form: .fullQR).publicKey == source.card(for: work, form: .fullQR).publicKey)
+    }
+
     @Test func importWrongPassphraseMapsToAppError() async throws {
         let (source, _) = try await onboarded()
         let data = try await source.exportData(passphrase: passphrase)
