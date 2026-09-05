@@ -142,7 +142,7 @@ public enum Confusables {
     /// The ASCII a label imitates when every scalar in it is ASCII or has
     /// an ASCII twin, at least one a twin (`аpple`, `gіthub`, `ｇｉｔｈｕｂ`,
     /// `аррӏе́`). Judged on the label's canonical decomposition (NFD), so
-    /// the skeleton is built on NFD, so a precomposed letter and its decomposed spelling get one verdict (singletons that decompose to ASCII, like the Kelvin sign, stay twins): a precomposed
+    /// precomposed and decomposed spellings get one verdict: a precomposed
     /// letter is its base and marks (`ѐ` is `е` then U+0300, so `аррӏѐ`
     /// is `apple` in either spelling), and a singleton whose decomposition
     /// is ASCII (the Kelvin sign is `K`) is a twin. A mark (Mn, Mc, Me)
