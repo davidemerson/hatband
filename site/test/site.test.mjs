@@ -72,7 +72,7 @@ test('the committed bundle runs: it renders a card from location.hash and leaves
     const root = globalThis.window.document.getElementById('app');
     assert.equal(elements(root).find((e) => e.tagName === 'H1').textContent, 'Leopold Bloom');
     assert.equal(elements(root).find((e) => e.classList.contains('badge')).textContent, 'signature verified');
-    assert.equal(globalThis.window.document.title, 'Leopold Bloom · Hatband');
+    assert.equal(globalThis.window.document.title, 'Hatband');
     assert.deepEqual(Object.keys(globalThis).filter((k) => !before.has(k)), ['window'], 'nothing leaks into the global scope');
   } finally {
     delete globalThis.window;

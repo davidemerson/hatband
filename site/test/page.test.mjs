@@ -227,7 +227,7 @@ test('error and empty states never echo the fragment', async () => {
 test('main: verifies, fingerprints and renders from location.hash', async () => {
   const typical = vector('typical-signed');
   const { win, root } = await run({ hash: typical.url.slice(HB1_URL_PREFIX.length - 1), href: typical.url });
-  assert.equal(win.document.title, 'Leopold Bloom · Hatband');
+  assert.equal(win.document.title, 'Hatband');
   assert.equal(byClass(root, 'badge')[0].textContent, 'signature verified');
   const open = links(root).find((a) => a.textContent === 'Open in Hatband');
   assert.equal(open.getAttribute('href'), typical.url);

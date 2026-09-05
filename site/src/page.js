@@ -255,7 +255,7 @@ export async function main(win) {
   const signature = await signatureStatus(card, map, subtle);
   let keyFingerprint = card.keyFingerprint;
   if (card.publicKey && subtle) keyFingerprint = await sha256(card.publicKey, subtle);
-  if (card.name) doc.title = card.name + ' · Hatband';
+  doc.title = 'Hatband';
   root.appendChild(renderCard(doc, card, {
     signature, keyFingerprint, url: win.location.href, navigator: win.navigator, File: win.File,
   }));

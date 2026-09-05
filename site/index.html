@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-vA2uBKDq3t2neSnVet0t/1VQl5auCWgXemomd/BWUrQ='; style-src 'sha256-b9JL0JAETaDWN++7oh0eHS20YcflE4UeScfmx0fqU+Y='; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-0Tebg4wvInn4YSwdi4UpuS+XCY9fmLNLeFtnKM8Iulc='; style-src 'sha256-b9JL0JAETaDWN++7oh0eHS20YcflE4UeScfmx0fqU+Y='; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light dark">
@@ -1483,7 +1483,7 @@ async function main(win) {
   const signature = await signatureStatus(card, map, subtle);
   let keyFingerprint = card.keyFingerprint;
   if (card.publicKey && subtle) keyFingerprint = await sha256(card.publicKey, subtle);
-  if (card.name) doc.title = card.name + ' · Hatband';
+  doc.title = 'Hatband';
   root.appendChild(renderCard(doc, card, {
     signature, keyFingerprint, url: win.location.href, navigator: win.navigator, File: win.File,
   }));

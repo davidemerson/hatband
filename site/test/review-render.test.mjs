@@ -285,7 +285,7 @@ test('main() touches nothing but the document, the hash, crypto, navigator and F
   assert.equal(byClass(root, 'badge')[0].textContent, 'signature verified');
   // The one thing that leaves the card for the browser chrome: the name in the window title,
   // which browsers keep in history and tab lists. Deliberate; recorded here so a change is noticed.
-  assert.equal(win.document.title, 'Leopold Bloom · Hatband');
+  assert.equal(win.document.title, 'Hatband');
 });
 
 test('vCard file names: everything the text check flags is stripped, path characters too, and a surrogate is never split', () => {

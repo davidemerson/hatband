@@ -14,7 +14,11 @@ cp site/*.html "$tmp/"
 sed "s/TEAMID/$TEAMID/g" site/.well-known/apple-app-site-association > "$tmp/.well-known/apple-app-site-association"
 cp site/.well-known/security.txt "$tmp/.well-known/security.txt"
 put() { aws s3 cp "$tmp/$1" "s3://$bucket/$1" --content-type "$2" --cache-control "${3:-public, max-age=300}" --only-show-errors; }
-for f in "$tmp"/*.html; do put "$(basename "$f")" "text/html; charset=utf-8"; done
+for f in "$tmp"/*.html; do
+  name=$(basename "$f")
+  put "$name" "text/html; charset=utf-8"
+  [ "$name" = index.html ] || { cp "$f" "$tmp/${name%.html}"; put "${name%.html}" "text/html; charset=utf-8"; }
+done
 put .well-known/apple-app-site-association "application/json" "public, max-age=3600"
 put .well-known/security.txt "text/plain; charset=utf-8" "public, max-age=3600"
 aws cloudfront create-invalidation --distribution-id "$dist" --paths "/*" --query 'Invalidation.Id' --output text

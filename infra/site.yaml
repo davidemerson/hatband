@@ -78,6 +78,9 @@ Resources:
       ResponseHeadersPolicyConfig:
         Name: !Sub "${DomainName}-headers"
         SecurityHeadersConfig:
+          ContentSecurityPolicy:
+            ContentSecurityPolicy: "frame-ancestors 'none'"
+            Override: true
           StrictTransportSecurity:
             AccessControlMaxAgeSec: 63072000
             IncludeSubdomains: true
