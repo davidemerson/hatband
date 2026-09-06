@@ -149,18 +149,24 @@ Resources:
       RecordSets:
         - Name: !Ref DomainName
           Type: A
-          AliasTarget: &alias
+          AliasTarget:
             DNSName: !GetAtt Distribution.DomainName
             HostedZoneId: Z2FDTNDATAQYW2   # CloudFront's fixed zone
         - Name: !Ref DomainName
           Type: AAAA
-          AliasTarget: *alias
+          AliasTarget:
+            DNSName: !GetAtt Distribution.DomainName
+            HostedZoneId: Z2FDTNDATAQYW2   # CloudFront's fixed zone
         - Name: !Sub "www.${DomainName}"
           Type: A
-          AliasTarget: *alias
+          AliasTarget:
+            DNSName: !GetAtt Distribution.DomainName
+            HostedZoneId: Z2FDTNDATAQYW2   # CloudFront's fixed zone
         - Name: !Sub "www.${DomainName}"
           Type: AAAA
-          AliasTarget: *alias
+          AliasTarget:
+            DNSName: !GetAtt Distribution.DomainName
+            HostedZoneId: Z2FDTNDATAQYW2   # CloudFront's fixed zone
 
 Outputs:
   BucketName:
