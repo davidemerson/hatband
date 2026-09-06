@@ -6,7 +6,7 @@ Named for the card Bloom keeps in his hatband in *Ulysses*, bearing the name of 
 
 ## Status
 
-The format library, its test vectors, the fallback site and the iPhone app exist. The app has only ever been built by CI; it has not run on a phone.
+The format library, its test vectors and the iPhone app exist; the fallback site is live at hatband.link. The app has only ever been built by CI; it has not run on a phone.
 
 ## Layout
 
