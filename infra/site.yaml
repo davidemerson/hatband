@@ -17,7 +17,8 @@ Resources:
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
-      BucketName: !Sub "${DomainName}-site"
+      # No dots: a dotted bucket name fails the TLS match on the S3 origin.
+      BucketName: hatband-link-site
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
