@@ -29,7 +29,7 @@ nonisolated enum TrustFacts {
         case .wkdDirect:
             return Egress(
                 host: "<their email domain>",
-                when: "The same tap, when the openpgpkey subdomain has no key to offer.")
+                when: "You tap Fetch key (direct) on the same person. It is a button of its own, not something the other one falls back to.")
         case .keysOpenPGP:
             return Egress(
                 host: "keys.openpgp.org",
@@ -37,7 +37,7 @@ nonisolated enum TrustFacts {
         case .githubKeys:
             return Egress(
                 host: "github.com",
-                when: "You tap Verify on a GitHub username whose card carries an SSH key.")
+                when: "You tap Verify on a GitHub username whose card carries an SSH key, or Check github.com beside your own GitHub username while editing your profile.")
         case .githubGPG:
             return Egress(
                 host: "github.com",
@@ -45,7 +45,7 @@ nonisolated enum TrustFacts {
         case .mastodonLookup:
             return Egress(
                 host: "<their Mastodon instance>",
-                when: "You tap Verify on a Mastodon address, to ask the instance whether it vouches for the website on the card.")
+                when: "You tap Verify on a Mastodon address, to ask the instance whether it vouches for the website on the card, or Check beside your own Mastodon address while editing your profile.")
         }
     }
 }

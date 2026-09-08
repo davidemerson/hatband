@@ -129,6 +129,45 @@ struct ProfileDraftTests {
         #expect(ProfileDraft.preview(key: "phone", text: "+353871234567") == nil)
     }
 
+    // MARK: - Checking a handle
+
+    /// Only the two services that answer honestly without an account, and
+    /// each through a target that already names its host on the trust page.
+    /// GitHub's key list is 404 for a user who is not there, and Mastodon's
+    /// lookup is the same, so neither needs a new request of its own.
+    @Test func onlyGitHubAndMastodonCanBeAsked() {
+        #expect(ProfileDraft.checkTarget(key: "github", text: "lbloom") == .githubKeys(user: "lbloom"))
+        #expect(ProfileDraft.checkTarget(key: "mastodon", text: "@bloom@merveilles.town")
+                == .mastodonLookup(user: "bloom", instance: "merveilles.town"))
+
+        // LinkedIn refuses unauthenticated profile requests; Calendly answers
+        // with a page rather than an answer. Neither is asked.
+        #expect(ProfileDraft.checkTarget(key: "linkedin", text: "leopold-bloom") == nil)
+        #expect(ProfileDraft.checkTarget(key: "calendly", text: "bloom/coffee") == nil)
+        #expect(ProfileDraft.checkTarget(key: "website", text: "nnix.com") == nil)
+        #expect(ProfileDraft.checkTarget(key: "email", text: "bloom@example.ie") == nil)
+    }
+
+    /// A handle that does not normalise has nothing to ask about, and the
+    /// host named on the button is the one the request goes to.
+    @Test func nothingIsAskedAboutAHandleThatIsNotOne() {
+        #expect(ProfileDraft.checkTarget(key: "github", text: "   ") == nil)
+        #expect(ProfileDraft.checkTarget(key: "github", text: "not a user/////") == nil)
+        #expect(ProfileDraft.checkTarget(key: "mastodon", text: "bloom") == nil)
+        #expect(ProfileDraft.checkTarget(key: "github", text: "lbloom")?.host == "github.com")
+        #expect(ProfileDraft.checkTarget(key: "mastodon", text: "bloom@merveilles.town")?.host
+                == "merveilles.town")
+    }
+
+    @Test func theDraftAnswersByFieldKey() {
+        var d = draft()
+        d.github = "lbloom"
+        d.mastodon = "bloom@merveilles.town"
+        #expect(d.value(for: "github") == "lbloom")
+        #expect(d.value(for: "mastodon") == "bloom@merveilles.town")
+        #expect(d.value(for: "nonsense").isEmpty)
+    }
+
     // MARK: - Keys
 
     /// The refusal has to reach the field, not just the scanner: these boxes

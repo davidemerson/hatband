@@ -24,6 +24,12 @@ import UIKit
     @State private var warnings: [String: String] = [:]
     @State private var pickedPhoto: PhotosPickerItem?
     @State private var saving = false
+    /// The link that was found, per field. Keyed on the link rather than the
+    /// field, so editing the handle changes the link and the tick goes with
+    /// it: a checkmark can never outlive the value it was about.
+    @State private var verified: [String: String] = [:]
+    @State private var checking: String?
+    @State private var copied: [String: String] = [:]
 
     init() {
         alias = nil
@@ -202,10 +208,62 @@ import UIKit
             .autocorrectionDisabled(lowercase)
         note(for: key)
         if problems[key] == nil, let preview = ProfileDraft.preview(key: key, text: text.wrappedValue) {
-            Text(preview)
-                .font(.footnote)
-                .foregroundStyle(Theme.tertiary)
-                .accessibilityLabel("Links to \(preview)")
+            previewRow(key: key, preview: preview, text: text.wrappedValue)
+        }
+    }
+
+    /// The link the field becomes: tap to copy it, and where the service can
+    /// be asked, a button that names the host before it is contacted.
+    @ViewBuilder private func previewRow(key: String, preview: String, text: String) -> some View {
+        HStack(spacing: 6) {
+            Button {
+                Pasteboard.copy(preview)
+                copied[key] = preview
+            } label: {
+                HStack(spacing: 4) {
+                    Text(copied[key] == preview ? "Copied" : preview)
+                        .font(.footnote)
+                        .foregroundStyle(Theme.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if verified[key] == preview {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(Theme.tertiary)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(verified[key] == preview
+                                ? "Links to \(preview), found. Copy."
+                                : "Links to \(preview). Copy.")
+            Spacer(minLength: 8)
+            if let target = ProfileDraft.checkTarget(key: key, text: text), verified[key] != preview {
+                if checking == key {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button("Check \(target.host)") { check(key, target) }
+                        .font(.footnote)
+                        .buttonStyle(.borderless)
+                }
+            }
+        }
+    }
+
+    /// One request, from this tap, to the host the button named.
+    private func check(_ key: String, _ target: FetchTarget) {
+        checking = key
+        Task {
+            do {
+                _ = try await ExplicitFetch.get(target, maxBytes: 65_536)
+                if let found = ProfileDraft.preview(key: key, text: draft.value(for: key)) {
+                    verified[key] = found
+                }
+                warnings[key] = nil
+            } catch {
+                warnings[key] = "\(target.host) did not know that one."
+            }
+            checking = nil
         }
     }
 
@@ -608,6 +666,46 @@ nonisolated struct ProfileDraft: Equatable {
             return (try? Normalize.mastodon(input)).flatMap { CanonicalURI.mastodon($0)?.profile }
         case "website":
             return (try? Normalize.website(input)).map { CanonicalURI.website($0.address, insecure: $0.insecure) }
+        default:
+            return nil
+        }
+    }
+
+    /// The draft's text for a field key, for the few places that work by key
+    /// rather than by binding.
+    func value(for key: String) -> String {
+        switch key {
+        case "phone": return phone
+        case "email": return email
+        case "website": return website
+        case "github": return github
+        case "linkedin": return linkedin
+        case "mastodon": return mastodon
+        case "calendly": return calendly
+        default: return ""
+        }
+    }
+
+    /// The one request that answers whether a handle is real, for the two
+    /// services that answer honestly without an account. Both hosts are
+    /// already named on the trust page, and both are reached only from a
+    /// tapped button. LinkedIn refuses unauthenticated profile requests and
+    /// Calendly answers with a page rather than an answer, so neither is
+    /// offered a check: their link is shown and left at that.
+    static func checkTarget(key: String, text: String) -> FetchTarget? {
+        let input = trim(text)
+        guard !input.isEmpty else { return nil }
+        switch key {
+        case "github":
+            return (try? Normalize.github(input)).map { FetchTarget.githubKeys(user: $0) }
+        case "mastodon":
+            guard let handle = try? Normalize.mastodon(input) else { return nil }
+            let scalars = Substring(handle).unicodeScalars
+            guard let at = scalars.lastIndex(of: "@"), at != scalars.startIndex else { return nil }
+            let user = String(String.UnicodeScalarView(scalars[..<at]))
+            let instance = String(String.UnicodeScalarView(scalars[scalars.index(after: at)...]))
+            guard !user.isEmpty, !instance.isEmpty else { return nil }
+            return .mastodonLookup(user: user, instance: instance)
         default:
             return nil
         }
