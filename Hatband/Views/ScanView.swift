@@ -107,8 +107,17 @@ import VisionKit
         .padding()
     }
 
-    private func recognised(_ text: String, source: CardSource) {
-        guard foundText == nil else { return }
+    /// True when the payload was a card, which is what ends the scan. A QR
+    /// that is not one says so here and leaves the camera running: closing
+    /// the sheet to raise an alert on another tab made a poster or a Wi-Fi
+    /// code into a four-tap detour.
+    @discardableResult private func recognised(_ text: String, source: CardSource) -> Bool {
+        guard foundText == nil else { return false }
+        guard ScanView.isCard(text) else {
+            problem = ScanView.notACard
+            return false
+        }
+        problem = nil
         foundText = text
         foundSource = source
         recognitions += 1
@@ -117,6 +126,16 @@ import VisionKit
             try? await Task.sleep(for: .milliseconds(250))
             dismiss()
         }
+        return true
+    }
+
+    static let notACard = "That QR code is not a Hatband card."
+
+    /// Whether a scanned payload decodes as a card, without keeping it: the
+    /// sheet only has to decide whether to stop scanning, and `receive`
+    /// reports anything wrong with a card that does decode.
+    nonisolated static func isCard(_ text: String) -> Bool {
+        (try? HB1.decode(url: text)) != nil
     }
 
     private func deliver(_ text: String, source: CardSource) {

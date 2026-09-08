@@ -5,13 +5,15 @@ import VisionKit
 /// `DataScannerViewController` limited to QR codes, as the child of a
 /// controller of our own: scanning starts from its `viewDidAppear`, once
 /// the camera view is in a window, so a refusal then is a real one. The
-/// first payload wins and scanning stops on it; an unavailable camera is
-/// reported once.
+/// `onScan` decides whether a payload ends the scan: a QR that is not a
+/// Hatband card leaves the camera up, so pointing it at a poster or a
+/// Wi-Fi code is not a dead end. An unavailable camera is reported once.
 @MainActor struct ScannerView: UIViewControllerRepresentable {
-    let onScan: (String) -> Void
+    /// True when the payload is a card and the scan is over.
+    let onScan: (String) -> Bool
     let onUnavailable: (any Error) -> Void
 
-    init(onScan: @escaping (String) -> Void, onUnavailable: @escaping (any Error) -> Void) {
+    init(onScan: @escaping (String) -> Bool, onUnavailable: @escaping (any Error) -> Void) {
         self.onScan = onScan
         self.onUnavailable = onUnavailable
     }
@@ -52,10 +54,10 @@ import VisionKit
     @MainActor final class Coordinator: NSObject, DataScannerViewControllerDelegate {
         private(set) var finished = false
         var scanner: DataScannerViewController?
-        private let onScan: (String) -> Void
+        private let onScan: (String) -> Bool
         private let onUnavailable: (any Error) -> Void
 
-        init(onScan: @escaping (String) -> Void, onUnavailable: @escaping (any Error) -> Void) {
+        init(onScan: @escaping (String) -> Bool, onUnavailable: @escaping (any Error) -> Void) {
             self.onScan = onScan
             self.onUnavailable = onUnavailable
         }
@@ -83,9 +85,9 @@ import VisionKit
             guard !finished else { return }
             for item in addedItems {
                 guard case .barcode(let barcode) = item, let payload = barcode.payloadStringValue else { continue }
+                guard onScan(payload) else { continue }
                 finished = true
                 dataScanner.stopScanning()
-                onScan(payload)
                 return
             }
         }

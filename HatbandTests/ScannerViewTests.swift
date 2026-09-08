@@ -29,7 +29,7 @@ import VisionKit
     /// refuses (reported once) or idles; either way one report in all.
     @Test func coordinatorReportsOnceAndStartsIdempotently() {
         var reported: [String] = []
-        let coordinator = ScannerView.Coordinator(onScan: { _ in }, onUnavailable: { reported.append(ScanView.unavailableText($0)) })
+        let coordinator = ScannerView.Coordinator(onScan: { _ in true }, onUnavailable: { reported.append(ScanView.unavailableText($0)) })
         let scanner = DataScannerViewController(
             recognizedDataTypes: [.barcode(symbologies: [.qr])],
             qualityLevel: .balanced,
