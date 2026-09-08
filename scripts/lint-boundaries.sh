@@ -1,7 +1,8 @@
 #!/bin/sh
 # Boundaries lint. Each row of scripts/boundaries.txt is `regex<TAB>allowed`,
 # allowed being space-separated path prefixes or `-`. Every hit of the regex
-# in Hatband, HatbandWidgets or Shared outside an allowed prefix is printed,
+# in Hatband, HatbandWidgets, HatbandMessages or Shared outside an allowed
+# prefix is printed,
 # and the exit status is 1 if there were any.
 #
 #   scripts/lint-boundaries.sh             lint the tree
@@ -13,7 +14,7 @@ set -u
 
 cd "$(dirname "$0")/.." || exit 2
 rules=scripts/boundaries.txt
-dirs="Hatband HatbandWidgets Shared"
+dirs="Hatband HatbandWidgets HatbandMessages Shared"
 tab=$(printf '\t')
 
 # Prints every hit of $1 not under a prefix in $2.

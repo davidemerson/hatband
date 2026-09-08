@@ -2,9 +2,9 @@ name: core
 on:
   workflow_dispatch:
   push:
-    paths: ["Packages/**", "spec/**", "Hatband/**", "Shared/**", "HatbandWidgets/**", "scripts/**", ".github/workflows/core.yml"]
+    paths: ["Packages/**", "spec/**", "Hatband/**", "Shared/**", "HatbandWidgets/**", "HatbandMessages/**", "scripts/**", ".github/workflows/core.yml"]
   pull_request:
-    paths: ["Packages/**", "spec/**", "Hatband/**", "Shared/**", "HatbandWidgets/**", "scripts/**", ".github/workflows/core.yml"]
+    paths: ["Packages/**", "spec/**", "Hatband/**", "Shared/**", "HatbandWidgets/**", "HatbandMessages/**", "scripts/**", ".github/workflows/core.yml"]
 jobs:
   linux:
     runs-on: ubuntu-24.04

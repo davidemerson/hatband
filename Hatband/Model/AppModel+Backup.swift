@@ -122,7 +122,7 @@ extension AppModel {
         people = imported
         locked = false
         phase = .ready
-        refreshWidget()
+        refreshFeeds()
         performDeferredOpen()
         Log.event("restore")
         return ImportSummary(personas: personas.count, people: imported.count,
@@ -167,7 +167,7 @@ extension AppModel {
         try store.save()
         store.reassertProtection()
         people = peopleResult.people
-        refreshWidget()
+        refreshFeeds()
         Log.event("merge")
         return ImportSummary(personas: personaResult.changed, people: peopleResult.added + peopleResult.updated,
                              encounters: peopleResult.encountersAdded, keyChanges: peopleResult.keyChanges)

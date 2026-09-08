@@ -13,6 +13,7 @@ xcuserdata/
 # Written by xcodegen from project.yml
 Hatband/Info.plist
 HatbandWidgets/Info.plist
+HatbandMessages/Info.plist
 *.entitlements
 
 # Site

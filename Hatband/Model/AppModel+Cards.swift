@@ -147,7 +147,7 @@ extension AppModel {
             self.error = AppError(error)
             Log.failure("select persona", error)
         }
-        refreshWidget()
+        refreshFeeds()
     }
 
     /// A random 8-byte id, a key index one past the highest ever allocated,
@@ -180,7 +180,7 @@ extension AppModel {
         }
         personas[index] = updated
         try saveOwner()
-        refreshWidget()
+        refreshFeeds()
         await updateActivity(for: updated)
     }
 
@@ -195,7 +195,7 @@ extension AppModel {
             settings.lastPersonaID = first.id
         }
         try saveOwner()
-        refreshWidget()
+        refreshFeeds()
         if sharing?.personaID == persona.id {
             Task { await self.stopSharing() }
         }
@@ -220,7 +220,7 @@ extension AppModel {
         self.profile = profile
         personas = updated
         try saveOwner()
-        refreshWidget()
+        refreshFeeds()
         if let sharing, let persona = personas.first(where: { $0.id == sharing.personaID }) {
             await updateActivity(for: persona)
         }

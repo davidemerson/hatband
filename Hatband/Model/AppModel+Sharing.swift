@@ -123,7 +123,7 @@ extension AppModel {
     /// which carry the name.
     func applyLockScreenPreferences() async throws {
         try saveOwner()
-        refreshWidget()
+        refreshFeeds()
         if let sharing, let persona = personas.first(where: { $0.id == sharing.personaID }) {
             await updateActivity(for: persona)
         }
@@ -154,10 +154,63 @@ extension AppModel {
         return failure
     }
 
+    /// Both feeds. Everything that changes what a card says calls this; the
+    /// widget's own on/off toggle still calls `refreshWidget` alone, because
+    /// it reverts itself on that failure and a share-feed failure is not its
+    /// business.
+    func refreshFeeds() {
+        refreshWidget()
+        refreshShareFeed()
+    }
+
+    /// Every persona as a finished, signed card, for the Messages extension
+    /// to offer. It cannot sign — the seed is the app's alone — so what it
+    /// can send is what is written here.
+    ///
+    /// Written whole or not at all: a half-list would offer some personas and
+    /// silently drop others.
+    @discardableResult func refreshShareFeed() -> (any Error)? {
+        let directory = widgetDirectory ?? AppGroup.container
+        guard phase == .ready, !personas.isEmpty else {
+            ShareFeed.remove(from: directory)
+            return nil
+        }
+        do {
+            let day = issuedDay()
+            let cards = try personas.map { persona -> ShareFeed.Card in
+                let file = try card(for: persona, form: .file)
+                let full = try card(for: persona, form: .fullQR)
+                return ShareFeed.Card(
+                    personaID: persona.id, label: persona.label, name: file.name,
+                    company: file.company, color: persona.color,
+                    fileURL: HB1.url(for: file), fullQRURL: HB1.url(for: full))
+            }
+            try ShareFeed(cards: cards, issuedDay: day, writtenAt: Date()).write(to: directory)
+            return nil
+        } catch {
+            ShareFeed.remove(from: directory)
+            Log.failure("refreshShareFeed", error)
+            return error
+        }
+    }
+
+    /// The signature covers the issued day, so yesterday's file names
+    /// yesterday. It still verifies and still saves; the app rewrites it
+    /// rather than leaving the extension to send a date it cannot correct.
+    func refreshShareFeedIfStale() {
+        guard phase == .ready else { return }
+        let feed = ShareFeed.read(from: widgetDirectory ?? AppGroup.container)
+        if feed == nil || feed?.isStale(on: issuedDay()) == true {
+            refreshShareFeed()
+        }
+    }
+
     /// Removes the feed and tells WidgetKit, so a widget on a `.never`
     /// policy stops showing a card the phone no longer holds.
     func clearWidget() {
-        WidgetFeed.remove(from: widgetDirectory ?? WidgetFeed.container)
+        let directory = widgetDirectory ?? AppGroup.container
+        WidgetFeed.remove(from: directory)
+        ShareFeed.remove(from: directory)
         reloadWidgetTimelines()
     }
 

@@ -1,5 +1,6 @@
 # Boundaries: regex<TAB>allowed path prefixes (space separated), or - for none.
-# Read by scripts/lint-boundaries.sh; grep -E over Hatband, HatbandWidgets, Shared.
+# Read by scripts/lint-boundaries.sh; grep -E over Hatband, HatbandWidgets,
+# HatbandMessages, Shared.
 URLSession|NWConnection|NWBrowser	Hatband/Platform/ExplicitFetch.swift
 import SwiftData|ModelContainer|ModelContext|@Model|FetchDescriptor|#Predicate	Hatband/Storage/
 SecItem|SecAccessControl|kSec	Hatband/Storage/KeychainStore.swift

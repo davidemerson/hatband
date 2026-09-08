@@ -1,9 +1,15 @@
 import Foundation
 import HatbandCore
 
-/// The only file allowed to name the App Group container.
+/// The only file allowed to name the App Group container, which the
+/// boundaries lint enforces by the literal call below. Both feeds reach the
+/// container through here rather than each naming it.
 nonisolated enum AppGroup {
     static let id = "group.link.hatband"
+
+    static var container: URL? {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: id)
+    }
 }
 
 /// What the Home Screen widget draws: the selected persona's compact URL,
@@ -14,9 +20,7 @@ nonisolated struct WidgetFeed: Codable, Equatable {
     static let kind = "link.hatband.card"
     static let fileName = "card-widget.json"
 
-    static var container: URL? {
-        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppGroup.id)
-    }
+    static var container: URL? { AppGroup.container }
 
     nonisolated enum Failure: Error, Equatable {
         case noContainer

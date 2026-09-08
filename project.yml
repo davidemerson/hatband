@@ -1,5 +1,5 @@
-# Single source for the Xcode project. Hatband.xcodeproj, both Info.plist
-# files and both .entitlements files are written by `xcodegen generate` and
+# Single source for the Xcode project. Hatband.xcodeproj, every Info.plist
+# and every .entitlements file are written by `xcodegen generate` and
 # gitignored. Stage 0: HatbandTests bundles spec/vectors/cards.json.
 name: Hatband
 options:
@@ -30,6 +30,8 @@ targets:
     dependencies:
       - package: HatbandCore
       - target: HatbandWidgets
+        embed: true
+      - target: HatbandMessages
         embed: true
     settings:
       base:
@@ -97,6 +99,29 @@ targets:
       path: HatbandWidgets/HatbandWidgets.entitlements
       properties:
         com.apple.security.application-groups: [group.link.hatband]
+  HatbandMessages:
+    type: app-extension
+    platform: iOS
+    sources: [HatbandMessages, Shared]
+    dependencies:
+      - package: HatbandCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: link.hatband.ios.messages
+        SKIP_INSTALL: "YES"
+    info:
+      path: HatbandMessages/Info.plist
+      properties:
+        CFBundleDisplayName: Hatband
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.message-payload-provider
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).MessagesViewController
+    entitlements:
+      path: HatbandMessages/HatbandMessages.entitlements
+      properties:
+        com.apple.security.application-groups: [group.link.hatband]
   HatbandTests:
     type: bundle.unit-test
     platform: iOS
@@ -114,6 +139,6 @@ targets:
 schemes:
   Hatband:
     build:
-      targets: { Hatband: all, HatbandWidgets: all, HatbandTests: [test] }
+      targets: { Hatband: all, HatbandWidgets: all, HatbandMessages: all, HatbandTests: [test] }
     run: { config: Debug }
     test: { config: Debug, targets: [HatbandTests] }

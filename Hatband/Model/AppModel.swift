@@ -150,6 +150,11 @@ import UIKit
             await loadKeychainState()
         }
         await reconcileActivities()
+        // The share feed's cards are signed for a day, and the signature
+        // covers it, so the Messages extension cannot correct one that has
+        // passed. `load()` only runs on the first activation, so this is the
+        // only place a plain foreground can notice midnight went by.
+        refreshShareFeedIfStale()
     }
 
     /// Opens the store once protected data is available, waiting for the
@@ -187,7 +192,7 @@ import UIKit
             _ = await unlock()
         }
         await reconcileActivities()
-        refreshWidget()
+        refreshFeeds()
         performDeferredOpen()
     }
 
