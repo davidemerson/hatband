@@ -9,8 +9,13 @@ struct BundleInfoTests {
     private let info = Bundle.main.infoDictionary ?? [:]
 
     @Test func versionComesFromTheBuildSetting() {
-        #expect(info["CFBundleShortVersionString"] as? String == "0.1.0")
-        #expect(info["CFBundleVersion"] as? String == "1")
+        #expect(info["CFBundleShortVersionString"] as? String == "0.2.0")
+        // Not pinned: every upload needs a build number above the last, so
+        // pinning one here would fail the release this test exists to protect.
+        // What matters is that the setting reaches the bundle at all.
+        let build = info["CFBundleVersion"] as? String
+        #expect(build?.isEmpty == false)
+        #expect(build.map { $0.allSatisfy(\.isNumber) } == true, "a build number, not $(CURRENT_PROJECT_VERSION)")
     }
 
     /// Declared false on the publicly-available-source exemption. Without the key

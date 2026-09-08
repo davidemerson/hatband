@@ -7,6 +7,34 @@ import Testing
 /// keychain; and, where the test host offers one, a real item written,
 /// rewritten under other protection, and read back.
 @MainActor struct KeychainStoreTests {
+    /// A replacement deletes before it adds, which is the one moment the
+    /// item is not there. If the add is refused the old protection goes back,
+    /// so a failed App lock toggle cannot leave the phone with no database
+    /// key and every scanned person unreadable.
+    @Test func restoringPutsBackTheProtectionTheItemHad() throws {
+        let data = Data([0xC0, 0xFF, 0xEE])
+
+        // An item behind an access control goes back behind the same object.
+        let control = try #require(SecAccessControlCreateWithFlags(
+            nil, kSecAttrAccessibleWhenUnlockedThisDeviceOnly, .userPresence, nil))
+        let controlled = KeychainStore.restoreAttributes(
+            name: "k", data: data, from: [kSecAttrAccessControl as String: control])
+        #expect(controlled?[kSecAttrAccessControl as String] != nil)
+        #expect(controlled?[kSecAttrAccessible as String] == nil)
+        #expect(controlled?[kSecValueData as String] as? Data == data)
+
+        // A plain item goes back at the accessibility it had.
+        let plain = KeychainStore.restoreAttributes(
+            name: "k", data: data,
+            from: [kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly as String])
+        #expect(plain?[kSecAttrAccessible as String] as? String
+                == kSecAttrAccessibleWhenUnlockedThisDeviceOnly as String)
+        #expect(plain?[kSecAttrAccessControl as String] == nil)
+
+        // Attributes that say nothing about protection offer nothing to restore.
+        #expect(KeychainStore.restoreAttributes(name: "k", data: data, from: [:]) == nil)
+    }
+
     @Test func baseAttributesNameTheItem() {
         let base = KeychainStore.baseAttributes(name: "dbkey")
         #expect(base[kSecClass as String] as? String == kSecClassGenericPassword as String)

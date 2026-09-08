@@ -208,7 +208,14 @@ extension AppModel {
         } catch {
             throw AppError(error)
         }
-        refreshWidget()
+        // A card that will not fit the widget's compact form leaves the
+        // setting on and the widget saying it is off, forever. Put the
+        // setting back where the widget is and say why.
+        if let failure = refreshWidget(), on {
+            settings.homeWidget = false
+            try? saveOwner()
+            throw AppError(failure)
+        }
     }
 
     // MARK: - Erase
@@ -218,12 +225,17 @@ extension AppModel {
     /// left for the share sheet, the store and its directory. Ends at
     /// onboarding.
     func eraseEverything() async {
+        // Keys failing is the one failure worth telling the reader about: the
+        // promise that the rows are unreadable even if the rest fails is a
+        // promise about these three items.
+        var keyFailure: (any Error)?
         do {
             try keys.delete(KeyName.database)
             try keys.delete(KeyName.seed)
             try keys.delete(KeyName.personaIndex)
         } catch {
             Log.failure("erase keys", error)
+            keyFailure = error
         }
         await stopSharing()
         clearWidget()
@@ -238,6 +250,9 @@ extension AppModel {
         Diagnostics.removeAll()
         resetAfterErase()
         Log.event("erased")
+        if let keyFailure {
+            error = AppError(keyFailure)
+        }
     }
 
     // MARK: - Private

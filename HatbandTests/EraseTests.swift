@@ -20,6 +20,19 @@ import Testing
         return (model, keys)
     }
 
+    /// Erase deletes the keys first, so the sealed rows are unreadable even
+    /// if the rest fails. When that deletion is the thing that fails, the
+    /// promise is void and saying nothing would be the wrong answer.
+    @Test func aFailedKeyDeletionIsReported() async throws {
+        let (model, keys) = try await onboarded()
+        keys.failNextDelete = .failed(-25300)
+
+        await model.eraseEverything()
+
+        #expect(model.error != nil, "erase reports the keys it could not delete")
+        #expect(model.phase == .onboarding, "and still ends where erase ends")
+    }
+
     /// On a temp directory store, so `erase()` reaches a real container.
     @Test func keysBeforeStore() async throws {
         let directory = FileManager.default.temporaryDirectory

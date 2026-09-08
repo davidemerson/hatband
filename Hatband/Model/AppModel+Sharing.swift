@@ -130,10 +130,13 @@ extension AppModel {
     }
 
     /// Writes the feed for the selected persona when the widget is on,
-    /// removes it otherwise, then asks WidgetKit to reload.
-    func refreshWidget() {
+    /// removes it otherwise, then asks WidgetKit to reload. Returns what went
+    /// wrong, so a caller turning the widget on can say so instead of leaving
+    /// the setting and the widget disagreeing.
+    @discardableResult func refreshWidget() -> (any Error)? {
         let directory = widgetDirectory ?? WidgetFeed.container
         let persona = personas.first { $0.id == selectedPersonaID }
+        var failure: (any Error)?
         if settings.homeWidget, let persona {
             do {
                 let state = try lockScreenState(for: persona, endsAt: Date())
@@ -142,11 +145,13 @@ extension AppModel {
             } catch {
                 WidgetFeed.remove(from: directory)
                 Log.failure("refreshWidget", error)
+                failure = error
             }
         } else {
             WidgetFeed.remove(from: directory)
         }
         reloadWidgetTimelines()
+        return failure
     }
 
     /// Removes the feed and tells WidgetKit, so a widget on a `.never`

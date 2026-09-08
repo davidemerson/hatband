@@ -80,8 +80,22 @@ nonisolated private final class AuthContext: @unchecked Sendable {
         default:
             break
         }
+        // A replacement is the one path that is briefly empty. Take down what
+        // protects the item first, so a refused add can put it back as it was
+        // rather than leaving the phone with no key and every scanned person
+        // unreadable.
+        let previous = KeychainStore.storedAttributes(name: name)
         try delete(name)
-        try KeychainStore.add(adding)
+        do {
+            try KeychainStore.add(adding)
+        } catch {
+            if let previous, let restore = KeychainStore.restoreAttributes(name: name, data: data, from: previous) {
+                try? KeychainStore.add(restore)
+            } else {
+                try? KeychainStore.add(adding)
+            }
+            throw error
+        }
     }
 
     func delete(_ name: String) throws {
@@ -119,6 +133,22 @@ nonisolated private final class AuthContext: @unchecked Sendable {
         attributes.merge(protection) { _, new in new }
         attributes[kSecValueData as String] = data
         return attributes
+    }
+
+    /// An add that puts an item back under the protection it already had.
+    /// The Keychain hands an access control back as an object, so it can go
+    /// straight into the replacement. Nil when the attributes carry neither,
+    /// which is when there is nothing to restore to.
+    nonisolated static func restoreAttributes(name: String, data: Data, from stored: [String: Any]) -> [String: Any]? {
+        var protection: [String: Any] = [:]
+        if let control = stored[kSecAttrAccessControl as String] {
+            protection[kSecAttrAccessControl as String] = control
+        } else if let accessible = stored[kSecAttrAccessible as String] {
+            protection[kSecAttrAccessible as String] = accessible
+        } else {
+            return nil
+        }
+        return addAttributes(name: name, data: data, protection: protection)
     }
 
     /// Whether stored attributes carry exactly the protection `access` asks

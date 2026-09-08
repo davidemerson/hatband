@@ -6,8 +6,10 @@ import Foundation
     /// the call suspends until the prompt is answered and never blocks the
     /// main thread.
     func read(_ name: String, prompt: String?) async throws -> Data?
-    /// Creates the item, or rewrites it under `access`. The old item stays
-    /// until the new one is in place, so a failure loses nothing.
+    /// Creates the item, or rewrites it under `access`. An update happens in
+    /// place. A replacement — which is what dropping an access control needs,
+    /// since the Keychain will not update one away — deletes and adds, and
+    /// puts the old item back if the add is refused.
     func write(_ name: String, _ data: Data, access: KeyAccess) throws
     func delete(_ name: String) throws
 }

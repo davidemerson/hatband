@@ -1,6 +1,6 @@
 import Foundation
 
-/// The test double: records every prompt and can fail one read or one write.
+/// The test double: records every prompt and can fail one read, write or delete.
 @MainActor final class MemoryKeyStore: KeyStore {
     var items: [String: (data: Data, access: KeyAccess)] = [:]
     /// Every prompt shown, for assertions.
@@ -9,6 +9,8 @@ import Foundation
     var failNextRead: KeyStoreError?
     /// Thrown by the next `write`, then cleared; the item is left as it was.
     var failNextWrite: KeyStoreError?
+    /// Thrown by the next `delete`, then cleared; the item stays.
+    var failNextDelete: KeyStoreError?
     /// How long a read suspends, as one behind a prompt would. Nil returns at once.
     var readDelay: Duration?
     /// Test hook: "read <name>", "write <name>", "delete <name>".
@@ -40,6 +42,10 @@ import Foundation
 
     func delete(_ name: String) throws {
         onEvent?("delete " + name)
+        if let failure = failNextDelete {
+            failNextDelete = nil
+            throw failure
+        }
         items[name] = nil
     }
 }
