@@ -209,6 +209,11 @@ import UIKit
         #expect(AppError(ExportError.wrongPassphraseOrTampered) == .wrongPassphrase)
         #expect(AppError(ExportError.tooLarge) == .tooLarge)
         #expect(AppError(AppError.activitiesDisabled) == .activitiesDisabled)
-        #expect(AppError(CodecError.unsupportedVersion(3)) == .storage("Stored data version 3 is newer than this app"))
+        // The version is named and the remedy given; the old line was jargon
+        // with nothing to do about it.
+        let newer = AppError(CodecError.unsupportedVersion(3))
+        #expect(newer.message.contains("version 3"))
+        #expect(newer.message.contains("Update Hatband"))
+        #expect(newer.message.hasSuffix("."))
     }
 }

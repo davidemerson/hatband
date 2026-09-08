@@ -19,6 +19,10 @@ import SwiftUI
     /// what was typed instead of an empty profile.
     @State private var stashedAlias: Profile?
     @State private var saving = false
+    /// The persona as it was loaded, to tell a real edit from none at all.
+    @State private var original: Persona?
+    /// Set by Done, so leaving afterwards does not write a second time.
+    @State private var saved = false
     /// The two meters, rebuilt when `meterKey` changes and never in `body`:
     /// measuring reads the seed and signs.
     @State private var meters: [CardForm: MeasuredCard] = [:]
@@ -50,7 +54,9 @@ import SwiftUI
         }
         .onAppear {
             if draft == nil {
-                draft = model.personas.first { $0.id == personaID }
+                let found = model.personas.first { $0.id == personaID }
+                draft = found
+                original = found
             }
             model.route.editingPersona = personaID
         }
@@ -58,6 +64,7 @@ import SwiftUI
             if model.route.editingPersona == personaID {
                 model.route.editingPersona = nil
             }
+            commitOnLeaving()
         }
         .onChange(of: meterKey, initial: true) { _, _ in
             measure()
@@ -286,36 +293,65 @@ import SwiftUI
 
     // MARK: - Done
 
+    /// The persona this draft commits to, or why it cannot. Pure, so both the
+    /// Done button and leaving the screen judge it the same way.
+    nonisolated enum Committed: Equatable {
+        case ready(Persona)
+        case refused(String)
+    }
+
+    nonisolated static func committed(_ draft: Persona) -> Committed {
+        let label = draft.label.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !label.isEmpty else {
+            return .refused("Give the persona a label.")
+        }
+        if let displayName = draft.displayName, !FieldValidator.name(displayName, limits: .file).isAccepted {
+            return .refused("The name on the card is too long, or has characters a card cannot carry.")
+        }
+        if draft.isAlias, (draft.aliasProfile?.name ?? "").isEmpty {
+            return .refused("An alias needs a name: open Alias details.")
+        }
+        var committed = draft
+        committed.label = label
+        return .ready(committed)
+    }
+
     private func save() {
         guard let draft else {
             dismiss()
             return
         }
-        let label = draft.label.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !label.isEmpty else {
-            problem = "Give the persona a label."
-            return
-        }
-        if let displayName = draft.displayName, !FieldValidator.name(displayName, limits: .file).isAccepted {
-            problem = "The name on the card is too long or has characters a card cannot carry."
-            return
-        }
-        if draft.isAlias, (draft.aliasProfile?.name ?? "").isEmpty {
-            problem = "An alias needs a name: open Alias details."
-            return
-        }
-        var committed = draft
-        committed.label = label
-        saving = true
-        problem = nil
-        Task {
-            do {
-                try await model.update(committed)
-                dismiss()
-            } catch {
-                problem = AppError(error).message
+        switch PersonaEditorView.committed(draft) {
+        case .refused(let reason):
+            problem = reason
+        case .ready(let committed):
+            saving = true
+            problem = nil
+            Task {
+                do {
+                    try await model.update(committed)
+                    saved = true
+                    dismiss()
+                } catch {
+                    problem = AppError(error).message
+                }
+                saving = false
             }
-            saving = false
+        }
+    }
+
+    /// This screen is pushed, so the Back chevron leaves it, and it used to
+    /// take everything with it: a renamed persona, a new colour, three
+    /// toggles, gone with no word. Its sibling, the person screen, has always
+    /// saved on the way out. Leaving saves what is valid and says what is not,
+    /// rather than discarding either in silence.
+    private func commitOnLeaving() {
+        guard !saved, !saving, let draft, let original, draft != original else { return }
+        switch PersonaEditorView.committed(draft) {
+        case .ready(let committed):
+            Task { try? await model.update(committed) }
+        case .refused(let reason):
+            model.error = .refused(reason + " Your changes to this persona were not saved.")
         }
     }
 }
