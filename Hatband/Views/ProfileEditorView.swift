@@ -201,6 +201,12 @@ import UIKit
             .textInputAutocapitalization(lowercase ? TextInputAutocapitalization.never : nil)
             .autocorrectionDisabled(lowercase)
         note(for: key)
+        if problems[key] == nil, let preview = ProfileDraft.preview(key: key, text: text.wrappedValue) {
+            Text(preview)
+                .font(.footnote)
+                .foregroundStyle(Theme.tertiary)
+                .accessibilityLabel("Links to \(preview)")
+        }
     }
 
     @ViewBuilder private func note(for key: String) -> some View {
@@ -566,6 +572,32 @@ nonisolated struct ProfileDraft: Equatable {
             renamed[was] = label
         }
         return renamed
+    }
+
+    /// What a channel becomes when someone uses it. A slug is stored bare and
+    /// the card expands it, so without this the reader types `lbloom` and has
+    /// no way of knowing it turns into a working link. Nil while the text does
+    /// not normalise, which is the editor's other messages' job to explain.
+    ///
+    /// LinkedIn has a branch nobody guesses: a stored `company/<slug>` keeps
+    /// its prefix, everything else is a person and gets `/in/`.
+    static func preview(key: String, text: String) -> String? {
+        let input = trim(text)
+        guard !input.isEmpty else { return nil }
+        switch key {
+        case "github":
+            return (try? Normalize.github(input)).map(CanonicalURI.github)
+        case "linkedin":
+            return (try? Normalize.linkedin(input)).map(CanonicalURI.linkedin)
+        case "calendly":
+            return (try? Normalize.calendly(input)).map(CanonicalURI.calendly)
+        case "mastodon":
+            return (try? Normalize.mastodon(input)).flatMap { CanonicalURI.mastodon($0)?.profile }
+        case "website":
+            return (try? Normalize.website(input)).map { CanonicalURI.website($0.address, insecure: $0.insecure) }
+        default:
+            return nil
+        }
     }
 
     // MARK: - Words

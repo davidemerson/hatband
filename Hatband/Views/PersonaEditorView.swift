@@ -15,6 +15,9 @@ import SwiftUI
     let personaID: [UInt8]
     @State private var draft: Persona?
     @State private var problem: String?
+    /// Kept when the Alias toggle goes off, so turning it back on restores
+    /// what was typed instead of an empty profile.
+    @State private var stashedAlias: Profile?
     @State private var saving = false
     /// The two meters, rebuilt when `meterKey` changes and never in `body`:
     /// measuring reads the seed and signs.
@@ -208,19 +211,27 @@ import SwiftUI
             set: { base.wrappedValue = $0.isEmpty ? nil : $0 })
     }
 
+    /// Turning the toggle off keeps the alias profile aside rather than
+    /// discarding it, so a tap taken to see what it does is not destructive.
+    /// Saving with the toggle off still drops it: the persona is not an alias.
     private func aliasBinding(_ persona: Binding<Persona>) -> Binding<Bool> {
         Binding(
             get: { persona.wrappedValue.isAlias },
             set: { on in
-                if on {
-                    if persona.wrappedValue.aliasProfile == nil {
-                        persona.wrappedValue.aliasProfile = Profile()
-                    }
-                } else {
-                    persona.wrappedValue.aliasProfile = nil
+                if !on {
+                    stashedAlias = persona.wrappedValue.aliasProfile
                 }
+                persona.wrappedValue.aliasProfile = PersonaEditorView.alias(
+                    turningOn: on, current: persona.wrappedValue.aliasProfile, stashed: stashedAlias)
                 persona.wrappedValue.lockScreenChannels = []
             })
+    }
+
+    /// The alias profile after the toggle moves: what is already there, else
+    /// what was put aside when it was last turned off, else a fresh one.
+    nonisolated static func alias(turningOn on: Bool, current: Profile?, stashed: Profile?) -> Profile? {
+        guard on else { return nil }
+        return current ?? stashed ?? Profile()
     }
 
     private func channelBinding(_ persona: Binding<Persona>, _ key: FieldKey) -> Binding<Bool> {

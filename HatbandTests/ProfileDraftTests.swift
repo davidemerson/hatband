@@ -92,6 +92,43 @@ struct ProfileDraftTests {
         #expect(fields?.map(\.value) == ["3A", "12"])
     }
 
+    // MARK: - Preview
+
+    /// The editor stores a bare slug and the card expands it, so the reader
+    /// needs to see what it becomes while typing.
+    @Test func slugsPreviewAsTheURLTheyBecome() {
+        #expect(ProfileDraft.preview(key: "github", text: "lbloom") == "https://github.com/lbloom")
+        #expect(ProfileDraft.preview(key: "github", text: "https://github.com/lbloom") == "https://github.com/lbloom")
+        #expect(ProfileDraft.preview(key: "calendly", text: "bloom/coffee") == "https://calendly.com/bloom/coffee")
+        #expect(ProfileDraft.preview(key: "mastodon", text: "@bloom@merveilles.town")
+                == "https://merveilles.town/@bloom")
+    }
+
+    /// The branch nobody guesses: a person goes under `/in/`, a company keeps
+    /// the prefix it was stored with.
+    @Test func linkedInPreviewsPeopleAndCompaniesDifferently() {
+        #expect(ProfileDraft.preview(key: "linkedin", text: "leopold-bloom")
+                == "https://www.linkedin.com/in/leopold-bloom")
+        #expect(ProfileDraft.preview(key: "linkedin", text: "company/hatband")
+                == "https://www.linkedin.com/company/hatband")
+    }
+
+    /// A website shows its scheme, which is the only place the reader learns
+    /// that what they typed is not encrypted.
+    @Test func websitePreviewShowsTheScheme() {
+        #expect(ProfileDraft.preview(key: "website", text: "nnix.com/~bloom") == "https://nnix.com/~bloom")
+        #expect(ProfileDraft.preview(key: "website", text: "http://example.org") == "http://example.org")
+    }
+
+    /// Nothing to show for an empty field, a field that does not normalise, or
+    /// one whose stored form is already what it looks like.
+    @Test func nothingToPreviewIsNothingShown() {
+        #expect(ProfileDraft.preview(key: "github", text: "   ") == nil)
+        #expect(ProfileDraft.preview(key: "github", text: "not a user/////") == nil)
+        #expect(ProfileDraft.preview(key: "name", text: "Leopold Bloom") == nil)
+        #expect(ProfileDraft.preview(key: "phone", text: "+353871234567") == nil)
+    }
+
     // MARK: - Renames
 
     /// A rename has to be carried to every persona that shared the field, or
