@@ -72,6 +72,52 @@ struct ProfileDraftTests {
         #expect(result.problems.isEmpty)
     }
 
+    /// The editor judged channels by the normaliser alone, and the two do not
+    /// agree: `Normalize` takes an IDN host and an email whose local part has
+    /// a slash, `FieldValidator` refuses both. So a tidy-looking row saved,
+    /// showed as dead text on your own card, and landed in the recipient's
+    /// "Left out" list. The editor asks the same question they will.
+    @Test func aChannelTheRecipientWouldDropIsRefusedHere() {
+        var idn = draft()
+        idn.website = "bücher.de"
+        let idnResult = idn.commit()
+        #expect(idnResult.profile == nil)
+        #expect(idnResult.problems["website"] != nil)
+
+        var slashed = draft()
+        slashed.email = "a/b@example.ie"
+        let slashedResult = slashed.commit()
+        #expect(slashedResult.profile == nil)
+        #expect(slashedResult.problems["email"] != nil)
+    }
+
+    /// The custom-field path already asked, and still does: the same value in
+    /// a custom email field was refused while the primary one sailed through.
+    @Test func theTwoPathsNowAgree() {
+        var custom = draft()
+        custom.custom = [field("Work", "a/b@example.ie", kind: .email)]
+        #expect(custom.commit().profile == nil)
+
+        var primary = draft()
+        primary.email = "a/b@example.ie"
+        #expect(primary.commit().profile == nil)
+    }
+
+    /// Ordinary values still commit; the extra question is not a new refusal
+    /// of things that were always fine.
+    @Test func goodChannelsAreUntouched() {
+        var d = draft()
+        d.email = "bloom@example.ie"
+        d.website = "nnix.com/~bloom"
+        d.github = "lbloom"
+        d.mastodon = "bloom@merveilles.town"
+        d.phone = "+353871234567"
+        let result = d.commit()
+        #expect(result.problems.isEmpty, "\(result.problems)")
+        #expect(result.profile?.email == "bloom@example.ie")
+        #expect(result.profile?.github == "lbloom")
+    }
+
     // MARK: - Custom fields
 
     /// A persona picks its custom fields by label and a card names them the

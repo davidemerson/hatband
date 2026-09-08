@@ -463,6 +463,13 @@ nonisolated struct ProfileDraft: Equatable {
 
     /// The profile the fields describe, or what is wrong with them, field
     /// by field. A blank field is an absent one.
+    ///
+    /// Every channel is normalised and then judged by the same validator a
+    /// recipient's phone runs over the card. The two disagree — `Normalize`
+    /// takes an IDN host and an email whose local part has a slash, and
+    /// `FieldValidator` refuses both — so judging by the normaliser alone let
+    /// you save a tidy-looking row that was dead text on your own card and
+    /// landed in the recipient's "Left out" list.
     func commit() -> Commit {
         var profile = Profile()
         var problems: [String: String] = [:]
@@ -493,14 +500,20 @@ nonisolated struct ProfileDraft: Equatable {
         }
         if !ProfileDraft.trim(phone).isEmpty {
             do {
-                profile.phone = try Normalize.phone(phone)
+                let number = try Normalize.phone(phone)
+                if apply(FieldValidator.phone(number, limits: .file), "phone") {
+                    profile.phone = number
+                }
             } catch {
                 problems["phone"] = ProfileDraft.describe(error)
             }
         }
         if !ProfileDraft.trim(email).isEmpty {
             do {
-                profile.email = try Normalize.email(email)
+                let address = try Normalize.email(email)
+                if apply(FieldValidator.email(address, limits: .file), "email") {
+                    profile.email = address
+                }
             } catch {
                 problems["email"] = ProfileDraft.describe(error)
             }
@@ -508,9 +521,11 @@ nonisolated struct ProfileDraft: Equatable {
         if !ProfileDraft.trim(website).isEmpty {
             do {
                 let site = try Normalize.website(website)
-                profile.website = Website(address: site.address, insecure: site.insecure)
-                if site.insecure {
-                    warnings["website"] = "Reachable only over http; the card says so."
+                if apply(FieldValidator.website(site.address, limits: .file), "website") {
+                    profile.website = Website(address: site.address, insecure: site.insecure)
+                    if site.insecure {
+                        warnings["website"] = "Reachable only over http; the card says so."
+                    }
                 }
             } catch {
                 problems["website"] = ProfileDraft.describe(error)
@@ -518,28 +533,40 @@ nonisolated struct ProfileDraft: Equatable {
         }
         if !ProfileDraft.trim(github).isEmpty {
             do {
-                profile.github = try Normalize.github(github)
+                let user = try Normalize.github(github)
+                if apply(FieldValidator.handle(user, limits: .file), "github") {
+                    profile.github = user
+                }
             } catch {
                 problems["github"] = ProfileDraft.describe(error)
             }
         }
         if !ProfileDraft.trim(linkedin).isEmpty {
             do {
-                profile.linkedin = try Normalize.linkedin(linkedin)
+                let slug = try Normalize.linkedin(linkedin)
+                if apply(FieldValidator.handle(slug, limits: .file), "linkedin") {
+                    profile.linkedin = slug
+                }
             } catch {
                 problems["linkedin"] = ProfileDraft.describe(error)
             }
         }
         if !ProfileDraft.trim(mastodon).isEmpty {
             do {
-                profile.mastodon = try Normalize.mastodon(mastodon)
+                let handle = try Normalize.mastodon(mastodon)
+                if apply(FieldValidator.handle(handle, limits: .file), "mastodon") {
+                    profile.mastodon = handle
+                }
             } catch {
                 problems["mastodon"] = ProfileDraft.describe(error)
             }
         }
         if !ProfileDraft.trim(calendly).isEmpty {
             do {
-                profile.calendly = try Normalize.calendly(calendly)
+                let path = try Normalize.calendly(calendly)
+                if apply(FieldValidator.handle(path, limits: .file), "calendly") {
+                    profile.calendly = path
+                }
             } catch {
                 problems["calendly"] = ProfileDraft.describe(error)
             }
