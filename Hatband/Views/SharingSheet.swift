@@ -25,7 +25,8 @@ import SwiftUI
                         Text("2 hours").tag(120)
                         Text("8 hours").tag(480)
                     }
-                    .pickerStyle(.segmented)
+                    // Segmented does not reflow; at large text the durations clip.
+            .pickerStyle(.inline)
                 }
                 Section {
                     Toggle("Show my name", isOn: $showName)

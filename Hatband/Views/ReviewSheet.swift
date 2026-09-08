@@ -109,7 +109,9 @@ import SwiftUI
                     Text("Update card").tag(true)
                     Text("Add meeting only").tag(false)
                 }
-                .pickerStyle(.segmented)
+                // Not segmented: it does not reflow, and at accessibility sizes a
+            // choice about overwriting someone's stored card became "Upda…".
+            .pickerStyle(.inline)
                 .labelsHidden()
                 if !updateCard {
                     Text("The card you have stays as it is; only this meeting is added.")
@@ -134,7 +136,10 @@ import SwiftUI
                             .foregroundStyle(.secondary)
                         Text(item.value)
                             .font(ReviewSheet.isMono(item.id) ? Theme.mono : .body)
-                            .lineLimit(3)
+                            // The mono values are keys and fingerprints, which is what
+                    // this sheet exists to have you approve; three lines of an
+                    // SSH key at large text is fifteen characters.
+                    .lineLimit(ReviewSheet.isMono(item.id) ? nil : 3)
                         if case .warning(let warning) = item.verdict {
                             Text(warning)
                                 .font(.caption)

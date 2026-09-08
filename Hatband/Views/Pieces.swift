@@ -1,8 +1,10 @@
 import HatbandCore
 import SwiftUI
 
-/// Bytes, characters and QR version of a card, coloured by how close it
-/// sits to the form's limit. Past the limit it says what to do instead.
+/// Bytes, characters and QR version of a card, with how close it sits to the
+/// form's limit said in words. Colour was the only thing separating a card
+/// near its limit from one nowhere near it, which meant nothing to a reader
+/// who cannot see it, and nothing at all in greyscale.
 @MainActor struct ByteMeter: View {
     let budget: Budget
     var form: CardForm = .fullQR
@@ -14,33 +16,49 @@ import SwiftUI
             if !compact {
                 Text("\(budget.characters) chars")
             }
-            Text(versionText)
+            Text(ByteMeter.versionText(budget, form: form))
         }
         .font(Theme.mono)
-        .foregroundStyle(tone)
-        .accessibilityElement(children: .combine)
+        .foregroundStyle(ByteMeter.tone(budget, form: form))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(ByteMeter.spoken(budget, form: form))
     }
 
-    private var limit: Int {
+    nonisolated static func limit(_ form: CardForm) -> Int {
         form == .lockScreen ? Budget.lockScreenMaxVersion : Budget.fullQRMaxVersion
     }
 
-    private var versionText: String {
-        guard let version = budget.version, version <= limit else {
+    /// The version, and whether it is close to the limit. "Near the limit" is
+    /// the part the colour used to carry on its own.
+    nonisolated static func versionText(_ budget: Budget, form: CardForm) -> String {
+        guard let version = budget.version, version <= limit(form) else {
             return form == .lockScreen ? "too big for the Lock Screen" : "share as a file"
         }
-        return "QR v\(version)"
+        return near(version, form: form) ? "QR v\(version), near the limit" : "QR v\(version)"
     }
 
-    private var tone: Color {
-        guard let version = budget.version, version <= limit else { return .red }
-        if form == .lockScreen, version > 8 {
-            return .orange
+    /// Read aloud as a sentence rather than three numbers run together: the
+    /// combined form said "412 B 88 chars QR v8".
+    nonisolated static func spoken(_ budget: Budget, form: CardForm) -> String {
+        let size = "\(budget.bytes) bytes, \(budget.characters) characters"
+        guard let version = budget.version, version <= limit(form) else {
+            return form == .lockScreen
+                ? "\(size). Too big for the Lock Screen."
+                : "\(size). Too big for a QR code; share it as a file."
         }
-        if form != .lockScreen, version > 20 {
-            return .orange
-        }
-        return Theme.tertiary
+        return near(version, form: form)
+            ? "\(size). QR version \(version), near the limit."
+            : "\(size). QR version \(version)."
+    }
+
+    /// Colour is reinforcement now, not the message.
+    nonisolated static func tone(_ budget: Budget, form: CardForm) -> Color {
+        guard let version = budget.version, version <= limit(form) else { return .red }
+        return near(version, form: form) ? .orange : Theme.tertiary
+    }
+
+    private nonisolated static func near(_ version: Int, form: CardForm) -> Bool {
+        form == .lockScreen ? version > 8 : version > 20
     }
 }
 
