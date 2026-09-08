@@ -78,7 +78,10 @@ extension AppModel {
         let key = try await requireKey()
         let existing = people.first { $0.personaID == review.card.personaID }
         if review.existing == nil, existing != nil {
-            var rebuilt = Review.make(card: review.card, source: review.source, people: people)
+            // Same id: the sheet stays up and keeps the place, note, tags and
+            // trust choice the reader has already typed. A new id would build
+            // a new sheet and lose all of it.
+            var rebuilt = Review.make(card: review.card, source: review.source, people: people, id: review.id)
             let excluded = Set(review.items.filter { !$0.included }.map { $0.id })
             for index in rebuilt.items.indices where excluded.contains(rebuilt.items[index].id) {
                 rebuilt.items[index].included = false

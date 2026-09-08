@@ -178,7 +178,10 @@ nonisolated struct Review: Identifiable, Equatable, Sendable {
     /// Screens every present field under `Limits.qr` for scan and photo,
     /// `Limits.file` otherwise. Rejections become `dropped`; warnings stay
     /// on their item. The GPG key survives only when it hashes to key 12.
-    static func make(card: Card, source: CardSource, people: [Person]) -> Review {
+    /// `id` is worth passing when a review is rebuilt for a sheet that is
+    /// already up: `.sheet(item:)` keys on it, so a fresh one tears the sheet
+    /// down and takes the place, note and tags the reader typed with it.
+    static func make(card: Card, source: CardSource, people: [Person], id: UUID = UUID()) -> Review {
         let limits = source.limits
         let customCount = FieldValidator.customCount(card.custom.count, limits: limits)
         var items: [Item] = []
@@ -208,7 +211,7 @@ nonisolated struct Review: Identifiable, Equatable, Sendable {
             signature = card.signatureIsValid ? .valid : .invalid
         }
         let existing = people.first { $0.personaID == card.personaID }
-        return Review(id: UUID(), card: card, source: source, items: items, dropped: dropped, signature: signature,
+        return Review(id: id, card: card, source: source, items: items, dropped: dropped, signature: signature,
                       existing: existing, outcome: Merge.outcome(existing: existing, incoming: card),
                       gpgKeyVerified: gpgKeyVerified)
     }

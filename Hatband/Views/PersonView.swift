@@ -25,6 +25,19 @@ import UIKit
         }
     }
 
+    /// The three things this screen edits, put onto the model's copy of the
+    /// person. `edited` is a snapshot taken when the view appeared and is
+    /// never refreshed, so writing it whole would undo anything stored behind
+    /// this screen: a GPG key fetched from the same screen, or a newer card
+    /// merged from a review while this one is still on the stack.
+    nonisolated static func committed(_ edited: Person, onto current: Person) -> Person {
+        var candidate = current
+        candidate.note = edited.note
+        candidate.tags = edited.tags
+        candidate.encounters = edited.encounters
+        return candidate
+    }
+
     /// Edits are committed as the scene leaves the foreground: at
     /// `.inactive`, which comes before `.background` and the lock that
     /// empties `people`, and again at `.background` for good measure.
@@ -436,8 +449,7 @@ import UIKit
 
     private func commit() {
         guard let current = model.people.first(where: { $0.id == person.id }) else { return }
-        var candidate = edited
-        candidate.updatedAt = current.updatedAt
+        let candidate = PersonView.committed(edited, onto: current)
         guard candidate != current else { return }
         do {
             try model.update(candidate)

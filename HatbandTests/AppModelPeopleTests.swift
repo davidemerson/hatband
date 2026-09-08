@@ -109,6 +109,31 @@ import Testing
         #expect(try scanner.store?.people().count == 1)
     }
 
+    /// A review shown while locked calls a known person new, because the
+    /// people list is out of memory. Unlocking during Save reveals them and
+    /// rebuilds the review — which must keep its id. `.sheet(item:)` keys on
+    /// it, so a fresh one tears down the sheet and takes the place, note and
+    /// tags the reader typed with it. Found on a phone, where the review
+    /// appearing twice looked like a bug in itself.
+    @Test func rebuildingAfterUnlockKeepsTheReviewsIdentity() async throws {
+        let sharer = try await onboarded()
+        let scanner = try await onboarded(name: "Henry Flower", email: "henry@flower.ie", appLock: true)
+        let url = try signedURL(from: sharer)
+        try await scanAndSave(scanner, url)
+        #expect(scanner.people.count == 1)
+
+        scanner.lock()
+        try scanner.receive(text: url, source: .link)
+        let shown = try #require(scanner.pendingReview)
+        #expect(shown.existing == nil)
+
+        try await scanner.save(shown, fix: nil, label: "Davy Byrne's", note: "a gorgonzola sandwich", tags: ["dublin"])
+        let rebuilt = try #require(scanner.pendingReview)
+        #expect(rebuilt.id == shown.id)
+        #expect(rebuilt.existing != nil)
+        #expect(scanner.people.first?.encounters.count == 1)
+    }
+
     @Test func rescanSameSeqAddsEncounterOnly() async throws {
         let sharer = try await onboarded()
         let scanner = try await onboarded(name: "Henry Flower", email: "henry@flower.ie")
