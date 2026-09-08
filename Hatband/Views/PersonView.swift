@@ -136,6 +136,7 @@ import UIKit
                         .scaledToFill()
                         .frame(width: 64, height: 64)
                         .clipShape(RoundedRectangle(cornerRadius: Theme.radius))
+                        .accessibilityHidden(true)
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {

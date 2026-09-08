@@ -130,6 +130,7 @@ import UIKit
                         draft.storedSSH = nil
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel("Remove the stored RSA key")
                 }
             }
             TextField("GPG fingerprint", text: $draft.gpgFingerprint)
@@ -152,6 +153,7 @@ import UIKit
                         draft.storedGPGKey = nil
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel("Remove the stored GPG key")
                 }
             }
         } header: {
@@ -273,7 +275,7 @@ import UIKit
                 }
                 warnings[key] = nil
             } catch {
-                warnings[key] = "\(target.host) did not know that one."
+                warnings[key] = "No answer from \(target.host). It may not know that one, or you may be offline."
             }
             checking = nil
         }
@@ -299,6 +301,7 @@ import UIKit
                     .scaledToFill()
                     .frame(width: 56, height: 56)
                     .clipShape(RoundedRectangle(cornerRadius: Theme.radius))
+                    .accessibilityHidden(true)
             }
             let photoTitle = draft.photo == nil ? "Choose photo" : "Change photo"
             PhotosPicker(selection: $pickedPhoto, matching: .images) {
@@ -311,6 +314,7 @@ import UIKit
                     draft.photo = nil
                 }
                 .buttonStyle(.borderless)
+                .accessibilityLabel("Remove the photo")
             }
         }
         note(for: "photo")

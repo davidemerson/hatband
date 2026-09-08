@@ -248,7 +248,7 @@ import SwiftUI
     }
 
     private var locationText: String {
-        guard useLocation else { return "Not noting where we met" }
+        guard useLocation else { return "Note where you met" }
         if locating {
             return "Finding a rough location…"
         }
