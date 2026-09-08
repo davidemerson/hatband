@@ -35,6 +35,24 @@ import UIKit
         return false
     }
 
+    /// A photo is the largest thing a card carries and every byte is Base32'd
+    /// into the link and the QR, so the smaller budget is aimed at first and
+    /// the cap is only the fallback. The side stays 256: quality goes before
+    /// pixels do.
+    @Test func aPhotoAimsBelowThePreferredBudgetAtFullSize() throws {
+        let jpeg = try #require(Photo.thumbnailJPEG(from: gradientPNG(side: 1024)))
+        #expect(jpeg.count <= Photo.preferredBytes,
+                "\(jpeg.count) bytes, wanted at most \(Photo.preferredBytes)")
+        let image = try #require(UIImage(data: Data(jpeg)))
+        #expect(max(image.size.width, image.size.height) == CGFloat(Photo.maxSide))
+    }
+
+    @Test func thePreferredBudgetIsWellUnderTheCap() {
+        #expect(Photo.preferredBytes < Photo.maxBytes)
+        #expect(Photo.maxBytes == 12_288)
+        #expect(Photo.maxSide == 256)
+    }
+
     @Test func thumbnailWithinLimits() throws {
         let source = gradientPNG(side: 1000)
         #expect(UIImage(data: source)?.size.width == 1000)

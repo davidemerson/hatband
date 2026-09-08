@@ -24,11 +24,6 @@ import SwiftUI
                     personaMenu
                     panel
                     details
-                    Text("Only the person who scans you keeps a record of this meeting.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
                 }
                 .padding()
             }

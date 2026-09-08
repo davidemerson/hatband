@@ -28,7 +28,7 @@ import SwiftUI
     @ViewBuilder private var content: some View {
         let stops = WhereView.stops(in: model.people)
         if stops.isEmpty {
-            ContentUnavailableView("No fixed abode.", systemImage: "map",
+            ContentUnavailableView("Nowhere yet", systemImage: "map",
                                    description: Text("Meetings appear here once you have scanned someone."))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Theme.ground)

@@ -129,6 +129,31 @@ struct ProfileDraftTests {
         #expect(ProfileDraft.preview(key: "phone", text: "+353871234567") == nil)
     }
 
+    // MARK: - Keys
+
+    /// The refusal has to reach the field, not just the scanner: these boxes
+    /// are next to each other and a card carries what is in them.
+    @Test func aPrivateKeyIsRefusedInEveryBoxThatTakesOne() {
+        var ssh = draft()
+        ssh.ssh = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEA\n-----END OPENSSH PRIVATE KEY-----"
+        let sshResult = ssh.commit()
+        #expect(sshResult.profile == nil)
+        #expect(sshResult.problems["ssh"] == PrivateKeyScan.refusal)
+
+        var gpg = draft()
+        gpg.gpgKey = "-----BEGIN PGP PRIVATE KEY BLOCK-----\n\nlQVYBGY=\n-----END PGP PRIVATE KEY BLOCK-----"
+        let gpgResult = gpg.commit()
+        #expect(gpgResult.profile == nil)
+        #expect(gpgResult.problems["gpgKey"] == PrivateKeyScan.refusal)
+
+        var custom = draft()
+        custom.custom = [field("Backup", "-----BEGIN RSA PRIVATE KEY-----\nMIIEow==\n-----END RSA PRIVATE KEY-----",
+                               kind: .key)]
+        let customResult = custom.commit()
+        #expect(customResult.profile == nil)
+        #expect(customResult.problems.values.contains(PrivateKeyScan.refusal))
+    }
+
     // MARK: - Renames
 
     /// A rename has to be carried to every persona that shared the field, or

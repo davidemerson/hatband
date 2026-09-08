@@ -489,11 +489,15 @@ nonisolated struct ProfileDraft: Equatable {
         }
 
         if !ProfileDraft.trim(ssh).isEmpty {
-            do {
-                let key = try SSHPublicKey(line: ssh)
-                profile.ssh = SSHKeyField(kind: key.kind.rawValue, bytes: key.storedBytes)
-            } catch {
-                problems["ssh"] = ProfileDraft.describeSSH(error)
+            if PrivateKeyScan.looksPrivate(ssh) {
+                problems["ssh"] = PrivateKeyScan.refusal
+            } else {
+                do {
+                    let key = try SSHPublicKey(line: ssh)
+                    profile.ssh = SSHKeyField(kind: key.kind.rawValue, bytes: key.storedBytes)
+                } catch {
+                    problems["ssh"] = ProfileDraft.describeSSH(error)
+                }
             }
         } else {
             profile.ssh = storedSSH
@@ -510,9 +514,14 @@ nonisolated struct ProfileDraft: Equatable {
         }
         var certificate = storedGPGKey
         if !ProfileDraft.trim(gpgKey).isEmpty {
-            certificate = OpenPGP.dearmor(gpgKey)
-            if certificate == nil {
-                problems["gpgKey"] = "Not an armored OpenPGP public key."
+            if PrivateKeyScan.looksPrivate(gpgKey) {
+                certificate = nil
+                problems["gpgKey"] = PrivateKeyScan.refusal
+            } else {
+                certificate = OpenPGP.dearmor(gpgKey)
+                if certificate == nil {
+                    problems["gpgKey"] = "Not an armored OpenPGP public key."
+                }
             }
         }
         if let certificate, apply(FieldValidator.gpgKey(byteCount: certificate.count, limits: .file), "gpgKey"),
@@ -550,6 +559,10 @@ nonisolated struct ProfileDraft: Equatable {
             }
             if item.kind == .email, let address = try? Normalize.email(value) {
                 value = address
+            }
+            if item.kind == .key, PrivateKeyScan.looksPrivate(value) {
+                _ = apply(.reject(PrivateKeyScan.refusal), key)
+                continue
             }
             guard apply(FieldValidator.customValue(value, kind: item.kind, limits: .file), key) else { continue }
             fields.append(CustomField(label: label, value: value, kind: item.kind))

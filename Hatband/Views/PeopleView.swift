@@ -31,7 +31,7 @@ import SwiftUI
 
     @ViewBuilder private var content: some View {
         if model.people.isEmpty {
-            ContentUnavailableView("No fixed abode.", systemImage: "person.2",
+            ContentUnavailableView("Nobody yet", systemImage: "person.2",
                                    description: Text("Scan a card and the person appears here."))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Theme.ground)

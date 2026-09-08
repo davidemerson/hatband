@@ -8,21 +8,37 @@ import UIKit
 nonisolated enum Photo {
     static let maxSide = 256
     static let maxBytes = 12_288
+    /// Aimed at before the cap is. A photo is the largest thing a card can
+    /// carry, and every byte of it is Base32'd into the link and the QR, so
+    /// the smallest one that still looks like a face is the right one.
+    static let preferredBytes = 6_144
 
     /// Nil when the data is not an image or no size and quality fit the cap.
+    /// Full size is tried against the smaller budget first, so a face stays
+    /// 256 pixels and simply loses some quality rather than being halved.
     @MainActor static func thumbnailJPEG(from data: Data) -> [UInt8]? {
         guard let image = UIImage(data: data) else { return nil }
+        if let small = fitting(scaled(image, maxSide: maxSide), within: preferredBytes) {
+            return small
+        }
         var side = maxSide
         while side >= 32 {
-            let scaled = scaled(image, maxSide: side)
-            for quality in [0.8, 0.65, 0.5, 0.35, 0.2] as [CGFloat] {
-                guard let jpeg = scaled.jpegData(compressionQuality: quality) else { return nil }
-                let stripped = strippingMetadata(Array(jpeg))
-                if stripped.count <= maxBytes {
-                    return stripped
-                }
+            if let jpeg = fitting(scaled(image, maxSide: side), within: maxBytes) {
+                return jpeg
             }
             side /= 2
+        }
+        return nil
+    }
+
+    /// The best quality of this image that fits `budget`, stripped.
+    @MainActor private static func fitting(_ image: UIImage, within budget: Int) -> [UInt8]? {
+        for quality in [0.8, 0.65, 0.5, 0.35, 0.2] as [CGFloat] {
+            guard let jpeg = image.jpegData(compressionQuality: quality) else { return nil }
+            let stripped = strippingMetadata(Array(jpeg))
+            if stripped.count <= budget {
+                return stripped
+            }
         }
         return nil
     }
