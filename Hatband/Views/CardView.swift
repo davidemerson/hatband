@@ -181,12 +181,14 @@ import SwiftUI
         }
     }
 
-    /// The link form as text, and the `.hatband` file, both from the file
-    /// card signed in `rendered()`.
+    /// The link form and the `.hatband` file, both from the file card signed
+    /// in `rendered()`. The preview is given rather than left to the system:
+    /// without one the share sheet fetches the page for metadata, and this
+    /// app asks nothing of the network it has not been told to.
     private var shareMenu: some View {
         Menu {
             if let persona = selected, let url = shown?.fileURL, let bytes = shown?.fileBytes {
-                ShareLink(item: url) {
+                ShareLink(item: url, preview: SharePreview(shown?.card?.name ?? "Hatband card")) {
                     Label("Share as link", systemImage: "link")
                 }
                 ShareLink(item: CardFile(bytes: bytes, name: CardView.fileBase(shown?.card?.name ?? persona.label) + ".hatband"),
@@ -235,8 +237,11 @@ import SwiftUI
         var card: Card?
         var code: QRCode?
         var budget: Budget?
-        /// The file-form URL and bytes offered by the share menu.
-        var fileURL: String?
+        /// The file-form URL and bytes offered by the share menu. A `URL`,
+        /// not a string: a string goes onto the share sheet as text, and the
+        /// receiving app's data detectors linkify `hatband.link` and drop the
+        /// fragment, so the card arrives as the bare site.
+        var fileURL: URL?
         var fileBytes: [UInt8]?
         var problem: String?
     }
@@ -255,7 +260,7 @@ import SwiftUI
             let code = try Budget.qrCode(for: card, form: .fullQR)
             let file = try model.card(for: persona, form: .file)
             return Rendered(card: card, code: code, budget: Budget(card: card),
-                            fileURL: HB1.url(for: file), fileBytes: HB1.fileBytes(for: file), problem: nil)
+                            fileURL: URL(string: HB1.url(for: file)), fileBytes: HB1.fileBytes(for: file), problem: nil)
         } catch {
             return Rendered(problem: AppError(error).message)
         }

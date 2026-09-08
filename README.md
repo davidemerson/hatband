@@ -55,7 +55,7 @@ The Camera app and Hatband's own scanner both read all four at 10 cm and none at
 
 The Live Activity renders on the Lock Screen and under Always-On, the widget renders while locked, the Dynamic Island carries no card, and StandBy shows what the Lock Screen shows. A universal link opens the app and its review sheet.
 
-A 32 KB card is 52,452 characters as a URL, and both decoders read one back. Pasted as plain text it does not survive: the system's data detectors linkify `hatband.link` and drop the fragment, so what arrives is the bare site. Through the share sheet, which passes a URL rather than text, it is intact. Photos and keys are why a card grows; they are why the file form exists.
+A 32 KB card is 52,452 characters as a URL, and both decoders read one back. Pasted as plain text it does not survive: the system's data detectors linkify `hatband.link` and drop the fragment, so what arrives is the bare site. "Share as link" shared the URL as a string and hit the same wall; it shares a `URL` now, which the receiving app keeps whole. Photos and keys are why a card grows; they are why the file form exists.
 
 Add to Contacts could never add. An unknown-contact card allows no editing and offers its own add actions, and the app had asked for the opposite; with no contact store set, the actions were disabled outright. It works now, at the cost of the one permission the plan meant to do without.
 
