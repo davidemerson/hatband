@@ -1081,11 +1081,57 @@ function webVerdict(rest) {
 }
 
 /** RFC 6068: one address, then optional header fields after `?`. */
+const MAILTO_HEADERS = new Set(['subject', 'body']);
+
+/** RFC 6068: one address, then header fields after `?`, each named in
+    `MAILTO_HEADERS`. Mirrors `URLPolicy.mailto`, which this had drifted from
+    in two ways: the address was judged raw, so `a%2Fb@c` read as valid atext
+    where the app decodes it and refuses the `/`; and any header was allowed,
+    so `?to=` could add a recipient the card never showed. */
 function mailtoVerdict(rest) {
   const end = rest.indexOf('?');
-  const verdict = addressVerdict(end < 0 ? rest : rest.slice(0, end), 'not an email address');
+  const verdict = encodedAddressVerdict(end < 0 ? rest : rest.slice(0, end), 'not an email address');
   if (!isAccepted(verdict)) return verdict;
-  return mergeVerdicts(verdict, tailVerdict(end < 0 ? '' : rest.slice(end)));
+  const tail = tailVerdict(end < 0 ? '' : rest.slice(end));
+  if (!isAccepted(tail)) return tail;
+  if (end >= 0) {
+    for (const field of rest.slice(end + 1).split('&')) {
+      if (field === '') continue;
+      const name = percentDecoded(field.split('=')[0]);
+      if (name === null || !MAILTO_HEADERS.has(name.toLowerCase())) {
+        return reject('mailto header not allowed');
+      }
+    }
+  }
+  return mergeVerdicts(verdict, tail);
+}
+
+/** RFC 6068 §2: the address is percent-encoded, so `first%2Blast@x.ie` is
+    `first+last@x.ie` and `a%0D%0A@b` hides a CRLF. Decoded, it takes the scan
+    the raw text had, then is judged as the address it spells. */
+function encodedAddressVerdict(text, failure) {
+  const decoded = percentDecoded(text);
+  if (decoded === null) return reject('bad percent-encoding');
+  const problem = textProblemIn(decoded);
+  if (problem) return reject(problem);
+  if (/\s/.test(decoded)) return reject('whitespace');
+  return addressVerdict(decoded, failure);
+}
+
+/** Percent triplets to their characters; null for a `%` that starts none. */
+function percentDecoded(text) {
+  let out = '';
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== '%') {
+      out += text[i];
+      continue;
+    }
+    const hex = text.slice(i + 1, i + 3);
+    if (!/^[0-9A-Fa-f]{2}$/.test(hex)) return null;
+    out += String.fromCharCode(parseInt(hex, 16));
+    i += 2;
+  }
+  return out;
 }
 
 /** `local@host`: an RFC 5322 dot-atom of at most 64 bytes and a host that

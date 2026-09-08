@@ -58,6 +58,27 @@ test('rejects bad paths', () => check([
   ['https://example.com/?%G0', reject('bad percent-encoding')],
 ]));
 
+test('refuses a mailto header the card never showed', () => check([
+  // RFC 6068 allows only these two, and the app has always enforced it. The site accepted any
+  // header, so `?to=` could add a recipient: a reader taps expecting to mail one person and
+  // gets a draft addressed to two.
+  ['mailto:a@b?to=harvester@evil.example', reject('mailto header not allowed')],
+  ['mailto:a@b?cc=harvester@evil.example', reject('mailto header not allowed')],
+  ['mailto:a@b?bcc=harvester@evil.example', reject('mailto header not allowed')],
+  ['mailto:a@b?from=someone@else.example', reject('mailto header not allowed')],
+  ['mailto:a@b?SUBJECT=x', OK], ['mailto:a@b?%73ubject=x', OK],
+  ['mailto:a@b?subject=x&body=y', OK], ['mailto:a@b?subject=x&to=z@w', reject('mailto header not allowed')],
+]));
+
+test('decodes a mailto address before judging it', () => check([
+  // `%` is atext in a local part, so a raw check reads the encoding as valid and never sees what
+  // it spells. `URLPolicy.mailto` decodes first; so does this now.
+  ['mailto:a%2Fb@example.ie', reject('not an email address')],
+  ['mailto:a%0D%0A@example.ie', reject('control character')],
+  ['mailto:first%2Blast@example.ie', OK],
+  ['mailto:a%20b@example.ie', reject('whitespace')],
+]));
+
 test('judges mailto', () => check([
   ['mailto:a@b', OK], ['mailto:a@b?subject=x', OK], ['mailto:a@b?subject=x&body=y%20z', OK], ['mailto:henry.flower@example.ie', OK],
   ['mailto:henry+flower@example.ie', OK], ['MAILTO:A@B', OK], ['mailto:a@xn--mnchen-3ya.de', warning('punycode host label')],

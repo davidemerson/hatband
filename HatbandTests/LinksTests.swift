@@ -55,15 +55,40 @@ struct LinksTests {
         #expect(Links.authorizedKeysLine(card.ssh!) == nil)
     }
 
-    @Test func ed25519RowShowsFingerprint() throws {
+    /// The row shows what the review sheet, the vCard and hatband.link show:
+    /// the authorized_keys line. It used to show a fingerprint, so you
+    /// approved one form at the review and found another on the person you
+    /// had just saved, with a "Copy authorized_keys line" button beneath it.
+    @Test func ed25519RowShowsTheKeyLineLikeEverywhereElse() throws {
         let card = try Vectors.card("maximal-qr-signed")
         let field = try #require(card.ssh)
         let key = try SSHPublicKey(kind: .ed25519, inlineBytes: field.bytes)
         let ssh = try row("ssh", in: Links.rows(for: card))
-        #expect(ssh.text == key.fingerprintString)
+        #expect(ssh.text == key.authorizedKeysLine())
+        #expect(ssh.text == Links.sshDisplay(field))
         #expect(ssh.mono)
         #expect(ssh.url == nil)
         #expect(Links.authorizedKeysLine(field) == key.authorizedKeysLine())
+    }
+
+    /// A card carries only the fingerprint of an RSA key, so that is all any
+    /// surface can show for one — the same on the row as in the vCard.
+    @Test func rsaRowShowsTheFingerprintBecauseThatIsAllThereIs() throws {
+        let field = SSHKeyField(kind: SSHPublicKey.Kind.rsa.rawValue, bytes: Array(repeating: 0x11, count: 32))
+        var card = try Vectors.card("maximal-qr-signed")
+        card.ssh = field
+        let ssh = try row("ssh", in: Links.rows(for: card))
+        #expect(ssh.text == SSHPublicKey.fingerprintString(sha256: field.bytes))
+        #expect(ssh.text == Links.sshDisplay(field))
+    }
+
+    /// A field that parses as nothing says so rather than showing an empty row.
+    @Test func aMalformedKeySaysSo() throws {
+        var card = try Vectors.card("maximal-qr-signed")
+        card.ssh = SSHKeyField(kind: SSHPublicKey.Kind.rsa.rawValue, bytes: [0x00])
+        #expect(try row("ssh", in: Links.rows(for: card)).text == "malformed ssh-rsa fingerprint")
+        card.ssh = SSHKeyField(kind: 200, bytes: [0x00])
+        #expect(try row("ssh", in: Links.rows(for: card)).text == "unknown key type")
     }
 
     @Test func gpgRowIsMonoWithoutURL() throws {

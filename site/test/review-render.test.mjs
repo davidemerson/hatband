@@ -183,9 +183,11 @@ test('bidi and invisible characters in hosts and handles make the row plain text
     assert.equal(links(channel).length, 0, JSON.stringify(value));
     assert.ok(texts(channel).includes(value), JSON.stringify(value));
   }
-  // Percent-encoding hides an override from the URL check (`%` is atext in a local part), so the
-  // visible text is checked too: a link never shows text that hides something.
-  assert.equal(urlVerdict('mailto:bl%E2%80%AEoom@example.ie').kind, 'ok');
+  // Percent-encoding used to hide an override from the URL check, because `%` is atext in a
+  // local part and the address was judged raw. The address is decoded before it is judged now,
+  // as `URLPolicy.mailto` has always done, so the override is caught at the verdict. The visible
+  // text is still checked below: a link never shows text that hides something.
+  assert.equal(urlVerdict('mailto:bl%E2%80%AEoom@example.ie').kind, 'reject');
   const article = renderCard(doc(), cardFrom([[4, 'bl' + RLO + 'oom@example.ie'], [13, [['e', RLO + 'ei.elpmaxe@eod.nhoj', CustomKind.email]]]]), {});
   assert.equal(links(article).filter((a) => a.getAttribute('href').startsWith('mailto:')).length, 0);
   // A URL with a look-alike host is refused at the verdict, before any DOM.

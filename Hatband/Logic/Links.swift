@@ -223,16 +223,18 @@ nonisolated enum Links {
 
     /// The OpenSSH fingerprint: computed for an inline key, carried as
     /// stored for RSA.
+    /// The same form the review sheet, the vCard and hatband.link all show:
+    /// the `authorized_keys` line, or the fingerprint for an RSA key, which is
+    /// all a card carries of one. The row used to show a fingerprint for every
+    /// kind, so you approved a key line at the review and then found a
+    /// fingerprint on the person you had just saved — with a "Copy
+    /// authorized_keys line" button sixty points below it.
     private static func sshText(_ field: SSHKeyField) -> String {
         guard let kind = SSHPublicKey.Kind(rawValue: field.kind) else { return "unknown key type" }
-        if kind == .rsa {
-            guard field.bytes.count == 32 else { return "malformed ssh-rsa fingerprint" }
-            return SSHPublicKey.fingerprintString(sha256: field.bytes)
+        guard let display = sshDisplay(field) else {
+            return kind == .rsa ? "malformed ssh-rsa fingerprint" : "malformed \(kind.typeName) key"
         }
-        guard let key = try? SSHPublicKey(kind: kind, inlineBytes: field.bytes) else {
-            return "malformed \(kind.typeName) key"
-        }
-        return key.fingerprintString
+        return display
     }
 
     private static func customRow(_ field: CustomField, index: Int) -> Row {
