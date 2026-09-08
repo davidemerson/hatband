@@ -16,7 +16,7 @@ settings:
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: JKXH9239G4
     GENERATE_INFOPLIST_FILE: "NO"
-    MARKETING_VERSION: 0.5.0
+    MARKETING_VERSION: 0.5.1
     CURRENT_PROJECT_VERSION: 3
     ENABLE_USER_SCRIPT_SANDBOXING: "YES"
     HATBAND_COMMIT: dev
@@ -36,6 +36,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: link.hatband.ios
+        # xcodegen defaults every iOS target to "1,2" at target level,
+        # which beats the project-level setting. Said here, it holds.
+        TARGETED_DEVICE_FAMILY: "1"
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         SWIFT_APPROACHABLE_CONCURRENCY: "YES"
     info:
@@ -46,8 +49,6 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
-        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown,
-                                               UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         ITSAppUsesNonExemptEncryption: false
         UIApplicationSceneManifest: { UIApplicationSupportsMultipleScenes: false }
         NSSupportsLiveActivities: true
@@ -87,6 +88,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: link.hatband.ios.widgets
+        TARGETED_DEVICE_FAMILY: "1"  # see the app target
         SKIP_INSTALL: "YES"
     info:
       path: HatbandWidgets/Info.plist
@@ -100,7 +102,10 @@ targets:
       properties:
         com.apple.security.application-groups: [group.link.hatband]
   HatbandMessages:
-    type: app-extension
+    # Not a plain app-extension: actool compiles a stickers icon set only for
+    # the messages product type, and without it the eight device icons are
+    # silently dropped and the upload is rejected.
+    type: app-extension.messages
     platform: iOS
     sources: [HatbandMessages, Shared]
     dependencies:
@@ -108,6 +113,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: link.hatband.ios.messages
+        ASSETCATALOG_COMPILER_APPICON_NAME: iMessage App Icon
+        TARGETED_DEVICE_FAMILY: "1"  # see the app target
         SKIP_INSTALL: "YES"
     info:
       path: HatbandMessages/Info.plist
@@ -133,6 +140,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: link.hatband.ios.tests
+        TARGETED_DEVICE_FAMILY: "1"  # see the app target
         GENERATE_INFOPLIST_FILE: "YES"
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         SWIFT_APPROACHABLE_CONCURRENCY: "YES"

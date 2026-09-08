@@ -218,8 +218,13 @@ test('error and empty states never echo the fragment', async () => {
   assert.equal(renderError(doc(), new TypeError('y')).textContent, 'This card could not be read.');
   const { root: empty } = await run({ hash: '' });
   assert.equal(elements(empty).find((e) => e.tagName === 'H1').textContent, 'No fixed abode.');
-  assert.match(empty.textContent, /hatband\.link shows a Hatband business card/);
+  assert.match(empty.textContent, /hatband\.link is a privacy-first business card exchange application\./);
   assert.equal(renderEmpty(doc()).className, 'empty');
+  // Someone who reached the site with no card is the person most likely to
+  // need the app, so the empty state has to offer it.
+  const store = elements(empty).find((e) => e.tagName === 'A');
+  assert.equal(store.getAttribute('href'), APP_STORE_URL);
+  assert.equal(store.getAttribute('rel'), 'noreferrer noopener');
   const { root: onlyHash } = await run({ hash: '#' });
   assert.ok(onlyHash.textContent.startsWith('No fixed abode.'));
 });

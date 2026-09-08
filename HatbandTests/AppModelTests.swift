@@ -162,6 +162,18 @@ import UIKit
         #expect(model.dbKey == nil)
     }
 
+    /// Shares used to be swept on the next write, which deleted files still in
+    /// flight. Coming back to the app is the moment that is safe instead.
+    @Test func returningToTheAppSweepsWhatTheLastShareWrote() async throws {
+        let (model, _) = try await onboarded()
+        let shared = try TransferredFiles.write([0x51, 0x52], name: "card.png")
+        #expect(FileManager.default.fileExists(atPath: shared.path))
+        model.scenePhase(.inactive)
+        #expect(FileManager.default.fileExists(atPath: shared.path), "swept while the share sheet was up")
+        model.scenePhase(.active)
+        #expect(!FileManager.default.fileExists(atPath: shared.deletingLastPathComponent().path))
+    }
+
     @Test func identityDerivesFromSeed() async throws {
         let (model, keys) = try await onboarded()
         let stored = try #require(keys.items[KeyName.seed])

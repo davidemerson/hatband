@@ -9,8 +9,9 @@ import {
   textProblem, textProblemIn, urlVerdict, websiteURI,
 } from './hb1.js';
 
-/** Placeholder until the listing exists. */
-export const APP_STORE_URL = 'https://apps.apple.com/app/id0000000000';
+/** The listing, by its App Store Connect id. Live once the app is released;
+    until then it is the right URL to a page that is not there yet. */
+export const APP_STORE_URL = 'https://apps.apple.com/app/id6809843834';
 export const SOURCE_URL = 'https://github.com/davidemerson/hatband';
 
 export function el(doc, tag, className, ...children) {
@@ -211,10 +212,16 @@ export function renderCard(doc, card, env = {}) {
   return article;
 }
 
+/** What someone sees who reached the site without a card: usually a person
+    who scanned one and has no app yet, so the download goes here. */
 export function renderEmpty(doc) {
+  const store = el(doc, 'a', 'button', 'Get Hatband on the App Store');
+  store.setAttribute('href', APP_STORE_URL);
+  store.setAttribute('rel', 'noreferrer noopener');
   return el(doc, 'section', 'empty',
     el(doc, 'h1', null, 'No fixed abode.'),
-    el(doc, 'p', null, 'hatband.link shows a Hatband business card from the link that opened it, decoded in your browser and sent nowhere.'));
+    el(doc, 'p', null, 'hatband.link is a privacy-first business card exchange application.'),
+    el(doc, 'p', null, store));
 }
 
 /** Fixed sentences only; the fragment is never echoed. */

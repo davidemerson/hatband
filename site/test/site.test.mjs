@@ -25,15 +25,15 @@ test('the CSP is exactly as specified and its hashes match the inline content', 
   const policy = csp();
   const script = inline('script');
   const style = inline('style');
-  assert.equal(policy, `default-src 'none'; script-src ${hash(script)}; style-src ${hash(style)}; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'`);
-  assert.match(policy, /^default-src 'none'; script-src 'sha256-[A-Za-z0-9+/]{43}='; style-src 'sha256-[A-Za-z0-9+/]{43}='; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'$/);
+  assert.equal(policy, `default-src 'none'; script-src ${hash(script)}; style-src ${hash(style)}; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'`);
+  assert.match(policy, /^default-src 'none'; script-src 'sha256-[A-Za-z0-9+/]{43}='; style-src 'sha256-[A-Za-z0-9+/]{43}='; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'$/);
   assert.ok(index.indexOf('<meta http-equiv="Content-Security-Policy"') < index.indexOf('<meta name="viewport"'), 'CSP comes first');
   assert.ok(!/<script\s/.test(index), 'no script tag with attributes');
   assert.ok(!/<link\b/.test(index), 'no link element');
   for (const [name] of PAGES) {
     const page = read(name + '.html');
     const pageStyle = /<style>([\s\S]*?)<\/style>/.exec(page)[1];
-    assert.match(page, new RegExp(`content="default-src 'none'; style-src ${hash(pageStyle).replace(/[+/]/g, '\\$&')}; form-action 'none'; base-uri 'none'; frame-ancestors 'none'"`));
+    assert.match(page, new RegExp(`content="default-src 'none'; style-src ${hash(pageStyle).replace(/[+/]/g, '\\$&')}; font-src data:; form-action 'none'; base-uri 'none'; frame-ancestors 'none'"`));
     assert.ok(!/<script/.test(page), name + ' has no script');
     assert.equal(pageStyle, style, name + ' shares the stylesheet');
   }
@@ -54,7 +54,12 @@ test('nothing external except the GitHub and App Store links', () => {
   assert.ok(!/\son[a-z]+=/.test(markup), 'no inline event handlers');
   assert.ok(!/\sstyle=/.test(markup), 'no style attributes');
   const style = inline('style');
-  assert.ok(!/url\(|@import|@font-face/.test(style), 'stylesheet loads nothing');
+  assert.ok(!/@import/.test(style), 'stylesheet loads nothing');
+  // The typeface is carried as data rather than fetched, so every url() in
+  // the stylesheet has to be one, and there must be no other kind.
+  const urls = [...style.matchAll(/url\(([^)]*)\)/g)].map((m) => m[1]);
+  for (const url of urls) assert.ok(url.startsWith('data:font/woff2;base64,'), url);
+  assert.equal(urls.length, 2, 'the two Jost faces, latin and latin-ext');
   assert.ok(!/^\s*(import|export)\b/m.test(script), 'bundled script is a classic script');
   assert.ok(script.includes("'use strict'"));
 });

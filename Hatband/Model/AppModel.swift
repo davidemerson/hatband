@@ -116,6 +116,9 @@ import UIKit
         switch phase {
         case .active:
             covered = false
+            // Coming back is the one moment no share is in flight, so it is
+            // the only safe moment to delete what the last one wrote.
+            TransferredFiles.sweep()
             Task { await self.activate() }
         case .inactive:
             covered = true

@@ -152,12 +152,42 @@ nonisolated private final class AuthContext: @unchecked Sendable {
     }
 
     /// Whether stored attributes carry exactly the protection `access` asks
-    /// for: its accessibility constant, and an access control only with
-    /// user presence.
+    /// for: its accessibility constant, and constraints only where user
+    /// presence was asked for.
+    ///
+    /// The presence of an access control is not the test. iOS 26 hands one
+    /// back for every item, constrained or not — a plain seed reads as
+    /// `<SecAccessControlRef: aku>` — so taking any control to mean user
+    /// presence made this return false for items that were already right, and
+    /// sent every write down the replace path, which is the one path that
+    /// leaves the item briefly absent.
     nonisolated static func protectionMatches(_ attributes: [String: Any], _ access: KeyAccess) -> Bool {
-        let accessible = attributes[kSecAttrAccessible as String] as? String
-        let controlled = attributes[kSecAttrAccessControl as String] != nil
-        return accessible == (access.accessible as String) && controlled == access.userPresence
+        guard attributes[kSecAttrAccessible as String] as? String == access.accessible as String else {
+            return false
+        }
+        guard let stored = attributes[kSecAttrAccessControl as String] else {
+            // Nothing to constrain the item, which is right only where
+            // nothing was meant to.
+            return !access.userPresence
+        }
+        guard let flags = access.flags else { return !isConstrained(stored) }
+        var error: Unmanaged<CFError>?
+        guard let wanted = SecAccessControlCreateWithFlags(nil, access.accessible, flags, &error) else {
+            return false
+        }
+        return CFEqual(wanted, stored as CFTypeRef)
+    }
+
+    /// Whether an access control carries any constraint beyond its protection
+    /// class. The constraints are not readable through public API, so this
+    /// reads the description, which lists the class and then each constraint
+    /// after a semicolon: `aku` alone against
+    /// `aku;od(cpo(DeviceOwnerAuthentication));odel(true);oe(true)`.
+    /// `accessControlDescribesItsConstraints` pins that shape against the
+    /// real Keychain so a change in it fails loudly here rather than quietly
+    /// accepting a weaker item.
+    nonisolated static func isConstrained(_ control: Any) -> Bool {
+        (CFCopyDescription(control as CFTypeRef) as String).contains(";")
     }
 
     /// The item's attributes without its data, read silently: nil when

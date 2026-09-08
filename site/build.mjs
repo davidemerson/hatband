@@ -31,11 +31,11 @@ export function bundle(hb1, page) {
 }
 
 export function indexCSP(script, style) {
-  return `default-src 'none'; script-src ${hashSource(script)}; style-src ${hashSource(style)}; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'`;
+  return `default-src 'none'; script-src ${hashSource(script)}; style-src ${hashSource(style)}; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'`;
 }
 
 export function pageCSP(style) {
-  return `default-src 'none'; style-src ${hashSource(style)}; form-action 'none'; base-uri 'none'; frame-ancestors 'none'`;
+  return `default-src 'none'; style-src ${hashSource(style)}; font-src data:; form-action 'none'; base-uri 'none'; frame-ancestors 'none'`;
 }
 
 export const PAGES = [['privacy', 'Privacy'], ['trust', 'Trust'], ['support', 'Support']];

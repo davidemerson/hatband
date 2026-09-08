@@ -50,7 +50,9 @@ import SwiftUI
                                 .font(Theme.mono)
                                 .lineLimit(1)
                             Spacer()
-                            ShareLink(item: url) {
+                            // Named, like every other share here, so the sheet
+                            // draws the preview instead of going to fetch one.
+                            ShareLink(item: url, preview: SharePreview(url.lastPathComponent)) {
                                 Image(systemName: "square.and.arrow.up")
                             }
                             .accessibilityLabel("Share \(url.lastPathComponent)")

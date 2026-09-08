@@ -102,6 +102,40 @@ import Testing
         #expect(!KeychainStore.protectionMatches([:], .seed))
     }
 
+    /// The shape `isConstrained` reads, pinned against the real Keychain.
+    /// iOS 26 returns an access control for every item, so the classification
+    /// rests entirely on whether that control lists constraints: a plain item
+    /// is its protection class alone, a guarded one appends them after a
+    /// semicolon. Returns early where the host has no usable keychain.
+    @Test func accessControlDescribesItsConstraints() throws {
+        let store = KeychainStore()
+
+        let plainName = "plain-" + UUID().uuidString
+        defer { try? store.delete(plainName) }
+        do {
+            try store.write(plainName, Data([1]), access: .seed)
+        } catch {
+            return
+        }
+        let plain = try #require(KeychainStore.storedAttributes(name: plainName))
+        if let control = plain[kSecAttrAccessControl as String] {
+            #expect(!KeychainStore.isConstrained(control), "a plain item came back constrained")
+        }
+        #expect(KeychainStore.protectionMatches(plain, .seed))
+        #expect(!KeychainStore.protectionMatches(plain, .database(appLock: true, includeInBackup: false)))
+
+        let guardedName = "guarded-" + UUID().uuidString
+        defer { try? store.delete(guardedName) }
+        let guardedAccess = KeyAccess.database(appLock: true, includeInBackup: false)
+        try store.write(guardedName, Data([2]), access: guardedAccess)
+        let guarded = try #require(KeychainStore.storedAttributes(name: guardedName))
+        let control = try #require(guarded[kSecAttrAccessControl as String],
+                                   "user presence has to reach the item as a control")
+        #expect(KeychainStore.isConstrained(control))
+        #expect(KeychainStore.protectionMatches(guarded, guardedAccess))
+        #expect(!KeychainStore.protectionMatches(guarded, .seed), "presence read as no presence")
+    }
+
     /// Through the real store, without user presence so nothing prompts:
     /// written, read off the main actor, rewritten under other
     /// accessibility with the data replaced, and deleted. Returns early

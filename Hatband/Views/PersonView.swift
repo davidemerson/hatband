@@ -480,8 +480,7 @@ import UIKit
     private var vcardFile: VCardFile {
         let met = person.encounters.first.map { Links.metNote(for: $0) }
         let text = model.vcard(for: person, met: met).text
-        let base = (card.name ?? "card").replacingOccurrences(of: "/", with: "-")
-        return VCardFile(bytes: Array(text.utf8), name: base + ".vcf")
+        return VCardFile(bytes: Array(text.utf8), name: CardView.fileBase(card.name ?? "") + ".vcf")
     }
 
     private var trustText: String {

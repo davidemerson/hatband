@@ -17,12 +17,27 @@ struct FilesTests {
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         #expect(url.lastPathComponent == "card.hatband")
         #expect(Array(try Data(contentsOf: url)) == bytes)
-        // The simulator may not report a protection class; where it does, it must be complete.
+        // The simulator may not report a protection class; where it does, it
+        // must be the hand-off class. `.complete` reads as nothing to the
+        // process on the other side of the share sheet.
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         let protection = attributes[.protectionKey]
         if let raw = (protection as? FileProtectionType)?.rawValue ?? (protection as? String) {
-            #expect(raw == FileProtectionType.complete.rawValue)
+            #expect(raw == FileProtectionType.completeUnlessOpen.rawValue)
         }
+    }
+
+    /// The bug Signal reported: a second write, which is what a thumbnail or a
+    /// second `ShareLink` on the same screen provokes, used to delete the file
+    /// the first one had already handed out.
+    @Test func writingAgainLeavesTheEarlierFileAlone() throws {
+        let first = try TransferredFiles.write([1, 2, 3], name: "first.png")
+        defer { try? FileManager.default.removeItem(at: first.deletingLastPathComponent()) }
+        let second = try TransferredFiles.write([4, 5, 6], name: "second.png")
+        defer { try? FileManager.default.removeItem(at: second.deletingLastPathComponent()) }
+        #expect(first.deletingLastPathComponent() != second.deletingLastPathComponent())
+        #expect(Array(try Data(contentsOf: first)) == [1, 2, 3], "the first share's file was swept mid-flight")
+        #expect(Array(try Data(contentsOf: second)) == [4, 5, 6])
     }
 
     @Test func transferablesKeepTheirBytes() {

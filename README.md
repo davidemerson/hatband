@@ -1,12 +1,12 @@
 # Hatband
 
-A business card in your hat. Hatband shows your contact details as a QR code, from the iPhone Lock Screen if you like, and remembers where you met the people you scan. No account, no server, nothing collected.
+Hatband shows your contact details as a QR code, from the iPhone Lock Screen if you like, and remembers where you met the people you scan. No account, no server, nothing collected.
 
 Named for the card Bloom keeps in his hatband in *Ulysses*, bearing the name of his other self, Henry Flower.
 
 ## Status
 
-The format library, its test vectors and the iPhone app exist; the fallback site is live at hatband.link. The app runs on a phone; what that showed is under Validation. TestFlight is next.
+The format library, its vectors, the iPhone app and the site at hatband.link all exist. The app runs on a phone and has been through TestFlight. What device testing showed is under Validation.
 
 ## Layout
 
@@ -19,31 +19,32 @@ The format library, its test vectors and the iPhone app exist; the fallback site
 
 ## Build and test
 
-Core, on Linux or macOS:
-
 ```
-swift test --package-path Packages/HatbandCore
+swift test --package-path Packages/HatbandCore          # core, Linux or macOS
+brew install xcodegen && xcodegen generate              # writes Hatband.xcodeproj
+xcodebuild test -project Hatband.xcodeproj -scheme Hatband \
+  -destination 'platform=iOS Simulator,name=iPhone 17'
+node --test site/test/*.test.mjs                        # site
+sh scripts/lint-boundaries.sh --no-stubs
 ```
 
-The app requires Xcode 26 and is generated from `project.yml` with XcodeGen.
+The app needs Xcode 26. `project.yml` is the only source of the project: `Hatband.xcodeproj`, every `Info.plist` and every entitlements file are generated and never committed. CI lints the boundaries, generates, tests, and refuses any package beyond swift-crypto and swift-asn1. `ITSAppUsesNonExemptEncryption` is false, on the publicly-available-source exemption.
 
 ## App
 
-- **Card.** The selected persona's signed card as a QR in a white panel, brightness raised while it shows and hidden while the screen is recorded. A byte meter warns past version 20 and offers the file form when no code fits. Share as a hatband.link link or a `.hatband` file; print as SVG, PNG or a PDF card. "What's in this QR" lists every field and the exact size of the code on screen.
-- **Profile and personas.** Every field commits through the library's normalizers and validators, so nothing unnormalized is stored. SSH keys are pasted as an `authorized_keys` line; a GPG certificate is kept only when it hashes to the typed fingerprint; a headshot is reduced to 256 pixels and 12 KB with its Exif stripped. A persona shares a subset of the profile under its own derived key and colour, or is an alias with a profile of its own. Key indices are never reused; `seq` rises only when a card's content changes.
-- **Lock Screen.** "Share my card" starts a Live Activity for 30 minutes, 2 or 8 hours. Only the Lock Screen presentation carries the compact QR and, if you choose, your name; the Dynamic Island, Watch, CarPlay and paired-Mac presentations show a hat glyph and "Sharing" at most. The activity goes stale at its end time and stopping in the app ends it at once. Always-On shows "Tap to show card" unless you allow the QR there. If the system refuses the Live Activity, no session is left behind and the refusal is explained in a sentence. The Home Screen widget is opt-in and reads one file in the App Group container, deleted when the widget is turned off.
-- **Messages.** Hatband appears in the Messages `+` menu: pick a persona and the card goes into the conversation as a bubble, not a link, so nothing truncates it. Someone with Hatband taps it and lands on the same review sheet a scan gives them; someone without gets hatband.link. The card sent is the whole one, or the one without the photo when the whole one is too long for a message to carry.
-- **Scanning.** The camera reads QR codes only; a screenshot goes through Vision instead. Every payload is screened field by field before the review sheet shows it: rejected fields are listed, warnings stay on their field, and any field can be switched off before saving. Saving notes one reduced-accuracy fix, about a city, with a place, a note and tags. A newer card from someone you know can be saved as an update or as a meeting only. Where draws one circle per meeting over a map that loads only when the tab opens. Forget deletes at once with ten seconds to undo. Add to Contacts files the meeting as a Gregorian date whatever calendar the phone displays, as is the card's issued day; it is the one thing that asks a permission beyond the camera, the coarse fix and Face ID, and it asks only when you tap it.
-- **Trust.** A person is pinned to the first key seen for their persona id, or to the 8-byte fingerprint of a Lock Screen card. A later card updates the record only under the pinned key with a higher sequence number; a different key is a warning and replaces nothing unless you choose "Trust new key". A GPG certificate riding in a file or link is kept only when it hashes to the card's fingerprint. The stored card is always the bytes that were signed; a photo received in a file share stays with the person when a later QR card, which never carries one, replaces it.
-- **Storage and lock.** One SwiftData store in a Class A directory. Your own card sits in one plaintext blob, so showing it never prompts; each scanned person is AES-GCM sealed under a 32-byte key in the Keychain, bound to its persona id. App lock, on by default, puts that key behind Face ID or the passcode; People, Where and Settings stay locked until then, and the key, the people and the ten-second undo buffer leave memory in the background, after a person's pending edits are saved. The Keychain is read off the main thread, so a Face ID prompt never freezes the app; rewriting the database key under new protection replaces the item only after the replacement is prepared, so a failed toggle leaves the old key. The store stays out of backups unless you opt in, and the toggle says what that means without Advanced Data Protection. Two files sit outside it, in the App Group container the extensions read: the widget's compact card, readable after the first unlock because a widget draws on a locked phone; and the cards the Messages extension sends, which are the whole thing including a headshot and a GPG certificate, and are therefore unreadable while the phone is locked. Both are excluded from backups and both go when you erase. The extensions can read a card; neither can sign one, because the seed never leaves the app.
-- **Export, import, erase.** A `.hatband-export` holds the seed, your card and every person, sealed under six EFF words or a passphrase of your own. Restore makes a fresh install into that phone; merge keeps the local seed and pins and takes the higher `seq`. The export carries the persona-index counter too, so a restored phone never hands a new persona a key index the old one used. Erase deletes the Keychain keys first, then activities, the widget file (and reloads the widget), the share-sheet temp files and the store.
-- **What leaves the phone.** Nothing, unless you tap a button that names its host: WKD, keys.openpgp.org, GitHub and a Mastodon instance for key and link checks; Safari for a tapped link; Apple's map tiles for the area around your coarse meeting places when the Where tab opens. One ephemeral session, no cookies, 15 seconds, TLS 1.2, same-host redirects only, 256 KB. `scripts/lint-boundaries.sh` keeps networking, storage, pasteboard, screen and location behind one file each and forbids UserDefaults, so `PrivacyInfo.xcprivacy` declares nothing. MetricKit diagnostics stay on the phone and show in About.
-- **Look.** Every list and form sits on the nnix ground in both appearances; timestamps are set in SF Mono; the persona editor's colour swatches are 44 pt targets named for VoiceOver, and every icon-only button carries a label. The byte meters are measured once per change of card content, off the render path, so a redraw never reads the seed or signs.
-- **Building and testing.** `brew install xcodegen && xcodegen generate`, then Xcode 26; `Info.plist` and the entitlements are generated, never committed. `xcodebuild test -project Hatband.xcodeproj -scheme Hatband -destination 'platform=iOS Simulator,name=iPhone 17'`. CI lints the boundaries, generates, tests, and refuses any package beyond swift-crypto and swift-asn1. `ITSAppUsesNonExemptEncryption` is declared false on the publicly-available-source exemption. TestFlight is still open.
+- **Card.** Your selected persona as a QR code. Brightness rises while it shows; the code hides while the screen is recorded. Share it as a hatband.link URL or a `.hatband` file, or print it as SVG, PNG or a PDF card. "What's in this QR" lists every field and the code's size on screen.
+- **Profile and personas.** Fields commit through the library's normalizers, so nothing unnormalized is stored. A persona shares a subset of your profile under its own derived key and colour, or is an alias with a profile of its own. Key indices are never reused. `seq` rises only when a card's content changes.
+- **Lock Screen.** "Share my card" runs a Live Activity for 30 minutes, 2 hours or 8. Only the Lock Screen presentation carries the QR; the Dynamic Island, Watch, CarPlay and paired Mac show a hat glyph at most. The Home Screen widget is opt-in and reads one file in the App Group container.
+- **Messages.** Hatband appears in the Messages `+` menu. The card goes into the conversation as a bubble rather than a link, so nothing truncates it. A recipient with the app lands on the review sheet; one without gets hatband.link.
+- **Scanning.** The camera reads QR codes; a screenshot goes through Vision. Every payload is screened field by field before you see it, and any field can be switched off before saving. Saving notes one reduced-accuracy fix, about a city. Forget deletes at once, with ten seconds to undo.
+- **Trust.** A person is pinned to the first key seen for their persona id. A later card updates the record only under that key with a higher `seq`; a different key is a warning and replaces nothing unless you accept it. A GPG certificate is kept only when it hashes to the card's fingerprint.
+- **Storage and lock.** One SwiftData store in a Class A directory. Your own card is plaintext, so showing it never prompts; each scanned person is AES-GCM sealed under a Keychain key bound to their persona id. App lock, on by default, puts that key behind Face ID or the passcode. The store stays out of backups unless you opt in. Two files sit outside it in the App Group container, for the widget and the Messages extension; both are excluded from backups and both go when you erase. Neither extension can sign a card, because the seed never leaves the app.
+- **Export, import, erase.** A `.hatband-export` holds the seed, your card and every person, sealed under six EFF words or a passphrase of your own. Restore replaces; merge keeps the local seed and pins and takes the higher `seq`. Erase deletes the Keychain keys first, then the activities, the widget file, the share-sheet temporaries and the store.
+- **What leaves the phone.** Nothing, unless you tap a button that names its host: WKD, keys.openpgp.org, GitHub and Mastodon for key and link checks; Safari for a tapped link; Apple's map tiles when the Where tab opens. One ephemeral session: no cookies, 15 seconds, TLS 1.2, same-host redirects, 256 KB. `scripts/lint-boundaries.sh` keeps networking, storage, pasteboard, screen and location behind one file each and forbids `UserDefaults`, so `PrivacyInfo.xcprivacy` declares nothing.
 
 ## Validation
 
-Measured on an iPhone 15 Pro, iOS 26.6.1, Xcode 26.6. The Lock Screen symbols were read from a display calibrated against a ruler at the Live Activity's exact geometry — a 136 pt panel, 6 pt of padding, a two-module quiet zone — which reproduces the optics of glass without a second phone.
+Measured on an iPhone 15 Pro, iOS 26.6.1, Xcode 26.6. Lock Screen symbols were read from a display calibrated against a ruler at the Live Activity's geometry: a 136 pt panel, 6 pt of padding, a two-module quiet zone.
 
 | Card | Version | Module | Read at |
 |---|---|---|---|
@@ -52,25 +53,25 @@ Measured on an iPhone 15 Pro, iOS 26.6.1, Xcode 26.6. The Lock Screen symbols we
 | The most the trim loop allows | 10 | 0.34 mm | 10 cm |
 | The same with the URL prefix dropped | 9 | 0.36 mm | 10 cm |
 
-The Camera app and Hatband's own scanner both read all four at 10 cm and none at 20. You hold the card out; it does not read across a table. The version-10 ceiling is never reached in practice, since the default card is version 5 and two channels make version 8, so the tier has more room than the budget assumed. Dropping the URL prefix, the fallback the plan reserved, buys one version and no distance, and would cost the Camera app: it stays unused.
+The Camera app and Hatband's scanner read all four at 10 cm and none at 20. You hold the card out; it does not read across a table. The version-10 ceiling is never reached in practice, so dropping the URL prefix — the fallback the plan reserved — stays unused: it buys one version, no distance, and would cost the Camera app.
 
-The codes carry the hat in a cleared square in the middle, 3.4 to 3.9 per cent of the symbol against the 15 per cent medium error correction recovers. Every vector still decodes to the same bytes with it there, checked with zbar; what that does not answer is distance, and the distance above was measured before the hat existed. It is not settled until it is measured again.
+The codes carry the hat in a cleared square, 3.4 to 3.9 per cent of the symbol against the 15 per cent medium correction recovers. Every vector still decodes with it there, checked with zbar. Distance was measured before the hat existed and is not settled until it is measured again.
 
-The Live Activity renders on the Lock Screen and under Always-On, the widget renders while locked, the Dynamic Island carries no card, and StandBy shows what the Lock Screen shows. A universal link opens the app and its review sheet.
+The Live Activity renders on the Lock Screen and under Always-On, the widget renders while locked, the Dynamic Island carries no card, and a universal link opens the app and its review sheet.
 
-A 32 KB card is 52,452 characters as a URL, and both decoders read one back. Pasted as plain text it does not survive: the system's data detectors linkify `hatband.link` and drop the fragment, so what arrives is the bare site. "Share as link" shared the URL as a string and hit the same wall; it shares a `URL` now, which the receiving app keeps whole. Photos and keys are why a card grows; they are why the file form exists.
+A 32 KB card is 52,452 characters as a URL, and both decoders read one back. Pasted as plain text it does not survive: the system's data detectors linkify `hatband.link` and drop the fragment. "Share as link" shares a `URL` rather than a string, which the receiving app keeps whole.
 
-Add to Contacts could never add. An unknown-contact card allows no editing and offers its own add actions, and the app had asked for the opposite; with no contact store set, the actions were disabled outright. It works now, at the cost of the one permission the plan meant to do without.
-
-Not tested: iPhone 12 through 14, and scanning a Lock Screen end to end, which needs a second camera. StandBy has no design behind it, so the line above is description, not verification.
+Not tested: iPhone 12 through 14, and scanning a Lock Screen end to end, which needs a second camera.
 
 ## Wire format (HB1)
 
 A card is a CBOR map with small integer keys, encoded deterministically (RFC 8949 §4.2.1). It travels three ways:
 
-- **QR**: `https://hatband.link/#1<base32>` — the fragment is a format tag and unpadded Base32 of the map. The fragment never reaches the host; the page at hatband.link decodes it in the browser for people without the app.
+- **QR**: `https://hatband.link/#1<base32>` — a format tag and unpadded Base32 of the map. The fragment never reaches the host; the page at hatband.link decodes it in the browser.
 - **File**: `.hatband`, the map behind the magic bytes `HB1\0`.
-- **Lock Screen**: the same URL form, restricted to the compact tier (name, up to two channels, persona id, key fingerprint) so it fits about QR version 10 at 23 mm.
+- **Lock Screen**: the same URL form, restricted to the compact tier — name, up to two channels, persona id, key fingerprint — so it fits about QR version 10 at 23 mm.
+
+Three forms sit behind those three ways. The Lock Screen tier is unsigned and carries a key fingerprint instead of a key. The in-app full QR is signed and drops the photo and the GPG certificate. The file form is signed and carries everything; its bytes travel as a `.hatband` file or in the URL fragment, which is why the table below marks the heavy fields "file and URL only".
 
 | Key | Field | Type | Notes |
 |---|---|---|---|
@@ -99,34 +100,41 @@ A card is a CBOR map with small integer keys, encoded deterministically (RFC 894
 | 22 | min reader | uint | |
 | 23 | gpg key | bytes | binary certificate; file and URL only; must hash to key 12 |
 
-Readers ignore unknown keys but carry them through unchanged, so a signature over a newer card still verifies. Keys 24 and up are reserved. Every form is signed over exactly its own content; a full card is about 256 bytes, the ceiling for any form is 32 KB. Test vectors live in `spec/vectors`.
+Readers ignore unknown keys but carry them through unchanged, so a signature over a newer card still verifies. Keys 24 and up are reserved. Every form is signed over exactly its own content. A full card is about 256 bytes; the ceiling for any form is 32 KB. Vectors live in `spec/vectors`.
 
 ## Core
 
 `Packages/HatbandCore` is the whole format and holds no UI. It builds on Linux, where its tests run first.
 
-- **Model.** One `Profile` holds every field in stored form. A `Persona` selects fields from it, or for an alias from a profile of its own, and carries a colour, an 8-byte id, a key index and up to two Lock Screen channels. `CardBuilder` renders a persona for a form: the Lock Screen tier is compact and unsigned, the full QR drops the photo and GPG key, the file form carries everything.
-- **Codec.** Deterministic CBOR (RFC 8949 §4.2.1; decoding is strict: shortest forms, ordered keys, no tags or floats, text compared by bytes), unpadded Base32, the HB1 URL and file forms, and a `Budget` that reports the QR version a card needs. Version 10 at medium correction is the Lock Screen ceiling, 25 the full-screen one; a name-only card is version 5.
-- **Crypto.** One 32-byte seed. Persona keys are HKDF-SHA256 of it with salt `hatband` and info `hatband/v1/persona/<index>`, derived on demand, never stored. `Card.signed(with:)` signs `hatband-card-v1` plus the canonical map; verification refuses small-order and non-canonical public keys. Exports are PBKDF2-HMAC-SHA256 (600 000 rounds) into ChaCha20-Poly1305, in a CBOR container whose header is authenticated; passphrases are six EFF words. Signatures may differ between runs, so compare them by verifying.
-- **QR.** An ISO 18004 encoder written for this project: segments, Reed–Solomon, every function pattern, masks scored by the reference N1–N4 rules. The URL prefix goes in a byte segment and the Base32 fragment in an alphanumeric one, at 5.5 bits per character. It renders SVG, PBM and path data; the app draws modules itself.
-- **Interop.** `Normalize` turns pasted input into stored forms (E.164 phone, lowercase-domain email, scheme-less website with an http flag, GitHub user, LinkedIn slug, `user@instance`, Calendly path, GPG fingerprint) and `CanonicalURI` renders them as links; `SSHPublicKey` reads OpenSSH lines and writes `authorized_keys`, `allowed_signers` and randomart; `VCard` builds vCard 3.0 for Contacts. Everything parses Unicode scalars, never grapheme clusters, so a combining mark or joiner can neither hide a delimiter nor ride into a stored value. Hostnames follow IDNA 2008's shape: letters, digits, marks and hyphens, 63 octets a label and 253 in all.
-- **Validate.** Every scanned field passes `FieldValidator` under `Limits.qr` or `Limits.file` before any UI sees it and comes back `ok`, `warning` or `reject`; nothing is repaired. Rejected: controls, bidi controls, format and default-ignorable characters (a variation selector after its base, a joiner inside an emoji sequence and a non-joiner inside an Arabic word excepted), values with no visible base, IP addresses in any spelling, `mailto` headers other than subject and body, and links outside https, http, mailto, tel, acct and OPENPGP4FPR. Hosts are judged label by label: a label whose every letter has an ASCII twin is a homograph (аpple, gіthub, also behind punycode) and is refused naming the ASCII it imitates; a label that keeps a letter no ASCII host has (москва, ελλάδα) is an honest IDN and merely warned. Which characters count as assigned follows the reader's Unicode tables, so a very new emoji in a name may be refused by an older phone.
-- **Vectors.** `spec/vectors/cards.json` holds ten cards with their CBOR, URL, file bytes, signing bytes, keys and signatures, generated from the seed `00…1f` by `scripts/gen-vectors.sh`. Every implementation is tested against it; CI regenerates it and fails on any drift.
+- **Codec.** Deterministic CBOR, decoded strictly: shortest forms, ordered keys, no tags or floats, text compared by bytes. Unpadded Base32. `Budget` reports the QR version a card needs — version 10 at medium correction is the Lock Screen ceiling, 25 the full-screen one, and a name-only card is version 5.
+- **Crypto.** One 32-byte seed. Persona keys are HKDF-SHA256 of it, salt `hatband`, info `hatband/v1/persona/<index>`, derived on demand and never stored. Signing covers `hatband-card-v1` plus the canonical map; verification refuses small-order and non-canonical public keys. Exports are PBKDF2-HMAC-SHA256 at 600,000 rounds into ChaCha20-Poly1305, in a CBOR container whose header is authenticated. CryptoKit randomises Ed25519 signatures, so compare them by verifying, not by bytes.
+- **QR.** An ISO 18004 encoder written for this project: segments, Reed–Solomon, every function pattern, masks scored by the reference N1–N4 rules. The URL prefix goes in a byte segment and the Base32 fragment in an alphanumeric one, at 5.5 bits per character.
+- **Interop.** `Normalize` turns pasted input into stored forms and `CanonicalURI` renders them back as links. `SSHPublicKey` reads OpenSSH lines and writes `authorized_keys`, `allowed_signers` and randomart. `VCard` builds vCard 3.0. Everything parses Unicode scalars rather than grapheme clusters, so a combining mark or joiner can neither hide a delimiter nor ride into a stored value. Hostnames follow IDNA 2008's shape.
+- **Validate.** Every scanned field passes `FieldValidator` under `Limits.qr` or `Limits.file` and comes back `ok`, `warning` or `reject`. Nothing is repaired. Rejected: controls, bidi controls, format and default-ignorable characters, values with no visible base, IP addresses in any spelling, `mailto` headers other than subject and body, and links outside https, http, mailto, tel, acct and OPENPGP4FPR. Hosts are judged label by label: a label whose every letter has an ASCII twin is a homograph and is refused naming the ASCII it imitates; a label keeping a letter no ASCII host has is an honest IDN and is only warned.
+- **Vectors.** `spec/vectors/cards.json` holds ten cards with their CBOR, URL, file bytes, signing bytes, keys and signatures, generated from the seed `00…1f` by `scripts/gen-vectors.sh`. Run it on Linux only; CI regenerates it there and fails on drift.
 
 ## Security
 
-- **Assets.** Your card; the people you scanned and where you met; your signing seed.
+- **Assets.** Your card; the people you scanned and where you met them; your signing seed.
 - **Adversaries.** A bystander photographing your Lock Screen. A thief with your phone, locked or unlocked. A contact who turns hostile. A hostile card. Anyone who can read a backup.
-- **Mitigations.** The Lock Screen shows a compact card, name only by default, that expires; compact and mirrored views carry no card at all. Received cards live in a Class A store, sealed under a key the app lock guards, and stay out of backups unless you opt in. Every scanned payload is parsed strictly and screened for hidden characters, look-alike domains and disallowed links before you see it; nothing opens by itself. An update is accepted only when signed by the pinned key with a higher sequence number. Nothing leaves the phone unless you tap a button that names where it goes.
+- **Mitigations.** The Lock Screen shows a compact card, name only by default, that expires; mirrored views carry no card at all. Received cards live in a Class A store, sealed under a key the app lock guards, and stay out of backups unless you opt in. Every scanned payload is parsed strictly and screened for hidden characters, look-alike domains and disallowed links before you see it; nothing opens by itself. An update is accepted only when signed by the pinned key with a higher sequence number. Nothing leaves the phone unless you tap a button that names where it goes.
 - **Non-goals.** A jailbroken or already compromised phone. Someone who photographs your card and keeps it: that is what a card is for.
 
 Report a vulnerability privately at https://github.com/davidemerson/hatband/security/advisories/new. The site's `security.txt` points here.
 
 ## Site
 
-hatband.link is one static page. A QR or link carries the card in the URL fragment, which browsers never send; the page decodes it in JavaScript, verifies the signature with WebCrypto and offers Add to contacts as a vCard. It loads nothing from anywhere, and its Content-Security-Policy allows only its own hashed inline code. The host sees a request's address, user agent and time, never the card.
+hatband.link is one static page. It decodes the card from the URL fragment, which browsers never send, verifies the signature with WebCrypto and offers Add to contacts as a vCard. It loads nothing from anywhere: the script, the styles and the Jost typeface are all in the file, and the Content-Security-Policy admits the first two by hash and the rest only as `data:`. The host sees a request's address, user agent and time, never the card.
 
-Hosting is a private S3 bucket behind CloudFront with logging off, described in `infra/site.yaml`. `node site/build.mjs` inlines `site/src` into `site/index.html` and writes the CSP hashes; the output is committed and CI checks it is current. `infra/deploy-stack.sh` creates the stack; `scripts/deploy-site.sh` uploads the pages with explicit content types and invalidates the cache. Tests: `node --test site/test/*.test.mjs`.
+Hosting is a private S3 bucket behind CloudFront with logging off, described in `infra/site.yaml`.
+
+```
+node site/build.mjs                             # inlines site/src, writes the CSP hashes
+infra/deploy-stack.sh                           # creates the stack
+TEAMID=JKXH9239G4 sh scripts/deploy-site.sh     # uploads and invalidates
+```
+
+The build output is committed, and CI checks it is current.
 
 ## License
 
