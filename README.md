@@ -53,6 +53,8 @@ Measured on an iPhone 15 Pro, iOS 26.6.1, Xcode 26.6. The Lock Screen symbols we
 
 The Camera app and Hatband's own scanner both read all four at 10 cm and none at 20. You hold the card out; it does not read across a table. The version-10 ceiling is never reached in practice, since the default card is version 5 and two channels make version 8, so the tier has more room than the budget assumed. Dropping the URL prefix, the fallback the plan reserved, buys one version and no distance, and would cost the Camera app: it stays unused.
 
+The codes carry the hat in a cleared square in the middle, 3.4 to 3.9 per cent of the symbol against the 15 per cent medium error correction recovers. Every vector still decodes to the same bytes with it there, checked with zbar; what that does not answer is distance, and the distance above was measured before the hat existed. It is not settled until it is measured again.
+
 The Live Activity renders on the Lock Screen and under Always-On, the widget renders while locked, the Dynamic Island carries no card, and StandBy shows what the Lock Screen shows. A universal link opens the app and its review sheet.
 
 A 32 KB card is 52,452 characters as a URL, and both decoders read one back. Pasted as plain text it does not survive: the system's data detectors linkify `hatband.link` and drop the fragment, so what arrives is the bare site. "Share as link" shared the URL as a string and hit the same wall; it shares a `URL` now, which the receiving app keeps whole. Photos and keys are why a card grows; they are why the file form exists.
