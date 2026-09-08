@@ -2,12 +2,14 @@ import HatbandCore
 import SwiftUI
 import UIKit
 
-/// The nnix tokens on iOS. Light first, dark second.
+/// The nnix tokens on iOS. Light first, dark second. Greyscale: nothing
+/// in the chrome carries a hue, so interaction is signalled by placement,
+/// weight and symbols rather than by colour.
 nonisolated enum Theme {
     static let ground = Color(light: 0xF2F2F2, dark: 0x0D0D0D)
     static let secondary = Color(light: 0xD9D9D9, dark: 0x262626)
     static let ink = Color(light: 0x111111, dark: 0xE6E6E6)
-    static let accent = Color(light: 0x00008B, dark: 0x7F7FFF)
+    static let accent = Color(light: 0x4A4A4A, dark: 0xBDBDBD)
     /// "Subtle mono".
     static let tertiary = Color(light: 0x6E6E6E, dark: 0x9A9A9A)
 
