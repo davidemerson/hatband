@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key><string>app-store-connect</string>
+  <key>teamID</key><string>JKXH9239G4</string>
+  <key>destination</key><string>export</string>
+  <key>signingStyle</key><string>automatic</string>
+  <!-- Organizer crash data is deliberately unused: the App Store label is
+       "Data Not Collected" with no Diagnostics entry, and symbolicated
+       crashes in Organizer would have to be declared as Diagnostics. -->
+  <key>uploadSymbols</key><false/>
+  <key>manageAppVersionAndBuildNumber</key><false/>
+</dict>
+</plist>

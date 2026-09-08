@@ -134,6 +134,26 @@ import Testing
         #expect(scanner.people.first?.encounters.count == 1)
     }
 
+    /// One scan from the Camera app arrives twice: as a URL open and as a
+    /// browsing-web activity. Every Review carries a fresh id, so a second
+    /// delivery would tear the sheet down and take the place, note and tags
+    /// with it. The same card from the same place is one review.
+    @Test func theSameCardDeliveredTwiceIsOneReview() async throws {
+        let sharer = try await onboarded()
+        let scanner = try await onboarded(name: "Blazes Boylan", email: "boylan@example.ie")
+        let url = try #require(URL(string: try signedURL(from: sharer)))
+
+        scanner.handle(url: url)
+        let first = try #require(scanner.pendingReview)
+        scanner.handle(url: url)
+        #expect(scanner.pendingReview?.id == first.id)
+
+        // A different card is a different review, and still replaces it.
+        let other = try await onboarded(name: "Molly Bloom", email: "molly@example.ie")
+        scanner.handle(url: try #require(URL(string: try signedURL(from: other))))
+        #expect(scanner.pendingReview?.id != first.id)
+    }
+
     @Test func rescanSameSeqAddsEncounterOnly() async throws {
         let sharer = try await onboarded()
         let scanner = try await onboarded(name: "Henry Flower", email: "henry@flower.ie")

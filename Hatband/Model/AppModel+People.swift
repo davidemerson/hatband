@@ -258,6 +258,14 @@ extension AppModel {
         }
         switch open {
         case .card(let card, let source):
+            // A universal link arrives as a URL open and as a web activity,
+            // and one scan can deliver both. Every Review carries a fresh id,
+            // so replacing one tears the sheet down and takes the place, note
+            // and tags with it: the same card from the same place is the same
+            // review.
+            if let pending = pendingReview, pending.card == card, pending.source == source {
+                return
+            }
             pendingReview = Review.make(card: card, source: source, people: people)
         case .export(let data):
             pendingImport = data

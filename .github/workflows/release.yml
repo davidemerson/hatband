@@ -1,0 +1,71 @@
+name: release
+# Uploads a TestFlight build. Deliberately not on every push: that would put
+# a build in front of testers for every commit. Tag a release, or run it by
+# hand. The build number is the commit count, which only ever rises.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+jobs:
+  testflight:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: xcodebuild -version
+      - run: brew install xcodegen
+      - name: App Store Connect key
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          test -n "$ASC_KEY_P8" || { echo "ASC_KEY_P8 is not set"; exit 1; }
+          mkdir -p ~/private_keys && chmod 700 ~/private_keys
+          printf '%s' "$ASC_KEY_P8" | base64 --decode > ~/private_keys/AuthKey_$ASC_KEY_ID.p8
+          chmod 600 ~/private_keys/AuthKey_$ASC_KEY_ID.p8
+      - run: scripts/lint-boundaries.sh --no-stubs
+      - run: xcodegen generate --spec project.yml
+      - name: build number
+        run: echo "BUILD=$(git rev-list --count HEAD)" >> "$GITHUB_ENV"
+      - name: test
+        run: |
+          set -o pipefail
+          xcodebuild test -project Hatband.xcodeproj -scheme Hatband \
+            -destination 'platform=iOS Simulator,name=iPhone 17' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" HATBAND_COMMIT=${GITHUB_SHA::7} \
+            -skipPackagePluginValidation 2>&1 \
+            | grep -E --line-buffered 'error:|✘|✔ Test run|Expectation failed|\*\* TEST' | cut -c1-400
+      - name: archive
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          xcodebuild archive -project Hatband.xcodeproj -scheme Hatband \
+            -destination 'generic/platform=iOS' -archivePath build/Hatband.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_$ASC_KEY_ID.p8 \
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            CURRENT_PROJECT_VERSION=$BUILD HATBAND_COMMIT=${GITHUB_SHA::7} \
+            -skipPackagePluginValidation
+      - name: export
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          xcodebuild -exportArchive -archivePath build/Hatband.xcarchive \
+            -exportOptionsPlist scripts/ExportOptions.plist -exportPath build/export \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_$ASC_KEY_ID.p8 \
+            -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+      - name: upload to TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          xcrun altool --upload-app -f build/export/Hatband.ipa -t ios \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+      - name: shred the key
+        if: always()
+        run: rm -f ~/private_keys/AuthKey_*.p8
