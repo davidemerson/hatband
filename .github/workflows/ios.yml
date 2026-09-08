@@ -18,11 +18,14 @@ jobs:
       - name: xcodebuild test
         run: |
           set -o pipefail
+          # The filter used to swallow the "Available destinations" list that
+          # xcodebuild prints under a destination error, so the one run that
+          # hit it could not say what the runner had.
           xcodebuild test -project Hatband.xcodeproj -scheme Hatband \
-            -destination 'platform=iOS Simulator,name=iPhone 17' \
+            -destination "$(scripts/ios-destination.sh)" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" HATBAND_COMMIT=${GITHUB_SHA::7} \
             -skipPackagePluginValidation 2>&1 \
-            | grep -E --line-buffered 'error:|warning:|✘|✔ Test run|◇ Test run|Expectation failed|recorded an issue|Test Suite|Executed|Failing tests|^\s+[A-Za-z]+Tests\.|\*\* TEST|Fatal|crash' \
+            | grep -E --line-buffered 'error:|warning:|✘|✔ Test run|◇ Test run|Expectation failed|recorded an issue|Test Suite|Executed|Failing tests|^\s+[A-Za-z]+Tests\.|\*\* TEST|Fatal|crash|Available destinations|^\s+\{ platform:' \
             | grep -vE 'Test run started' | cut -c1-400
       - name: package allow-list
         run: |

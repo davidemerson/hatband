@@ -33,7 +33,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild test -project Hatband.xcodeproj -scheme Hatband \
-            -destination 'platform=iOS Simulator,name=iPhone 17' \
+            -destination "$(scripts/ios-destination.sh)" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" HATBAND_COMMIT=${GITHUB_SHA::7} \
             -skipPackagePluginValidation 2>&1 \
             | grep -E --line-buffered 'error:|✘|✔ Test run|Expectation failed|\*\* TEST' | cut -c1-400
