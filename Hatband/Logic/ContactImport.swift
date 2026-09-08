@@ -3,8 +3,12 @@ import Foundation
 import HatbandCore
 
 /// A picked contact into a profile. Every value goes through `Normalize`;
-/// one that does not normalise is skipped and the base value kept. Only
-/// keys the picker made available are read.
+/// one that does not normalise is skipped and the base value kept, so a
+/// `Profile` never holds an unnormalised value. Only keys the picker made
+/// available are read. `rawPhone` is the exception the caller needs:
+/// Contacts stores domestic numbers without a country code, which is not
+/// E.164, so the common case is a number that cannot be imported and must
+/// be shown rather than dropped in silence.
 nonisolated enum ContactImport {
     static func profile(from contact: CNContact, into base: Profile) -> Profile {
         var profile = base
@@ -45,6 +49,20 @@ nonisolated enum ContactImport {
             }
         }
         return profile
+    }
+
+    /// The first phone number as Contacts holds it, normalised or not, for
+    /// a field the reader can correct. `profile(from:into:)` keeps only what
+    /// is already E.164; almost no domestic number is.
+    static func rawPhone(from contact: CNContact) -> String? {
+        guard contact.isKeyAvailable(CNContactPhoneNumbersKey) else { return nil }
+        for labeled in contact.phoneNumbers {
+            let text = labeled.value.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                return text
+            }
+        }
+        return nil
     }
 
     /// Known hosts go to their own field; anything else is the website.

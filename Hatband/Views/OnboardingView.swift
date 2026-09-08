@@ -89,7 +89,9 @@ import UniformTypeIdentifiers
                 profile = ContactImport.profile(from: contact, into: profile)
                 name = profile.name ?? ""
                 company = profile.company ?? ""
-                phone = profile.phone ?? ""
+                // A number Contacts holds in national form does not normalise;
+                // show it so "use the international form" lands on something.
+                phone = profile.phone ?? ContactImport.rawPhone(from: contact) ?? ""
                 email = profile.email ?? ""
                 door = .type
             }

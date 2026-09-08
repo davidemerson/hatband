@@ -24,6 +24,35 @@ struct ContactImportTests {
         #expect(profile.website == Website(address: "nnix.com/~bloom", insecure: false))
     }
 
+    /// Contacts holds domestic numbers in national form, which is not E.164,
+    /// so the profile keeps nothing and the raw number is what onboarding
+    /// shows. Found on a phone: the name and website imported, the number
+    /// vanished without a word.
+    @Test func nationalNumbersAreKeptRawForTheReader() {
+        for national in ["(555) 123-4567", "555-123-4567", "020 7946 0958", "087 123 4567"] {
+            let contact = CNMutableContact()
+            contact.phoneNumbers = [CNLabeledValue(label: CNLabelPhoneNumberMobile,
+                                                   value: CNPhoneNumber(stringValue: national))]
+            #expect(ContactImport.profile(from: contact, into: Profile()).phone == nil)
+            #expect(ContactImport.rawPhone(from: contact) == national)
+        }
+    }
+
+    /// An E.164 number needs no rescuing, and an absent one offers nothing.
+    @Test func rawPhoneIsTheFirstNonEmptyNumberOrNothing() {
+        let good = CNMutableContact()
+        good.phoneNumbers = [CNLabeledValue(label: CNLabelPhoneNumberMobile,
+                                            value: CNPhoneNumber(stringValue: "+353 87 123 4567"))]
+        #expect(ContactImport.profile(from: good, into: Profile()).phone == "+353871234567")
+        #expect(ContactImport.rawPhone(from: good) == "+353 87 123 4567")
+
+        #expect(ContactImport.rawPhone(from: CNMutableContact()) == nil)
+
+        let blank = CNMutableContact()
+        blank.phoneNumbers = [CNLabeledValue(label: CNLabelPhoneNumberMobile, value: CNPhoneNumber(stringValue: "  "))]
+        #expect(ContactImport.rawPhone(from: blank) == nil)
+    }
+
     @Test func invalidValuesSkipped() {
         var base = Profile()
         base.name = "Henry Flower"
