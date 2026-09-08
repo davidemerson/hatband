@@ -168,6 +168,20 @@ struct ProfileDraftTests {
         #expect(d.value(for: "nonsense").isEmpty)
     }
 
+    /// What a reader hears on the preview. It used to say "found", which was
+    /// doing too much work, and the label never changed when the link was
+    /// copied — so a VoiceOver user got no confirmation at all.
+    @Test func thePreviewSaysWhatItIsAndWhatJustHappened() {
+        let link = "https://github.com/lbloom"
+        #expect(ProfileEditorView.previewLabel(link, verified: false, copied: false)
+                == "https://github.com/lbloom. Copy link.")
+        #expect(ProfileEditorView.previewLabel(link, verified: true, copied: false)
+                == "https://github.com/lbloom, the host knows it. Copy link.")
+        // Copying is what just happened, so it is what gets said.
+        #expect(ProfileEditorView.previewLabel(link, verified: true, copied: true)
+                == "https://github.com/lbloom. Copied.")
+    }
+
     // MARK: - Keys
 
     /// The refusal has to reach the field, not just the scanner: these boxes

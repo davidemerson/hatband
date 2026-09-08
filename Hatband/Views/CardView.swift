@@ -47,7 +47,10 @@ import SwiftUI
                     Button {
                         model.route.sheet = .sharing
                     } label: {
-                        Label("Lock Screen", systemImage: "lock.iphone")
+                        // Filled while a card is live, so "am I still sharing?"
+                        // is answered without reopening the sheet that started it.
+                        Label(model.sharing == nil ? "Lock Screen" : "Lock Screen, sharing",
+                              systemImage: model.sharing == nil ? "lock.iphone" : "lock.iphone.open")
                     }
                     Button {
                         model.route.sheet = .inspector
@@ -171,6 +174,11 @@ import SwiftUI
             }
             if let budget = shown?.budget {
                 ByteMeter(budget: budget, form: .fullQR)
+            }
+            if let sharing = model.sharing {
+                Text("On the Lock Screen until \(sharing.endsAt, style: .time)")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.tertiary)
             }
         }
     }

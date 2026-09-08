@@ -213,9 +213,7 @@ import UniformTypeIdentifiers
                     PassphraseField("At least \(ExportView.minimumLength) characters", text: $own)
                 } else {
                     MonoText(generated)
-                    Button("Copy") {
-                        Pasteboard.copy(generated)
-                    }
+                    CopyButton(text: generated, label: "Copy the words", title: "Copy")
                     Button("Other words") {
                         generated = Passphrase.generate()
                     }

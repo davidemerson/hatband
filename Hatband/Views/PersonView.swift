@@ -65,6 +65,9 @@ import UIKit
     @State private var messages: [String] = []
     @State private var showingContact = false
     @State private var confirmingForget = false
+    /// Held until confirmed. The person has a dialog and ten seconds of undo;
+    /// a meeting had neither, and it carries the place and note you typed.
+    @State private var pendingMeetingDelete: IndexSet?
 
     init(person: Person) {
         self.person = person
@@ -100,6 +103,18 @@ import UIKit
         .sheet(isPresented: $showingContact) {
             UnknownContactView(person: person, met: person.encounters.first?.date)
                 .privacyCovered()
+        }
+        .confirmationDialog("Delete this meeting?", isPresented: meetingDeletePresented, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                if let pendingMeetingDelete {
+                    edited.encounters.remove(atOffsets: pendingMeetingDelete)
+                    commit()
+                }
+                pendingMeetingDelete = nil
+            }
+            Button("Keep", role: .cancel) { pendingMeetingDelete = nil }
+        } message: {
+            Text("The day, the place and the note go with it. There is no undo for a meeting.")
         }
         .confirmationDialog("Forget \(card.name ?? "this person")?", isPresented: $confirmingForget, titleVisibility: .visible) {
             Button("Forget", role: .destructive) {
@@ -192,7 +207,7 @@ import UIKit
                 }
             }
             Spacer()
-            copyButton(row.text, label: "Copy " + row.label)
+            CopyButton(text: row.text, label: "Copy " + row.label)
         }
         .buttonStyle(.borderless)
     }
@@ -227,13 +242,11 @@ import UIKit
             }
             if let ssh = card.ssh, let kind = SSHPublicKey.Kind(rawValue: ssh.kind), kind != .rsa,
                let key = try? SSHPublicKey(kind: kind, inlineBytes: ssh.bytes) {
-                Button("Copy authorized_keys line") {
-                    Pasteboard.copy(key.authorizedKeysLine())
-                }
+                CopyButton(text: key.authorizedKeysLine(), label: "Copy authorized_keys line",
+                           title: "Copy authorized_keys line")
                 if let email = card.email {
-                    Button("Copy allowed_signers line") {
-                        Pasteboard.copy(key.allowedSignersLine(principal: email))
-                    }
+                    CopyButton(text: key.allowedSignersLine(principal: email),
+                               label: "Copy allowed_signers line", title: "Copy allowed_signers line")
                 }
             }
             if let gpgKey = person.gpgKey {
@@ -315,10 +328,7 @@ import UIKit
                         .foregroundStyle(Theme.tertiary)
                 }
             }
-            .onDelete { offsets in
-                edited.encounters.remove(atOffsets: offsets)
-                commit()
-            }
+            .onDelete { pendingMeetingDelete = $0 }
         }
     }
 
@@ -378,15 +388,6 @@ import UIKit
 
     // MARK: - Pieces
 
-    private func copyButton(_ text: String, label: String) -> some View {
-        Button {
-            Pasteboard.copy(text)
-        } label: {
-            Image(systemName: "doc.on.doc")
-        }
-        .accessibilityLabel(label)
-    }
-
     private func fetchKeyButton(_ target: FetchTarget, fingerprint: [UInt8]) -> some View {
         fetchButton(target.buttonTitle, target) { data in
             let text = String(decoding: data, as: UTF8.self)
@@ -445,6 +446,10 @@ import UIKit
         } catch {
             model.error = AppError(error)
         }
+    }
+
+    private var meetingDeletePresented: Binding<Bool> {
+        Binding(get: { pendingMeetingDelete != nil }, set: { if !$0 { pendingMeetingDelete = nil } })
     }
 
     private func commit() {

@@ -148,6 +148,40 @@ import SwiftUI
     }
 }
 
+/// Copy, and say so. Every copy in the app went through `Pasteboard` and
+/// then said nothing, so the only way to know it worked was to paste
+/// somewhere else. The clipboard clears itself after a minute; that is said
+/// once in a footer near the button rather than on the button, which would
+/// be a sentence you read a hundred times.
+@MainActor struct CopyButton: View {
+    let text: String
+    /// The label a reader hears, and sees when the button carries a title.
+    let label: String
+    /// Nil for the icon-only form used beside a row.
+    var title: String?
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            Pasteboard.copy(text)
+            copied = true
+            Task {
+                try? await Task.sleep(for: .seconds(1.6))
+                copied = false
+            }
+        } label: {
+            if let title {
+                Text(copied ? "Copied" : title)
+            } else {
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+            }
+        }
+        .buttonStyle(.borderless)
+        .sensoryFeedback(.success, trigger: copied) { _, now in now }
+        .accessibilityLabel(copied ? "Copied" : label)
+    }
+}
+
 extension View {
     /// The privacy cover over this view while `AppModel.covered`.
     @MainActor func privacyCovered() -> some View {

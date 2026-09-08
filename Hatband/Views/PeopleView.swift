@@ -31,8 +31,16 @@ import SwiftUI
 
     @ViewBuilder private var content: some View {
         if model.people.isEmpty {
-            ContentUnavailableView("Nobody yet", systemImage: "person.2",
-                                   description: Text("Scan a card and the person appears here."))
+            ContentUnavailableView {
+                Label("Nobody yet", systemImage: "person.2")
+            } description: {
+                Text("Scan a card and the person appears here.")
+            } actions: {
+                Button("Scan a card") {
+                    model.route.tab = .card
+                    model.route.sheet = .scan
+                }
+            }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Theme.ground)
         } else {
@@ -66,11 +74,23 @@ import SwiftUI
         ScrollView(.horizontal, showsIndicators: false) {
             HStack {
                 ForEach(model.tagNames, id: \.self) { name in
-                    Button(name) {
-                        tag = tag == name ? nil : name
+                    let on = tag == name
+                    // A checkmark, not a darker grey: greyscale left the two
+                    // states 1.7:1 apart, so a reader could strand themselves
+                    // on "No one matches." with no idea a filter was why. The
+                    // trait says the same thing to VoiceOver, which had nothing.
+                    Button {
+                        tag = on ? nil : name
+                    } label: {
+                        if on {
+                            Label(name, systemImage: "checkmark")
+                        } else {
+                            Text(name)
+                        }
                     }
                     .buttonStyle(.bordered)
-                    .tint(tag == name ? Theme.accent : Theme.tertiary)
+                    .tint(on ? Theme.ink : Theme.tertiary)
+                    .accessibilityAddTraits(on ? .isSelected : [])
                 }
             }
         }

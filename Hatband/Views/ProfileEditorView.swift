@@ -219,6 +219,12 @@ import UIKit
             Button {
                 Pasteboard.copy(preview)
                 copied[key] = preview
+                // Reverts, because the clipboard clears itself after a minute
+                // and a label reading "Copied" outlives what it copied.
+                Task {
+                    try? await Task.sleep(for: .seconds(1.6))
+                    if copied[key] == preview { copied[key] = nil }
+                }
             } label: {
                 HStack(spacing: 4) {
                     Text(copied[key] == preview ? "Copied" : preview)
@@ -234,9 +240,8 @@ import UIKit
                 }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(verified[key] == preview
-                                ? "Links to \(preview), found. Copy."
-                                : "Links to \(preview). Copy.")
+            .accessibilityLabel(ProfileEditorView.previewLabel(
+                preview, verified: verified[key] == preview, copied: copied[key] == preview))
             Spacer(minLength: 8)
             if let target = ProfileDraft.checkTarget(key: key, text: text), verified[key] != preview {
                 if checking == key {
@@ -248,6 +253,13 @@ import UIKit
                 }
             }
         }
+    }
+
+    /// What a reader hears on the preview: the link, whether the host has
+    /// confirmed it, and the copy that just happened.
+    nonisolated static func previewLabel(_ preview: String, verified: Bool, copied: Bool) -> String {
+        if copied { return "\(preview). Copied." }
+        return verified ? "\(preview), the host knows it. Copy link." : "\(preview). Copy link."
     }
 
     /// One request, from this tap, to the host the button named.

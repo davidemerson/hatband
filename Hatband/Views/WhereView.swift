@@ -28,8 +28,16 @@ import SwiftUI
     @ViewBuilder private var content: some View {
         let stops = WhereView.stops(in: model.people)
         if stops.isEmpty {
-            ContentUnavailableView("Nowhere yet", systemImage: "map",
-                                   description: Text("Meetings appear here once you have scanned someone."))
+            ContentUnavailableView {
+                Label("Nowhere yet", systemImage: "map")
+            } description: {
+                Text("Scan someone and the meeting lands here.")
+            } actions: {
+                Button("Scan a card") {
+                    model.route.tab = .card
+                    model.route.sheet = .scan
+                }
+            }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Theme.ground)
         } else {
