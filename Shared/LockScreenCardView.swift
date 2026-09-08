@@ -52,8 +52,7 @@ nonisolated struct LockScreenCardView: View {
             .fill(Color.white)
             .frame(width: LockScreenCardView.panelSide, height: LockScreenCardView.panelSide)
             .overlay {
-                QRShape(code: code)
-                    .fill(Color.black)
+                BrandedQR(code: code)
                     .padding(6)
             }
     }

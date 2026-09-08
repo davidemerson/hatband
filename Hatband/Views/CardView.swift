@@ -141,8 +141,7 @@ import SwiftUI
                 .foregroundStyle(.black)
                 .padding()
             } else if let code = shown?.code {
-                QRShape(code: code)
-                    .fill(.black)
+                BrandedQR(code: code)
                     .aspectRatio(1, contentMode: .fit)
                     .padding(12)
                     .accessibilityLabel("Your card as a QR code")

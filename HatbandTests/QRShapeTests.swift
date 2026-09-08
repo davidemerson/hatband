@@ -47,9 +47,9 @@ struct QRShapeTests {
         #expect(first.y > rect.minY)
     }
 
-    @Test func rectCountEqualsRunCount() throws {
+    @Test func rectCountEqualsRunCountWithoutTheLogo() throws {
         let code = try code()
-        let path = QRShape(code: code).path(in: CGRect(x: 0, y: 0, width: 200, height: 200))
+        let path = QRShape(code: code, logo: false).path(in: CGRect(x: 0, y: 0, width: 200, height: 200))
         #expect(moves(path).count == runCount(code))
         var closes = 0
         path.forEach { element in
@@ -58,6 +58,29 @@ struct QRShapeTests {
             }
         }
         #expect(closes == runCount(code))
+    }
+
+    /// With the hat, the middle is left clear, so there is strictly less ink
+    /// and the runs it splits make no more rectangles than the plain code had.
+    @Test func theLogoLeavesTheMiddleClear() throws {
+        let code = try code()
+        let rect = CGRect(x: 0, y: 0, width: 200, height: 200)
+        let plain = QRShape(code: code, logo: false).path(in: rect)
+        let branded = QRShape(code: code).path(in: rect)
+        #expect(!branded.isEmpty)
+        #expect(branded != plain)
+
+        let hole = try #require(QRLogo.hole(size: code.size))
+        let quiet = 2
+        let module = rect.width / CGFloat(code.size + 2 * quiet)
+        let centre = CGRect(
+            x: rect.minX + CGFloat(hole.lowerBound + quiet) * module,
+            y: rect.minY + CGFloat(hole.lowerBound + quiet) * module,
+            width: CGFloat(hole.count) * module, height: CGFloat(hole.count) * module)
+        // Nothing the shape draws starts inside the cleared square.
+        for point in moves(branded) {
+            #expect(!centre.insetBy(dx: 0.001, dy: 0.001).contains(point))
+        }
     }
 
     @Test func moduleUsesShorterSide() throws {

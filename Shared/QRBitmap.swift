@@ -5,7 +5,8 @@ import HatbandCore
 /// A QR symbol as an 8-bit gray bitmap, one byte per pixel, for the Home
 /// Screen widget. Row 0 of the symbol is the top row of the image.
 nonisolated enum QRBitmap {
-    static func cgImage(_ code: QRCode, pixelsPerModule: Int, quietZone: Int = 4) -> CGImage? {
+    /// `logo` leaves the middle clear for the hat the view draws over it.
+    static func cgImage(_ code: QRCode, pixelsPerModule: Int, quietZone: Int = 4, logo: Bool = true) -> CGImage? {
         guard pixelsPerModule > 0, quietZone >= 0 else { return nil }
         let total = code.size + 2 * quietZone
         let side = total * pixelsPerModule
@@ -26,7 +27,8 @@ nonisolated enum QRBitmap {
         // Core Graphics puts the origin at the bottom-left, so symbol row y
         // is drawn at the mirrored row.
         for y in 0..<code.size {
-            for x in 0..<code.size where code.module(x: x, y: y) {
+            for x in 0..<code.size where code.module(x: x, y: y)
+                && !(logo && QRLogo.covers(x: x, y: y, size: code.size)) {
                 let left = (x + quietZone) * pixelsPerModule
                 let bottom = (total - 1 - (y + quietZone)) * pixelsPerModule
                 context.fill(CGRect(x: left, y: bottom, width: pixelsPerModule, height: pixelsPerModule))
