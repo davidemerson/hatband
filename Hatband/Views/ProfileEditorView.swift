@@ -18,6 +18,8 @@ import UIKit
     private let onDone: ((Profile) -> Void)?
     @State private var draft = ProfileDraft()
     @State private var loaded = false
+    /// Row id to label as loaded, so a rename can be told from a delete.
+    @State private var originalCustomLabels: [UUID: String] = [:]
     @State private var problems: [String: String] = [:]
     @State private var warnings: [String: String] = [:]
     @State private var pickedPhoto: PhotosPickerItem?
@@ -69,6 +71,7 @@ import UIKit
         .onAppear {
             if !loaded {
                 draft = ProfileDraft(profile: alias ?? model.profile)
+                originalCustomLabels = Dictionary(uniqueKeysWithValues: draft.custom.map { ($0.id, $0.label) })
                 loaded = true
             }
         }
@@ -297,7 +300,9 @@ import UIKit
         saving = true
         Task {
             do {
-                try await model.saveProfile(profile)
+                try await model.saveProfile(
+                    profile,
+                    renamedCustomLabels: ProfileDraft.renamedLabels(from: originalCustomLabels, to: draft.custom))
                 dismiss()
             } catch {
                 model.error = AppError(error)
@@ -523,11 +528,17 @@ nonisolated struct ProfileDraft: Equatable {
 
         _ = apply(FieldValidator.customCount(custom.count, limits: .file), "custom")
         var fields: [CustomField] = []
+        var seenLabels: Set<String> = []
         for item in custom {
             let key = "custom-\(item.id.uuidString)"
             let label = ProfileDraft.trim(item.label)
             var value = ProfileDraft.trim(item.value)
             guard apply(FieldValidator.customLabel(label, limits: .file), key) else { continue }
+            // A persona picks its custom fields by label, and a card names them
+            // the same way, so two fields sharing one cannot be told apart on
+            // either side of a scan.
+            guard apply(seenLabels.insert(label).inserted ? .ok : .reject("another field has this label"), key)
+            else { continue }
             if item.kind == .phone, let number = try? Normalize.phone(value) {
                 value = number
             }
@@ -540,6 +551,21 @@ nonisolated struct ProfileDraft: Equatable {
         profile.custom = fields
 
         return Commit(profile: problems.isEmpty ? profile : nil, problems: problems, warnings: warnings)
+    }
+
+    /// Which labels were renamed in this editing session, old to new. A
+    /// persona keeps its custom fields as a set of labels, so a rename reads
+    /// as a delete and an add and silently drops the field from every card.
+    /// The row ids are stable for the session, which is what makes a rename
+    /// tellable from a delete.
+    static func renamedLabels(from original: [UUID: String], to current: [CustomDraft]) -> [String: String] {
+        var renamed: [String: String] = [:]
+        for item in current {
+            let label = trim(item.label)
+            guard let was = original[item.id], was != label, !label.isEmpty else { continue }
+            renamed[was] = label
+        }
+        return renamed
     }
 
     // MARK: - Words

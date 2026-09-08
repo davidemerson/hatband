@@ -202,12 +202,17 @@ extension AppModel {
     }
 
     /// Replaces the canonical profile, bumping `seq` on every persona whose
-    /// card content changes, and refreshes what is on show.
-    func saveProfile(_ profile: Profile) async throws {
+    /// card content changes, and refreshes what is on show. A persona keeps
+    /// its custom fields as a set of labels, so a renamed label has to be
+    /// carried over or the field silently leaves every card that shared it.
+    func saveProfile(_ profile: Profile, renamedCustomLabels renamed: [String: String] = [:]) async throws {
         var updated: [Persona] = []
         for persona in personas {
             var next = persona
-            if AppModel.cardContent(profile: self.profile, persona: persona) != AppModel.cardContent(profile: profile, persona: persona) {
+            if !renamed.isEmpty {
+                next.customLabels = Set(persona.customLabels.map { renamed[$0] ?? $0 })
+            }
+            if AppModel.cardContent(profile: self.profile, persona: persona) != AppModel.cardContent(profile: profile, persona: next) {
                 next.seq += 1
             }
             updated.append(next)

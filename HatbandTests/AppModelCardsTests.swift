@@ -318,6 +318,31 @@ import Testing
         #expect(model.selectedPersona?.seq == before)
     }
 
+    /// A persona keeps its custom fields as a set of labels. Renaming one in
+    /// the profile editor used to read as a delete and an add, so the field
+    /// left every card that shared it with no word. The rename is carried.
+    @Test func renamingACustomFieldKeepsItOnThePersonasThatSharedIt() async throws {
+        let model = try await onboarded(profile: maximalProfile())
+        var persona = try #require(model.selectedPersona)
+        persona.customLabels = ["Pub", "Fax"]
+        try await model.update(persona)
+        // Re-read: setting the labels changed the card, so seq has already moved.
+        let before = try #require(model.selectedPersona)
+
+        var profile = model.profile
+        let index = try #require(profile.custom.firstIndex { $0.label == "Pub" })
+        let was = profile.custom[index].value
+        profile.custom[index] = CustomField(label: "Local", value: was, kind: profile.custom[index].kind)
+        try await model.saveProfile(profile, renamedCustomLabels: ["Pub": "Local"])
+
+        let after = try #require(model.selectedPersona)
+        #expect(after.customLabels == ["Local", "Fax"])
+        let card = try model.card(for: after, form: .file)
+        #expect(card.custom.contains { $0.label == "Local" && $0.value == was })
+        #expect(!card.custom.contains { $0.label == "Pub" })
+        #expect(after.seq == before.seq + 1, "the card's content changed, so seq rises")
+    }
+
     /// The set of HB1 keys each form emits is the set the vector of that
     /// tier carries; the app never writes key 22.
     @Test func tiersEmitTheVectorKeySets() async throws {
