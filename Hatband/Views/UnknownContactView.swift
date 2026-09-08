@@ -56,19 +56,38 @@ import UIKit
         if let company = card.company {
             contact.organizationName = company
         }
+        // The card's own number and address, then any custom field that is one.
+        // The vCard carries those; dropping them here made two buttons in one
+        // section hand over different contacts.
+        var phones: [CNLabeledValue<CNPhoneNumber>] = []
+        var emails: [CNLabeledValue<NSString>] = []
         if let phone = card.phone {
-            contact.phoneNumbers = [CNLabeledValue(label: CNLabelPhoneNumberMobile, value: CNPhoneNumber(stringValue: phone))]
+            phones.append(CNLabeledValue(label: CNLabelPhoneNumberMobile, value: CNPhoneNumber(stringValue: phone)))
         }
         if let email = card.email {
-            contact.emailAddresses = [CNLabeledValue(label: CNLabelHome, value: email as NSString)]
+            emails.append(CNLabeledValue(label: CNLabelHome, value: email as NSString))
         }
+        for field in card.custom {
+            switch field.kind {
+            case .phone:
+                phones.append(CNLabeledValue(label: field.label, value: CNPhoneNumber(stringValue: field.value)))
+            case .email:
+                emails.append(CNLabeledValue(label: field.label, value: field.value as NSString))
+            case .text, .url, .key:
+                continue
+            }
+        }
+        contact.phoneNumbers = phones
+        contact.emailAddresses = emails
         var urls: [CNLabeledValue<NSString>] = []
         for row in Links.rows(for: card) {
             guard let url = row.url, url.lowercased().hasPrefix("http") else { continue }
             urls.append(CNLabeledValue(label: row.label, value: url as NSString))
         }
         contact.urlAddresses = urls
-        if let photo = person.currentPhoto {
+        // Same gate as the vCard: the SOI marker, or Contacts is handed
+        // something it cannot draw.
+        if let photo = person.currentPhoto, Links.isJPEG(photo) {
             contact.imageData = Data(photo)
         }
         if let met {

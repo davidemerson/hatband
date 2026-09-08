@@ -264,13 +264,13 @@ import UIKit
     private var verifySection: some View {
         Section("Verify") {
             if let user = card.github, let ssh = card.ssh {
-                fetchButton("Check \(FetchTarget.githubKeys(user: user).host) for this SSH key", .githubKeys(user: user)) { data in
+                fetchButton(FetchTarget.githubKeys(user: user).buttonTitle, .githubKeys(user: user)) { data in
                     let listed = Verify.githubKeys(String(decoding: data, as: UTF8.self), matches: ssh)
                     return listed ? "github.com lists this SSH key." : "github.com does not list this SSH key."
                 }
             }
             if let user = card.github, let fingerprint = card.gpgFingerprint {
-                fetchButton("Check \(FetchTarget.githubGPG(user: user).host) for this GPG key", .githubGPG(user: user)) { data in
+                fetchButton(FetchTarget.githubGPG(user: user).buttonTitle, .githubGPG(user: user)) { data in
                     guard let bytes = OpenPGP.dearmor(String(decoding: data, as: UTF8.self)) else {
                         return "github.com did not return a key."
                     }
@@ -283,7 +283,7 @@ import UIKit
             }
             if let handle = card.mastodon, let parts = PersonDetail.mastodonParts(handle), let website = card.website {
                 let target = FetchTarget.mastodonLookup(user: parts.user, instance: parts.instance)
-                fetchButton("Check \(target.host) for a verified link", target) { data in
+                fetchButton(target.buttonTitle, target) { data in
                     let site = CanonicalURI.website(website.address, insecure: website.insecure)
                     let verified = Verify.mastodonVerified(json: data, website: site)
                     return verified ? "\(target.host) verified the website link." : "\(target.host) has not verified the website."
@@ -364,7 +364,7 @@ import UIKit
                 Label("Share as vCard", systemImage: "square.and.arrow.up")
             }
         } footer: {
-            Text("Contacts gets the name, company, phone, email and links. Never where you met.")
+            Text("Both send the name, company, numbers, addresses and links. The vCard also carries the day you met, your note and any key. Neither sends where you were.")
         }
     }
 
@@ -388,7 +388,7 @@ import UIKit
     }
 
     private func fetchKeyButton(_ target: FetchTarget, fingerprint: [UInt8]) -> some View {
-        fetchButton("Fetch key from \(target.host)", target) { data in
+        fetchButton(target.buttonTitle, target) { data in
             let text = String(decoding: data, as: UTF8.self)
             let bytes = text.contains("-----BEGIN PGP") ? OpenPGP.dearmor(text) : Array(data)
             guard let bytes else { return "\(target.host) did not return a key." }

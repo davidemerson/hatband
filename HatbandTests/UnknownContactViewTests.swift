@@ -20,6 +20,38 @@ import Testing
 
     /// The "Met" date is the Gregorian year, month and day in the zone,
     /// stamped with that calendar, whatever calendar the phone displays.
+    /// Add to Contacts and Share as vCard sit in one section and used to
+    /// hand over different contacts: the sheet dropped every custom email and
+    /// phone field, and attached a photo the vCard would have refused.
+    @Test func customNumbersAndAddressesTravelToo() throws {
+        let bytes = try Vectors.cbor("maximal-qr-signed")
+        var card = try HB1.decode(cbor: bytes)
+        card.custom = [
+            CustomField(label: "Fax", value: "+35318000000", kind: .phone),
+            CustomField(label: "Work", value: "bloom@example.ie", kind: .email),
+            CustomField(label: "Desk", value: "3A", kind: .text),
+        ]
+        let publicKey = try #require(card.publicKey)
+        let person = Person(personaID: card.personaID, cardBytes: bytes, card: card, publicKey: publicKey,
+                            keyFingerprint: nil, trust: .inPerson, source: .scan, tags: [], note: "",
+                            gpgKey: nil, photo: nil, createdAt: instant, updatedAt: instant, encounters: [])
+
+        let contact = UnknownContactView.contact(for: person, met: nil)
+        #expect(contact.phoneNumbers.contains { $0.value.stringValue == "+35318000000" })
+        #expect(contact.emailAddresses.contains { ($0.value as String) == "bloom@example.ie" })
+        // A text field is not a channel and stays off the contact.
+        #expect(!contact.emailAddresses.contains { ($0.value as String) == "3A" })
+    }
+
+    /// The photo takes the same gate as the vCard's: without it Contacts is
+    /// handed bytes it cannot draw.
+    @Test func onlyAJPEGBecomesTheContactPicture() throws {
+        let notJPEG: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        #expect(UnknownContactView.contact(for: try person(photo: notJPEG), met: nil).imageData == nil)
+        let jpeg: [UInt8] = [0xFF, 0xD8, 0xFF, 0xDB, 0x00, 0x01]
+        #expect(UnknownContactView.contact(for: try person(photo: jpeg), met: nil).imageData == Data(jpeg))
+    }
+
     @Test func metComponentsAreGregorian() throws {
         let utc = try #require(TimeZone(identifier: "UTC"))
         let components = UnknownContactView.metComponents(instant, timeZone: utc)

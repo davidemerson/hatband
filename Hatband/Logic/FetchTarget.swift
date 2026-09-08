@@ -12,6 +12,21 @@ nonisolated enum FetchTarget: Equatable, Sendable {
 
     nonisolated enum Kind: CaseIterable, Sendable {
         case wkdAdvanced, wkdDirect, keysOpenPGP, githubKeys, githubGPG, mastodonLookup
+
+        /// The button's words around a host. `TrustFacts` fills in the host it
+        /// can only describe; the person screen fills in the real one.
+        func title(host: String) -> String {
+            switch self {
+            case .wkdAdvanced, .wkdDirect, .keysOpenPGP:
+                return "Fetch key from \(host)"
+            case .githubKeys:
+                return "Check \(host) for this SSH key"
+            case .githubGPG:
+                return "Check \(host) for this GPG key"
+            case .mastodonLookup:
+                return "Check \(host) for a verified link"
+            }
+        }
     }
 
     var kind: Kind {
@@ -23,6 +38,13 @@ nonisolated enum FetchTarget: Equatable, Sendable {
         case .githubGPG: return .githubGPG
         case .mastodonLookup: return .mastodonLookup
         }
+    }
+
+    /// The button that performs this fetch, word for word. The trust page
+    /// quotes it and the person screen shows it, both from here, so the page
+    /// cannot come to name a button that does not exist.
+    var buttonTitle: String {
+        kind.title(host: host)
     }
 
     /// The button label.

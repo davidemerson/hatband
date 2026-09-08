@@ -23,7 +23,33 @@ struct TrustFactsTests {
         #expect(TrustFacts.egress.allSatisfy { $0.when.contains("tap") })
     }
 
-    /// Where has no hand-off button: opening the tab is what fetches
+    /// The page quotes the button, and the button is built from the same
+    /// words, so the two cannot drift. They had: the page said "Fetch key
+    /// (WKD)" and "Verify" long after the buttons were renamed, and the only
+    /// test on the text asked whether it contained the word "tap".
+    @Test func everyRowQuotesTheButtonThatDoesIt() {
+        for kind in FetchTarget.Kind.allCases {
+            let row = TrustFacts.egress(for: kind)
+            let title = kind.title(host: TrustFacts.placeholderHost(for: kind))
+            #expect(row.when.contains(title), "\(kind) does not quote its button")
+            #expect(row.when.hasPrefix("You tap "))
+            #expect(row.when.hasSuffix("."))
+        }
+    }
+
+    /// A real target's button says the same thing with the host filled in,
+    /// which is what the person screen shows.
+    @Test func aRealTargetTitlesItsOwnButton() {
+        #expect(FetchTarget.githubKeys(user: "lbloom").buttonTitle == "Check github.com for this SSH key")
+        #expect(FetchTarget.githubGPG(user: "lbloom").buttonTitle == "Check github.com for this GPG key")
+        #expect(FetchTarget.keysOpenPGP(fingerprint: []).buttonTitle == "Fetch key from keys.openpgp.org")
+        #expect(FetchTarget.mastodonLookup(user: "bloom", instance: "merveilles.town").buttonTitle
+                == "Check merveilles.town for a verified link")
+        #expect(FetchTarget.wkdDirect(local: "bloom", domain: "example.ie").buttonTitle
+                == "Fetch key from example.ie")
+    }
+
+    /// Where has no hand-off button:    /// Where has no hand-off button: opening the tab is what fetches
     /// Apple's tiles, and the row says exactly that.
     @Test func mapsRowDescribesTheTileLoad() {
         #expect(TrustFacts.maps.host == "Apple Maps")

@@ -21,31 +21,35 @@ nonisolated enum TrustFacts {
         when: "You tap the Where tab. The map asks Apple for tiles around the coarse positions Hatband kept, nothing finer; the timeline under it needs nothing from anywhere.")
 
     static func egress(for kind: FetchTarget.Kind) -> Egress {
+        let host = placeholderHost(for: kind)
+        return Egress(host: host, when: "You tap " + kind.title(host: host) + " " + occasion(for: kind))
+    }
+
+    /// What the row can say about a host it cannot know: the real one is the
+    /// person's email domain, or their instance.
+    static func placeholderHost(for kind: FetchTarget.Kind) -> String {
         switch kind {
-        case .wkdAdvanced:
-            return Egress(
-                host: "openpgpkey.<their email domain>",
-                when: "You tap Fetch key (WKD) on a person whose card carries a GPG fingerprint and an email address.")
-        case .wkdDirect:
-            return Egress(
-                host: "<their email domain>",
-                when: "You tap Fetch key (direct) on the same person. It is a button of its own, not something the other one falls back to.")
+        case .wkdAdvanced: return "openpgpkey.<their email domain>"
+        case .wkdDirect: return "<their email domain>"
+        case .keysOpenPGP: return "keys.openpgp.org"
+        case .githubKeys, .githubGPG: return "github.com"
+        case .mastodonLookup: return "<their Mastodon instance>"
+        }
+    }
+
+    /// Where the button is and what has to be on the card for it to appear.
+    private static func occasion(for kind: FetchTarget.Kind) -> String {
+        switch kind {
+        case .wkdAdvanced, .wkdDirect:
+            return "on a person whose card carries a GPG fingerprint and an email address. The two are separate buttons; neither falls back to the other."
         case .keysOpenPGP:
-            return Egress(
-                host: "keys.openpgp.org",
-                when: "You tap Fetch key from keys.openpgp.org on a person with a GPG fingerprint.")
+            return "on a person whose card carries a GPG fingerprint."
         case .githubKeys:
-            return Egress(
-                host: "github.com",
-                when: "You tap Verify on a GitHub username whose card carries an SSH key, or Check github.com beside your own GitHub username while editing your profile.")
+            return "on a person whose card carries a GitHub username and an SSH key, or beside your own GitHub username while you edit your profile."
         case .githubGPG:
-            return Egress(
-                host: "github.com",
-                when: "You tap Fetch key from GitHub on a person with a GitHub username and a GPG fingerprint.")
+            return "on a person whose card carries a GitHub username and a GPG fingerprint."
         case .mastodonLookup:
-            return Egress(
-                host: "<their Mastodon instance>",
-                when: "You tap Verify on a Mastodon address, to ask the instance whether it vouches for the website on the card, or Check beside your own Mastodon address while editing your profile.")
+            return "on a person whose card carries a Mastodon address and a website, or beside your own address while you edit your profile."
         }
     }
 }
