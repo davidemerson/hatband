@@ -6,6 +6,11 @@ import UIKit
 
 /// `CNContactViewController(forUnknownContact:)` in a navigation controller:
 /// the system offers "Create New Contact" and "Add to Existing Contact".
+/// Both of those need `contactStore` set and `allowsActions` on: without a
+/// store the header is explicit that "actions for adding the contact to the
+/// user's contacts are disabled", and the card becomes a dead end. An unknown
+/// contact "does not allow editing" whatever `allowsEditing` says, so it is
+/// off: the card is there to be filed, not amended.
 /// The contact carries the card's name (split as `VCard` does), company,
 /// phone, email, labelled links, image and an optional "Met" date. Never
 /// an address, a note or coordinates.
@@ -21,11 +26,15 @@ import UIKit
 
     func makeUIViewController(context: Context) -> UINavigationController {
         let controller = CNContactViewController(forUnknownContact: UnknownContactView.contact(for: person, met: met))
-        controller.allowsActions = false
-        controller.allowsEditing = true
+        controller.contactStore = CNContactStore()
+        controller.allowsActions = true
+        controller.allowsEditing = false
         controller.delegate = context.coordinator
-        controller.navigationItem.leftBarButtonItem = UIBarButtonItem(
-            barButtonSystemItem: .done, target: context.coordinator, action: #selector(Coordinator.finish))
+        // "Close", on the right, because it only dismisses: a Done checkmark on
+        // the left reads as a save, and the buttons that actually file the
+        // contact are further down the card.
+        controller.navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: "Close", style: .plain, target: context.coordinator, action: #selector(Coordinator.finish))
         return UINavigationController(rootViewController: controller)
     }
 

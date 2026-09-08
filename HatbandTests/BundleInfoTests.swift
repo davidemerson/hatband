@@ -19,6 +19,16 @@ struct BundleInfoTests {
         #expect(info["ITSAppUsesNonExemptEncryption"] as? Bool == false)
     }
 
+    /// Every permission the app can prompt for needs its string, or the prompt
+    /// is a crash rather than a refusal. Contacts is asked for only when someone
+    /// taps "Add to Contacts" on a person they already scanned.
+    @Test func everyPromptHasItsUsageDescription() {
+        for key in ["NSCameraUsageDescription", "NSLocationWhenInUseUsageDescription",
+                    "NSFaceIDUsageDescription", "NSContactsUsageDescription"] {
+            #expect((info[key] as? String)?.isEmpty == false, "missing \(key)")
+        }
+    }
+
     /// The app is iPhone-only; the iPad orientations exist only to answer Xcode's
     /// "all interface orientations must be supported" check without the deprecated
     /// `UIRequiresFullScreen`. `infoDictionary` resolves `~device` suffixes and so

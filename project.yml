@@ -54,6 +54,7 @@ targets:
         NSLocationWhenInUseUsageDescription: When you save a scanned card, Hatband notes roughly where you were. It stays on this phone.
         NSLocationDefaultAccuracyReduced: true
         NSFaceIDUsageDescription: Unlock the people you have scanned.
+        NSContactsUsageDescription: Adding someone you scanned. Hatband writes only the card you are looking at, and never reads your contacts.
         LSSupportsOpeningDocumentsInPlace: false
         HatbandCommit: $(HATBAND_COMMIT)
         CFBundleURLTypes:
