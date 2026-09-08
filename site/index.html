@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-XtQts0Lu3lT0CB0lnqKdV7YEShfcMpF5MIpTgFtCy7s='; style-src 'sha256-s1PUDdPscns/P8Q4P1kAdZANJsBR2BHebPkB9U5uSbk='; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-XtQts0Lu3lT0CB0lnqKdV7YEShfcMpF5MIpTgFtCy7s='; style-src 'sha256-mt9QmFw7Zreau+JEd6C0XdEEhkhojz5a/xBtfqaK3LA='; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light dark">
@@ -55,6 +55,9 @@ body { margin: 0; padding: 1.5rem 1rem 2rem; min-height: 100vh; box-sizing: bord
 main { width: 100%; max-width: 40rem; margin: 0 auto; flex: 1; }
 a { color: inherit; text-decoration: underline; text-underline-offset: 0.15em; }
 a:hover, a:focus { color: var(--accent); text-decoration: none; }
+/* `a:hover` outranks `.button`, so a hovered button would take the accent as
+   its text colour and vanish into its own background. */
+.button:hover, .button:focus { color: var(--ground); }
 h1, h2 { font-weight: 400; margin: 0; overflow-wrap: anywhere; }
 h1 { font-size: 1.5rem; }
 h2 { font-size: 1.25rem; margin-top: 1.75rem; }

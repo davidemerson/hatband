@@ -45,6 +45,9 @@ body { margin: 0; padding: 1.5rem 1rem 2rem; min-height: 100vh; box-sizing: bord
 main { width: 100%; max-width: 40rem; margin: 0 auto; flex: 1; }
 a { color: inherit; text-decoration: underline; text-underline-offset: 0.15em; }
 a:hover, a:focus { color: var(--accent); text-decoration: none; }
+/* `a:hover` outranks `.button`, so a hovered button would take the accent as
+   its text colour and vanish into its own background. */
+.button:hover, .button:focus { color: var(--ground); }
 h1, h2 { font-weight: 400; margin: 0; overflow-wrap: anywhere; }
 h1 { font-size: 1.5rem; }
 h2 { font-size: 1.25rem; margin-top: 1.75rem; }
