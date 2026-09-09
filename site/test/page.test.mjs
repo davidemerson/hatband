@@ -223,6 +223,7 @@ test('error and empty states never echo the fragment', async () => {
   // Someone who reached the site with no card is the person most likely to
   // need the app, so the empty state has to offer it.
   const store = elements(empty).find((e) => e.tagName === 'A');
+  assert.equal(store.textContent, 'Get Hatband for iOS');
   assert.equal(store.getAttribute('href'), APP_STORE_URL);
   assert.equal(store.getAttribute('rel'), 'noreferrer noopener');
   const { root: onlyHash } = await run({ hash: '#' });

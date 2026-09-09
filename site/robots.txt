@@ -1,0 +1,4 @@
+# hatband.link is one static page. A card lives after the "#", which browsers
+# never send, so there is nothing here a crawler could read even in principle.
+User-agent: *
+Allow: /

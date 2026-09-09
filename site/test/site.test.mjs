@@ -17,7 +17,7 @@ const hash = (text) => "'sha256-" + createHash('sha256').update(text).digest('ba
 
 test('index.html and the pages are what the sources build', () => {
   const built = build();
-  assert.deepEqual(Object.keys(built).sort(), ['index.html', 'privacy.html', 'support.html', 'trust.html']);
+  assert.deepEqual(Object.keys(built).sort(), ['contribute.html', 'index.html']);
   for (const [name, html] of Object.entries(built)) assert.equal(read(name), html, `${name} is stale: run node site/build.mjs`);
 });
 
@@ -37,7 +37,6 @@ test('the CSP is exactly as specified and its hashes match the inline content', 
     assert.ok(!/<script/.test(page), name + ' has no script');
     assert.equal(pageStyle, style, name + ' shares the stylesheet');
   }
-  assert.ok(read('trust.html').includes(policy), 'trust page quotes the live CSP');
 });
 
 test('nothing external except the GitHub and App Store links', () => {

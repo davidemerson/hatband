@@ -61,6 +61,8 @@ The Live Activity renders on the Lock Screen and under Always-On, the widget ren
 
 A 32 KB card is 52,452 characters as a URL, and both decoders read one back. Pasted as plain text it does not survive: the system's data detectors linkify `hatband.link` and drop the fragment. "Share as link" shares a `URL` rather than a string, which the receiving app keeps whole.
 
+Google Safe Browsing listed hatband.link as a phishing site four days after the domain was registered, so Chrome and Safari both put an interstitial in front of every card link. Nothing on the page is what it was flagged for; a new domain that decodes a stranger's name, photo and telephone number out of an opaque blob in the URL and hands over a `data:` vCard is a shape a classifier knows, and it is not wrong about the shape. Reported for review; the page carries a description and no longer asks not to be indexed.
+
 Not tested: iPhone 12 through 14, and scanning a Lock Screen end to end, which needs a second camera.
 
 ## Wire format (HB1)
@@ -121,6 +123,38 @@ Readers ignore unknown keys but carry them through unchanged, so a signature ove
 - **Non-goals.** A jailbroken or already compromised phone. Someone who photographs your card and keeps it: that is what a card is for.
 
 Report a vulnerability privately at https://github.com/davidemerson/hatband/security/advisories/new. The site's `security.txt` points here.
+
+## Privacy
+
+Hatband collects nothing. There is no Hatband server, no account, and no analytics,
+cookies, trackers or third-party SDKs; the app links no code it did not write except
+Apple's own. Nothing about you reaches the developer, who has no way to learn that you
+installed it.
+
+Your card, your signing seed, the people you have scanned and where you met them stay on
+your phone. Received cards live in a Class A store sealed under a key the app lock
+guards, and stay out of your backups unless you turn that on. Nothing leaves the phone
+unless you tap a button that names where it goes.
+
+Four permissions, each asked for at the moment it is used and none of them required:
+
+- **Camera**, to read a card's QR code. Frames are decoded and discarded.
+- **Contacts**, write-only, when you add someone you scanned. Hatband writes the card in
+  front of you and never reads your contacts.
+- **Location**, reduced accuracy, when you save a scanned card and choose to note where
+  you met. It stays on the phone.
+- **Face ID**, to unlock the people you have scanned.
+
+hatband.link carries the card after the `#`, which browsers never send to a server. The
+page reads it with JavaScript in your browser and can fetch nothing: its
+Content-Security-Policy forbids it. What the host sees is what any web server sees — an
+address, a user agent, a time — never the card, never who is on it. Access logging is off.
+
+Crash and performance reports from MetricKit stay on the phone; About lists them and you
+choose whether to share one. The App Store's own download and crash reporting is Apple's,
+not Hatband's, and is aggregate.
+
+Questions: d@nnix.com.
 
 ## Site
 

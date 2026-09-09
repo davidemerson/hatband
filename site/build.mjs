@@ -38,7 +38,7 @@ export function pageCSP(style) {
   return `default-src 'none'; style-src ${hashSource(style)}; font-src data:; form-action 'none'; base-uri 'none'; frame-ancestors 'none'`;
 }
 
-export const PAGES = [['privacy', 'Privacy'], ['trust', 'Trust'], ['support', 'Support']];
+export const PAGES = [['contribute', 'Contribute']];
 
 /** File name to contents for everything the build produces. */
 export function build() {
@@ -49,7 +49,7 @@ export function build() {
   const files = { 'index.html': fill(read('src/index.template.html'), { csp, style, script }) };
   const pageCsp = pageCSP(style);
   for (const [name, title] of PAGES) {
-    const body = fill(read(`src/pages/${name}.html`), { indexCsp: csp }).trim();
+    const body = read(`src/pages/${name}.html`).trim();
     files[name + '.html'] = fill(read('src/page.template.html'), { csp: pageCsp, title, style, body });
   }
   return files;

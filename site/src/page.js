@@ -215,7 +215,7 @@ export function renderCard(doc, card, env = {}) {
 /** What someone sees who reached the site without a card: usually a person
     who scanned one and has no app yet, so the download goes here. */
 export function renderEmpty(doc) {
-  const store = el(doc, 'a', 'button', 'Get Hatband on the App Store');
+  const store = el(doc, 'a', 'button', 'Get Hatband for iOS');
   store.setAttribute('href', APP_STORE_URL);
   store.setAttribute('rel', 'noreferrer noopener');
   return el(doc, 'section', 'empty',
