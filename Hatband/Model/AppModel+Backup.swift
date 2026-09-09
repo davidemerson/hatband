@@ -239,7 +239,8 @@ extension AppModel {
         }
         await stopSharing()
         clearWidget()
-        TransferredFiles.sweep()
+        // Erase means everything, in flight or not.
+        TransferredFiles.sweep(olderThan: 0)
         if let store {
             do {
                 try store.erase()

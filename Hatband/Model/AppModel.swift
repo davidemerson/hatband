@@ -116,8 +116,10 @@ import UIKit
         switch phase {
         case .active:
             covered = false
-            // Coming back is the one moment no share is in flight, so it is
-            // the only safe moment to delete what the last one wrote.
+            // Coming back is when there is time to tidy, but it is not proof
+            // that nothing is in flight: a share extension goes on preparing
+            // its attachment after its sheet has closed. The sweep spares
+            // anything written recently.
             TransferredFiles.sweep()
             Task { await self.activate() }
         case .inactive:

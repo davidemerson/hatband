@@ -78,7 +78,7 @@ import UIKit
         layout.subcaption = card.company
         layout.trailingCaption = "Hatband"
         if let code = CardQR.code(for: url, form: .fullQR),
-           let image = QRBitmap.cgImage(code, pixelsPerModule: 8) {
+           let image = BrandedQRImage.cgImage(code, pixelsPerModule: 8) {
             layout.image = UIImage(cgImage: image)
         }
         return layout

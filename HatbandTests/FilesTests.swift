@@ -53,15 +53,39 @@ struct FilesTests {
     }
 }
 
-@Test func sweepRemovesEarlierTransfers() throws {
+@Test func sweepRemovesEarlierTransfersAndSparesRecentOnes() throws {
     let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("sweep-" + UUID().uuidString, isDirectory: true)
     try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: temporary) }
-    let stale = temporary.appendingPathComponent(TransferredFiles.prefix + "old", isDirectory: true)
-    let other = temporary.appendingPathComponent("keep", isDirectory: true)
-    try FileManager.default.createDirectory(at: stale, withIntermediateDirectories: true)
-    try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
-    TransferredFiles.sweep(in: temporary)
+    let now = Date()
+    func directory(_ name: String) throws -> URL {
+        let url = temporary.appendingPathComponent(name, isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+    let stamp = { (age: TimeInterval) in String(Int((now.timeIntervalSinceReferenceDate - age).rounded())) }
+    let stale = try directory(TransferredFiles.prefix + stamp(TransferredFiles.grace + 60) + "-" + UUID().uuidString)
+    let fresh = try directory(TransferredFiles.prefix + stamp(5) + "-" + UUID().uuidString)
+    // A directory from a build that wrote no stamp is from an earlier launch.
+    let unstamped = try directory(TransferredFiles.prefix + "old")
+    let other = try directory("keep")
+    TransferredFiles.sweep(in: temporary, now: now)
     #expect(!FileManager.default.fileExists(atPath: stale.path))
+    #expect(FileManager.default.fileExists(atPath: fresh.path), "swept a share that may still be in flight")
+    #expect(!FileManager.default.fileExists(atPath: unstamped.path))
     #expect(FileManager.default.fileExists(atPath: other.path))
+    // Erase takes everything, however new.
+    TransferredFiles.sweep(in: temporary, olderThan: 0, now: now)
+    #expect(!FileManager.default.fileExists(atPath: fresh.path))
+    #expect(FileManager.default.fileExists(atPath: other.path))
+}
+
+@Test func aWrittenDirectoryCarriesItsTime() throws {
+    let when = Date(timeIntervalSinceReferenceDate: 800_000_000)
+    let url = try TransferredFiles.write([1], name: "a.png", now: when)
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+    let name = url.deletingLastPathComponent().lastPathComponent
+    #expect(TransferredFiles.stamp(in: name).map { abs($0.timeIntervalSince(when)) < 1 } == true)
+    #expect(TransferredFiles.stamp(in: "Transfer-nonsense-x") == nil)
+    #expect(TransferredFiles.stamp(in: "Transfer-") == nil)
 }

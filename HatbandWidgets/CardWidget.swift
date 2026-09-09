@@ -65,7 +65,6 @@ nonisolated struct CardProvider: TimelineProvider {
                                 .interpolation(.none)
                                 .widgetAccentedRenderingMode(.fullColor)
                                 .aspectRatio(1, contentMode: .fit)
-                                .overlay { CardWidgetView.hat(over: image) }
                                 .padding(6)
                         }
                     VStack(alignment: .leading, spacing: 6) {
@@ -102,27 +101,6 @@ nonisolated struct CardProvider: TimelineProvider {
     /// The feed's URL at the Lock Screen version limit, or nil.
     nonisolated static func image(for feed: WidgetFeed) -> CGImage? {
         guard let code = CardQR.code(for: feed.url, form: .lockScreen) else { return nil }
-        return QRBitmap.cgImage(code, pixelsPerModule: 4)
-    }
-
-    /// The hat over the square the bitmap left clear. Sized from the image
-    /// rather than the code, which the view no longer holds; the quiet zone
-    /// is `QRBitmap`'s default four modules on each side.
-    @ViewBuilder nonisolated static func hat(over image: CGImage) -> some View {
-        let modules = image.width / 4
-        if modules > 8, let fraction = QRLogo.fraction(size: modules - 8) {
-            GeometryReader { geometry in
-                let side = min(geometry.size.width, geometry.size.height)
-                let symbol = side * CGFloat(modules - 8) / CGFloat(modules)
-                let box = symbol * fraction * 0.78
-                Image(systemName: Theme.hat)
-                    .resizable()
-                    .scaledToFit()
-                    .foregroundStyle(.black)
-                    .frame(width: box, height: box)
-                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
-                    .accessibilityHidden(true)
-            }
-        }
+        return BrandedQRImage.cgImage(code, pixelsPerModule: 4)
     }
 }

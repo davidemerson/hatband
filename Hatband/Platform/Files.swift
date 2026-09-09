@@ -12,30 +12,55 @@ nonisolated extension UTType {
 nonisolated enum TransferredFiles {
     static let prefix = "Transfer-"
 
+    /// How long a share's file is left alone. A receiver resolves the file
+    /// after the sheet it came from has gone, so "the app is frontmost again"
+    /// is not the same as "no share is in flight".
+    static let grace: TimeInterval = 300
+
     /// Removes the directories earlier shares left behind, so plaintext card
-    /// bytes never outlive the share by longer than the trip out and back.
+    /// bytes never outlive the share by much longer than the trip out and back.
     ///
-    /// Never call this from `write`. A `FileRepresentation` is resolved more
+    /// Age comes from the directory's own name, not from the file system: the
+    /// boundary lint forbids reading creation dates, and a name cannot be
+    /// touched by anything that reads the file.
+    ///
+    /// Never sweep indiscriminately. A `FileRepresentation` is resolved more
     /// than once — the share sheet resolves it to draw a thumbnail, then the
-    /// receiving extension resolves it to take the bytes — and the print
-    /// sheet keeps three of them alive at once, so sweeping on write deletes
-    /// the file the previous resolution is still vending. That is what Signal
-    /// reported as "Unable to Prepare Attachment".
-    static func sweep(in temporary: URL = FileManager.default.temporaryDirectory) {
+    /// receiving extension resolves it to take the bytes — and an extension
+    /// like Signal's goes on preparing the attachment after its sheet has
+    /// closed and Hatband is frontmost again. Deleting a file that is still
+    /// being vended is what Signal reports as "Unable to Prepare Attachment".
+    static func sweep(
+        in temporary: URL = FileManager.default.temporaryDirectory,
+        olderThan grace: TimeInterval = grace,
+        now: Date = Date()
+    ) {
         let manager = FileManager.default
         guard let names = try? manager.contentsOfDirectory(atPath: temporary.path) else { return }
         for name in names where name.hasPrefix(prefix) {
+            // A name from a build that wrote no stamp is from a previous
+            // launch by definition, and goes.
+            if let written = stamp(in: name), now.timeIntervalSince(written) < grace { continue }
             try? manager.removeItem(at: temporary.appendingPathComponent(name))
         }
+    }
+
+    /// `Transfer-<seconds since the reference date>-<uuid>`, or nil if the
+    /// name does not carry one.
+    static func stamp(in name: String) -> Date? {
+        let rest = name.dropFirst(prefix.count)
+        guard let dash = rest.firstIndex(of: "-"), let seconds = Double(rest[rest.startIndex..<dash]) else { return nil }
+        return Date(timeIntervalSinceReferenceDate: seconds)
     }
 
     /// `.completeUnlessOpen` rather than `.complete`: another process reads
     /// this file while Hatband is in the background, and a complete-protected
     /// file is unreadable the moment the phone locks behind the share sheet.
     /// The bytes are still unreadable at rest, which is what the class is for.
-    static func write(_ bytes: [UInt8], name: String) throws -> URL {
+    static func write(_ bytes: [UInt8], name: String, now: Date = Date()) throws -> URL {
+        let stamp = String(Int(now.timeIntervalSinceReferenceDate.rounded()))
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent(prefix + UUID().uuidString, isDirectory: true)
+            .appendingPathComponent(prefix + stamp + "-" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true,
             attributes: [.protectionKey: FileProtectionType.completeUnlessOpen])
