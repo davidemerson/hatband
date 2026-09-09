@@ -65,6 +65,8 @@ A 32 KB card is 52,452 characters as a URL, and both decoders read one back. Pas
 
 Google Safe Browsing listed hatband.link as a phishing site four days after the domain was registered, so Chrome and Safari both put an interstitial in front of every card link. Nothing on the page is what it was flagged for; a new domain that decodes a stranger's name, photo and telephone number out of an opaque blob in the URL and hands over a `data:` vCard is a shape a classifier knows, and it is not wrong about the shape. Reported for review; the page carries a description and no longer asks not to be indexed.
 
+Two faults only a phone found, both of them a thing that looked like chrome. A share sent as a file was refused by Signal's share extension for a PNG, an SVG and a PDF while it accepted a `.hatband` through the same code, so shares hand over their bytes instead: every one of them already held those bytes, and the file was a second copy of something the app had. And the hat above and to the left of a code in a Messages balloon is Messages drawing this app's icon there, over the top-left finder pattern — the mark a scanner looks for first, and not something error correction recovers. The balloon's image now carries a blank down its leading edge wider than that badge, which clears a disc in the corner at any height and costs the symbol no modules at all.
+
 Not tested: iPhone 12 through 14, and scanning a Lock Screen end to end, which needs a second camera.
 
 ## Wire format (HB1)
