@@ -1,6 +1,8 @@
 # Hatband
 
-Hatband shows your contact details as a QR code, from the iPhone Lock Screen if you like, and remembers where you met the people you scan. No account, no server, nothing collected.
+A privacy-first business card exchange application. No account, no server, no data collection.
+
+It shows your contact details as a QR code, from the iPhone Lock Screen if you like, and remembers where you met the people you scan.
 
 Named for the card Bloom keeps in his hatband in *Ulysses*, bearing the name of his other self, Henry Flower.
 

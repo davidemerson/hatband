@@ -218,7 +218,7 @@ test('error and empty states never echo the fragment', async () => {
   assert.equal(renderError(doc(), new TypeError('y')).textContent, 'This card could not be read.');
   const { root: empty } = await run({ hash: '' });
   assert.equal(elements(empty).find((e) => e.tagName === 'H1').textContent, 'No fixed abode.');
-  assert.match(empty.textContent, /hatband\.link is a privacy-first business card exchange application\./);
+  assert.match(empty.textContent, /A privacy-first business card exchange application\. No account, no server, no data collection\./);
   assert.equal(renderEmpty(doc()).className, 'empty');
   // Someone who reached the site with no card is the person most likely to
   // need the app, so the empty state has to offer it.

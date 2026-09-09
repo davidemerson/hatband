@@ -220,7 +220,7 @@ export function renderEmpty(doc) {
   store.setAttribute('rel', 'noreferrer noopener');
   return el(doc, 'section', 'empty',
     el(doc, 'h1', null, 'No fixed abode.'),
-    el(doc, 'p', null, 'hatband.link is a privacy-first business card exchange application.'),
+    el(doc, 'p', null, 'A privacy-first business card exchange application. No account, no server, no data collection.'),
     el(doc, 'p', null, store));
 }
 

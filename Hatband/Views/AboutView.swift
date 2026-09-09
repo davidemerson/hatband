@@ -25,7 +25,7 @@ import SwiftUI
                         MonoText(AboutView.build())
                     }
                 }
-                Text("A business card in your hat. No account, no server, nothing collected.")
+                Text("A privacy-first business card exchange application. No account, no server, no data collection.")
                     .foregroundStyle(.secondary)
             }
             Section("Source and proofs, on github.com") {
@@ -33,7 +33,7 @@ import SwiftUI
                 link("Wire format, in the README", AboutView.repository + "#wire-format-hb1")
                 link("Security and threat model, in the README", AboutView.repository + "#security")
                 link("Report a vulnerability privately", AboutView.repository + "/security/advisories/new")
-                link("Sponsor the work", "https://github.com/sponsors/davidemerson")
+                link("Support the work", "https://ko-fi.com/davidemerson")
             }
             Section("License") {
                 Text("GPL-3.0-or-later, with permission to distribute through the App Store (COPYING.iOS). The format library is Apache-2.0; the wire format is CC-BY-4.0.")
