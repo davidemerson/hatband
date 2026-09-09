@@ -138,13 +138,14 @@ struct BrandedQRImageTests {
         let code = try fullCode()
         let pixelsPerModule = 8
         let quietZone = 4
-        let fraction = 0.14
+        let fraction = 0.20
         let plain = try #require(BrandedQRImage.cgImage(code, pixelsPerModule: pixelsPerModule, quietZone: quietZone))
         let inset = try #require(BrandedQRImage.cgImage(
             code, pixelsPerModule: pixelsPerModule, quietZone: quietZone, topLeadingInset: fraction))
         #expect(inset.width > plain.width)
         #expect(inset.width == inset.height, "still square")
-        // The badge's corner is blank all the way across.
+        // The corner is blank for the whole fraction asked for, quiet zone
+        // included — that is what the caller is promised.
         let badge = Int(Double(inset.width) * fraction)
         for x in stride(from: 0, to: badge, by: pixelsPerModule) {
             for y in stride(from: 0, to: badge, by: pixelsPerModule) {

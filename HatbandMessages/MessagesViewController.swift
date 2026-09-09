@@ -73,10 +73,13 @@ import UIKit
     /// than shown wrong when the card is too big to draw as a QR — a card
     /// carrying a photo is past what any symbol holds.
     /// How much of the balloon image Messages' own app-icon badge covers at
-    /// the top left. Measured off the phone rather than documented anywhere;
-    /// generous, because the cost of too little is a symbol that will not
-    /// scan and the cost of too much is a slightly smaller one.
-    nonisolated static let badgeInset = 0.14
+    /// the top left. Measured off a balloon rather than documented anywhere:
+    /// the badge ran about 16% of the image's side, swallowing the finder
+    /// pattern and its separator whole. 20% leaves a margin, because the badge
+    /// looks to be a fixed size and so takes a larger share of a narrower
+    /// screen. Too little here is a symbol that will not scan; too much is
+    /// only a smaller one.
+    nonisolated static let badgeInset = 0.20
 
     nonisolated static func layout(for card: ShareFeed.Card, url: String) -> MSMessageTemplateLayout {
         let layout = MSMessageTemplateLayout()

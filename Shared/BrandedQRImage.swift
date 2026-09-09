@@ -12,14 +12,15 @@ nonisolated enum BrandedQRImage {
     /// it so the modules beside it are not crowded. `BrandedQR` uses the same.
     static let inset = 0.78
 
-    /// Blank space at the top and the leading edge, as a fraction of the
-    /// finished image, on top of the quiet zone. Messages draws the app's icon
-    /// over the top-left corner of a balloon's image and it lands on the finder
-    /// pattern — the one part of a symbol a scanner cannot do without, and not
-    /// something error correction recovers. A fraction rather than a module
-    /// count because the badge is a fraction of the balloon and a card is
-    /// anywhere from version 5 to 25. Everything else passes zero and gets the
-    /// symbol centred, as before.
+    /// How much of the finished image must be blank at the top-left corner,
+    /// quiet zone included. Messages draws the app's icon there, over the
+    /// finder pattern — the mark a scanner looks for first, and not something
+    /// error correction recovers. A fraction rather than a module count
+    /// because the badge is a fraction of the balloon while a card is anywhere
+    /// from version 5 to 25. The blank is added only at the top and the
+    /// leading edge; the other two sides keep the plain quiet zone, so the
+    /// symbol gives up as little as the corner costs. Everything but the
+    /// balloon passes zero and is unchanged.
     static func cgImage(
         _ code: QRCode,
         pixelsPerModule: Int,
@@ -29,11 +30,15 @@ nonisolated enum BrandedQRImage {
         guard let symbol = QRBitmap.cgImage(code, pixelsPerModule: pixelsPerModule, quietZone: quietZone) else {
             return nil
         }
-        // The inset is a fraction of the finished side, and the symbol is the
-        // rest of it: f = d / (q + d), so d = q · f / (1 - f).
+        // The blank at the corner is the added modules plus the quiet zone
+        // already there, over the finished side: f = (m + q) / (t + m), so
+        // m = (f·t - q) / (1 - f).
         let fraction = min(max(topLeadingInset, 0), 0.5)
+        let total = Double(code.size + 2 * quietZone)
         let modules = fraction > 0
-            ? Int((Double(code.size + 2 * quietZone) * fraction / (1 - fraction)).rounded())
+            // Up, never down: the caller is promised a clear corner, and
+            // half a module short of one is a symbol that does not scan.
+            ? max(Int(((fraction * total - Double(quietZone)) / (1 - fraction)).rounded(.up)), 0)
             : 0
         guard modules > 0 else {
             return composite(code, onto: symbol, pixelsPerModule: pixelsPerModule, quietZone: quietZone,
