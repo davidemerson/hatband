@@ -130,37 +130,41 @@ struct BrandedQRImageTests {
         #expect(ink > 0, "no hat at the balloon's own size")
     }
 
-    /// Messages draws its app-icon badge over the top-left of a balloon's
-    /// image, straight onto the finder pattern, and a covered finder is not
-    /// something error correction recovers: the symbol simply will not scan.
-    /// The inset pushes the symbol clear of it.
-    @Test func theInsetClearsTheCornerTheBadgeCovers() throws {
+    /// Messages draws its app-icon badge over the top-left corner of a
+    /// balloon's image, straight onto the finder pattern, and a covered finder
+    /// is not something error correction recovers: the symbol simply will not
+    /// scan. The badge is a disc in that corner, so a leading margin wider
+    /// than it clears it at any height and the symbol keeps its full height.
+    @Test func theLeadingMarginClearsTheBadgeAndKeepsTheHeight() throws {
         let code = try fullCode()
         let pixelsPerModule = 8
         let quietZone = 4
         let fraction = 0.20
         let plain = try #require(BrandedQRImage.cgImage(code, pixelsPerModule: pixelsPerModule, quietZone: quietZone))
         let inset = try #require(BrandedQRImage.cgImage(
-            code, pixelsPerModule: pixelsPerModule, quietZone: quietZone, topLeadingInset: fraction))
+            code, pixelsPerModule: pixelsPerModule, quietZone: quietZone, leadingInset: fraction))
+        // Wider, and not one pixel shorter: the whole point of a margin on one
+        // side is that the symbol gives up nothing in the other direction.
+        #expect(inset.height == plain.height)
         #expect(inset.width > plain.width)
-        #expect(inset.width == inset.height, "still square")
-        // The corner is blank for the whole fraction asked for, quiet zone
-        // included — that is what the caller is promised.
-        let badge = Int(Double(inset.width) * fraction)
-        for x in stride(from: 0, to: badge, by: pixelsPerModule) {
-            for y in stride(from: 0, to: badge, by: pixelsPerModule) {
+
+        // The leading edge is blank for the whole fraction asked for, top to
+        // bottom, quiet zone included.
+        let margin = Int(Double(inset.width) * fraction)
+        for x in stride(from: 0, to: margin, by: pixelsPerModule) {
+            for y in stride(from: 0, to: inset.height, by: pixelsPerModule * 4) {
                 #expect(try gray(inset, x: x, y: y) == 255, "ink at \(x),\(y) under the badge")
             }
         }
-        // And every module still says what it said, just moved.
+
+        // And every module still says what it said, moved sideways only.
         let shift = inset.width - plain.width
         let total = code.size + 2 * quietZone
         for row in stride(from: 0, to: total, by: 3) {
             for column in stride(from: 0, to: total, by: 3) {
                 let x = column * pixelsPerModule + pixelsPerModule / 2
                 let y = row * pixelsPerModule + pixelsPerModule / 2
-                // Blank at the top and the leading edge, so both axes move.
-                #expect(try gray(inset, x: x + shift, y: y + shift) == (try gray(plain, x: x, y: y)),
+                #expect(try gray(inset, x: x + shift, y: y) == (try gray(plain, x: x, y: y)),
                         "module \(column),\(row) changed")
             }
         }
@@ -170,9 +174,10 @@ struct BrandedQRImageTests {
     @Test func nothingElseGainsAnInset() throws {
         let code = try code()
         let plain = try #require(BrandedQRImage.cgImage(code, pixelsPerModule: 4))
-        let zero = try #require(BrandedQRImage.cgImage(code, pixelsPerModule: 4, topLeadingInset: 0))
+        let zero = try #require(BrandedQRImage.cgImage(code, pixelsPerModule: 4, leadingInset: 0))
         #expect(plain.width == zero.width)
         #expect(plain.width == (code.size + 8) * 4)
+        #expect(plain.width == plain.height, "still square")
     }
 
     @Test func aSymbolTooSmallForAHatIsReturnedUntouched() throws {

@@ -12,28 +12,32 @@ nonisolated enum BrandedQRImage {
     /// it so the modules beside it are not crowded. `BrandedQR` uses the same.
     static let inset = 0.78
 
-    /// How much of the finished image must be blank at the top-left corner,
-    /// quiet zone included. Messages draws the app's icon there, over the
-    /// finder pattern — the mark a scanner looks for first, and not something
-    /// error correction recovers. A fraction rather than a module count
-    /// because the badge is a fraction of the balloon while a card is anywhere
-    /// from version 5 to 25. The blank is added only at the top and the
-    /// leading edge; the other two sides keep the plain quiet zone, so the
-    /// symbol gives up as little as the corner costs. Everything but the
-    /// balloon passes zero and is unchanged.
+    /// How much of the finished image's width must be blank down the leading
+    /// edge, quiet zone included. Messages draws the app's icon over the
+    /// top-left corner of a balloon, onto the finder pattern — the mark a
+    /// scanner looks for first, and not something error correction recovers.
+    ///
+    /// The badge is a disc in that corner, so a leading margin wider than the
+    /// badge clears it whatever its height, and the symbol needs no downward
+    /// push at all: the image grows sideways and keeps every module of its
+    /// height. Top, bottom and trailing keep the plain quiet zone.
+    ///
+    /// A fraction rather than a module count, because the badge is a fraction
+    /// of the balloon while a card is anywhere from version 5 to 25.
+    /// Everything but the balloon passes zero and gets a square, as before.
     static func cgImage(
         _ code: QRCode,
         pixelsPerModule: Int,
         quietZone: Int = 4,
-        topLeadingInset: Double = 0
+        leadingInset: Double = 0
     ) -> CGImage? {
         guard let symbol = QRBitmap.cgImage(code, pixelsPerModule: pixelsPerModule, quietZone: quietZone) else {
             return nil
         }
-        // The blank at the corner is the added modules plus the quiet zone
-        // already there, over the finished side: f = (m + q) / (t + m), so
-        // m = (f·t - q) / (1 - f).
-        let fraction = min(max(topLeadingInset, 0), 0.5)
+        // The blank at the leading edge is the added modules plus the quiet
+        // zone already there, over the finished width: f = (m + q) / (t + m),
+        // so m = (f·t - q) / (1 - f).
+        let fraction = min(max(leadingInset, 0), 0.5)
         let total = Double(code.size + 2 * quietZone)
         let modules = fraction > 0
             // Up, never down: the caller is promised a clear corner, and
@@ -42,31 +46,30 @@ nonisolated enum BrandedQRImage {
             : 0
         guard modules > 0 else {
             return composite(code, onto: symbol, pixelsPerModule: pixelsPerModule, quietZone: quietZone,
-                             offsetX: 0, offsetY: 0)
+                             offsetX: 0)
         }
         return inset(symbol, by: modules * pixelsPerModule).flatMap {
             composite(code, onto: $0, pixelsPerModule: pixelsPerModule, quietZone: quietZone,
-                      offsetX: modules * pixelsPerModule, offsetY: 0)
+                      offsetX: modules * pixelsPerModule)
         }
     }
 
-    /// The symbol on a larger white square, pushed to the bottom-right so the
-    /// blank is at the top and the leading edge. Core Graphics counts from the
-    /// bottom, so "top" is the far end of y.
+    /// The symbol on a wider white canvas, pushed to the trailing edge so the
+    /// blank is all down the leading one. The height does not change.
     private static func inset(_ symbol: CGImage, by pixels: Int) -> CGImage? {
-        let side = symbol.width + pixels
-        guard let context = context(side: side) else { return nil }
+        let width = symbol.width + pixels
+        guard let context = context(width: width, height: symbol.height) else { return nil }
         context.setFillColor(gray: 1, alpha: 1)
-        context.fill(CGRect(x: 0, y: 0, width: side, height: side))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: symbol.height))
         context.draw(symbol, in: CGRect(x: pixels, y: 0, width: symbol.width, height: symbol.height))
         return context.makeImage()
     }
 
-    private static func context(side: Int) -> CGContext? {
+    private static func context(width: Int, height: Int) -> CGContext? {
         CGContext(
             data: nil,
-            width: side,
-            height: side,
+            width: width,
+            height: height,
             bitsPerComponent: 8,
             bytesPerRow: 0,
             space: CGColorSpaceCreateDeviceGray(),
@@ -78,13 +81,11 @@ nonisolated enum BrandedQRImage {
         onto symbol: CGImage,
         pixelsPerModule: Int,
         quietZone: Int,
-        offsetX: Int,
-        offsetY: Int
+        offsetX: Int
     ) -> CGImage? {
         guard let hole = QRLogo.hole(size: code.size) else { return symbol }
-        let side = symbol.width
-        guard let context = context(side: side) else { return symbol }
-        context.draw(symbol, in: CGRect(x: 0, y: 0, width: side, height: side))
+        guard let context = context(width: symbol.width, height: symbol.height) else { return symbol }
+        context.draw(symbol, in: CGRect(x: 0, y: 0, width: symbol.width, height: symbol.height))
 
         // The hole in pixels, taken from the module range rather than from the
         // image's width: reading the module count back out of a bitmap needs
@@ -95,7 +96,7 @@ nonisolated enum BrandedQRImage {
         let left = (hole.lowerBound + quietZone) * pixelsPerModule + offsetX
         // Core Graphics counts from the bottom; the hole's top row is
         // `hole.lowerBound` from the top.
-        let bottom = (total - hole.upperBound - quietZone) * pixelsPerModule + offsetY
+        let bottom = (total - hole.upperBound - quietZone) * pixelsPerModule
 
         // Whole pixels, and a side of the same parity as the square it sits
         // in, so the margin is the same integer on both sides. A fractional

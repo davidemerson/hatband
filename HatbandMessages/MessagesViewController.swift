@@ -72,13 +72,12 @@ import UIKit
     /// Caption, company and the code itself. The image is left off rather
     /// than shown wrong when the card is too big to draw as a QR — a card
     /// carrying a photo is past what any symbol holds.
-    /// How much of the balloon image Messages' own app-icon badge covers at
-    /// the top left. Measured off a balloon rather than documented anywhere:
-    /// the badge ran about 16% of the image's side, swallowing the finder
-    /// pattern and its separator whole. 20% leaves a margin, because the badge
-    /// looks to be a fixed size and so takes a larger share of a narrower
-    /// screen. Too little here is a symbol that will not scan; too much is
-    /// only a smaller one.
+    /// How wide the blank down the leading edge is, as a fraction of the
+    /// balloon image's width. Messages draws the app's icon over the top-left
+    /// corner, onto the finder pattern. Measured off a balloon rather than
+    /// documented anywhere: the badge reached about 17% across. 20% leaves a
+    /// margin, since the badge looks to be a fixed size and so takes a larger
+    /// share of a narrower screen.
     nonisolated static let badgeInset = 0.20
 
     nonisolated static func layout(for card: ShareFeed.Card, url: String) -> MSMessageTemplateLayout {
@@ -87,7 +86,7 @@ import UIKit
         layout.subcaption = card.company
         layout.trailingCaption = "Hatband"
         if let code = CardQR.code(for: url, form: .fullQR),
-           let image = BrandedQRImage.cgImage(code, pixelsPerModule: 8, topLeadingInset: badgeInset) {
+           let image = BrandedQRImage.cgImage(code, pixelsPerModule: 8, leadingInset: badgeInset) {
             layout.image = UIImage(cgImage: image)
         }
         return layout
