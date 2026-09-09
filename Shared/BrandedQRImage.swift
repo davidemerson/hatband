@@ -12,13 +12,53 @@ nonisolated enum BrandedQRImage {
     /// it so the modules beside it are not crowded. `BrandedQR` uses the same.
     static let inset = 0.78
 
-    static func cgImage(_ code: QRCode, pixelsPerModule: Int, quietZone: Int = 4) -> CGImage? {
+    /// Blank space at the top and the leading edge, as a fraction of the
+    /// finished image, on top of the quiet zone. Messages draws the app's icon
+    /// over the top-left corner of a balloon's image and it lands on the finder
+    /// pattern — the one part of a symbol a scanner cannot do without, and not
+    /// something error correction recovers. A fraction rather than a module
+    /// count because the badge is a fraction of the balloon and a card is
+    /// anywhere from version 5 to 25. Everything else passes zero and gets the
+    /// symbol centred, as before.
+    static func cgImage(
+        _ code: QRCode,
+        pixelsPerModule: Int,
+        quietZone: Int = 4,
+        topLeadingInset: Double = 0
+    ) -> CGImage? {
         guard let symbol = QRBitmap.cgImage(code, pixelsPerModule: pixelsPerModule, quietZone: quietZone) else {
             return nil
         }
-        guard let hole = QRLogo.hole(size: code.size) else { return symbol }
-        let side = symbol.width
-        guard let context = CGContext(
+        // The inset is a fraction of the finished side, and the symbol is the
+        // rest of it: f = d / (q + d), so d = q · f / (1 - f).
+        let fraction = min(max(topLeadingInset, 0), 0.5)
+        let modules = fraction > 0
+            ? Int((Double(code.size + 2 * quietZone) * fraction / (1 - fraction)).rounded())
+            : 0
+        guard modules > 0 else {
+            return composite(code, onto: symbol, pixelsPerModule: pixelsPerModule, quietZone: quietZone,
+                             offsetX: 0, offsetY: 0)
+        }
+        return inset(symbol, by: modules * pixelsPerModule).flatMap {
+            composite(code, onto: $0, pixelsPerModule: pixelsPerModule, quietZone: quietZone,
+                      offsetX: modules * pixelsPerModule, offsetY: 0)
+        }
+    }
+
+    /// The symbol on a larger white square, pushed to the bottom-right so the
+    /// blank is at the top and the leading edge. Core Graphics counts from the
+    /// bottom, so "top" is the far end of y.
+    private static func inset(_ symbol: CGImage, by pixels: Int) -> CGImage? {
+        let side = symbol.width + pixels
+        guard let context = context(side: side) else { return nil }
+        context.setFillColor(gray: 1, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: side, height: side))
+        context.draw(symbol, in: CGRect(x: pixels, y: 0, width: symbol.width, height: symbol.height))
+        return context.makeImage()
+    }
+
+    private static func context(side: Int) -> CGContext? {
+        CGContext(
             data: nil,
             width: side,
             height: side,
@@ -26,7 +66,19 @@ nonisolated enum BrandedQRImage {
             bytesPerRow: 0,
             space: CGColorSpaceCreateDeviceGray(),
             bitmapInfo: CGImageAlphaInfo.none.rawValue)
-        else { return symbol }
+    }
+
+    private static func composite(
+        _ code: QRCode,
+        onto symbol: CGImage,
+        pixelsPerModule: Int,
+        quietZone: Int,
+        offsetX: Int,
+        offsetY: Int
+    ) -> CGImage? {
+        guard let hole = QRLogo.hole(size: code.size) else { return symbol }
+        let side = symbol.width
+        guard let context = context(side: side) else { return symbol }
         context.draw(symbol, in: CGRect(x: 0, y: 0, width: side, height: side))
 
         // The hole in pixels, taken from the module range rather than from the
@@ -35,10 +87,10 @@ nonisolated enum BrandedQRImage {
         // moment either changes.
         let total = code.size + 2 * quietZone
         let clearedSide = hole.count * pixelsPerModule
-        let left = (hole.lowerBound + quietZone) * pixelsPerModule
+        let left = (hole.lowerBound + quietZone) * pixelsPerModule + offsetX
         // Core Graphics counts from the bottom; the hole's top row is
         // `hole.lowerBound` from the top.
-        let bottom = (total - hole.upperBound - quietZone) * pixelsPerModule
+        let bottom = (total - hole.upperBound - quietZone) * pixelsPerModule + offsetY
 
         // Whole pixels, and a side of the same parity as the square it sits
         // in, so the margin is the same integer on both sides. A fractional

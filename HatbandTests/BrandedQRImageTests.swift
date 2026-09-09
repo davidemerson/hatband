@@ -130,6 +130,50 @@ struct BrandedQRImageTests {
         #expect(ink > 0, "no hat at the balloon's own size")
     }
 
+    /// Messages draws its app-icon badge over the top-left of a balloon's
+    /// image, straight onto the finder pattern, and a covered finder is not
+    /// something error correction recovers: the symbol simply will not scan.
+    /// The inset pushes the symbol clear of it.
+    @Test func theInsetClearsTheCornerTheBadgeCovers() throws {
+        let code = try fullCode()
+        let pixelsPerModule = 8
+        let quietZone = 4
+        let fraction = 0.14
+        let plain = try #require(BrandedQRImage.cgImage(code, pixelsPerModule: pixelsPerModule, quietZone: quietZone))
+        let inset = try #require(BrandedQRImage.cgImage(
+            code, pixelsPerModule: pixelsPerModule, quietZone: quietZone, topLeadingInset: fraction))
+        #expect(inset.width > plain.width)
+        #expect(inset.width == inset.height, "still square")
+        // The badge's corner is blank all the way across.
+        let badge = Int(Double(inset.width) * fraction)
+        for x in stride(from: 0, to: badge, by: pixelsPerModule) {
+            for y in stride(from: 0, to: badge, by: pixelsPerModule) {
+                #expect(try gray(inset, x: x, y: y) == 255, "ink at \(x),\(y) under the badge")
+            }
+        }
+        // And every module still says what it said, just moved.
+        let shift = inset.width - plain.width
+        let total = code.size + 2 * quietZone
+        for row in stride(from: 0, to: total, by: 3) {
+            for column in stride(from: 0, to: total, by: 3) {
+                let x = column * pixelsPerModule + pixelsPerModule / 2
+                let y = row * pixelsPerModule + pixelsPerModule / 2
+                // Blank at the top and the leading edge, so both axes move.
+                #expect(try gray(inset, x: x + shift, y: y + shift) == (try gray(plain, x: x, y: y)),
+                        "module \(column),\(row) changed")
+            }
+        }
+    }
+
+    /// The default is no inset, so the Lock Screen and the widget are untouched.
+    @Test func nothingElseGainsAnInset() throws {
+        let code = try code()
+        let plain = try #require(BrandedQRImage.cgImage(code, pixelsPerModule: 4))
+        let zero = try #require(BrandedQRImage.cgImage(code, pixelsPerModule: 4, topLeadingInset: 0))
+        #expect(plain.width == zero.width)
+        #expect(plain.width == (code.size + 8) * 4)
+    }
+
     @Test func aSymbolTooSmallForAHatIsReturnedUntouched() throws {
         let code = try code()
         // `QRLogo.hole` refuses anything under 21 modules; where it refuses,
