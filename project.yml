@@ -144,9 +144,32 @@ targets:
         GENERATE_INFOPLIST_FILE: "YES"
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         SWIFT_APPROACHABLE_CONCURRENCY: "YES"
+  HatbandScreenshots:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [HatbandScreenshots]
+    dependencies:
+      - target: Hatband
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: link.hatband.ios.screenshots
+        TARGETED_DEVICE_FAMILY: "1"
+        # Not MainActor by default, unlike the app: XCTestCase's overrides are
+        # nonisolated and will not compile against it.
+        TEST_TARGET_NAME: Hatband
+    info:
+      path: HatbandScreenshots/Info.plist
+
 schemes:
   Hatband:
     build:
       targets: { Hatband: all, HatbandWidgets: all, HatbandMessages: all, HatbandTests: [test] }
     run: { config: Debug }
     test: { config: Debug, targets: [HatbandTests] }
+  # Its own scheme so CI never runs it: these drive the app to pose for the
+  # App Store and take minutes, and they assert nothing about correctness.
+  HatbandScreenshots:
+    build:
+      targets: { Hatband: all, HatbandScreenshots: [test] }
+    run: { config: Debug }
+    test: { config: Debug, targets: [HatbandScreenshots] }

@@ -28,9 +28,10 @@ xcodebuild test -project Hatband.xcodeproj -scheme Hatband \
   -destination 'platform=iOS Simulator,name=iPhone 17'
 node --test site/test/*.test.mjs                        # site
 sh scripts/lint-boundaries.sh --no-stubs
+sh scripts/screenshots.sh                               # App Store screenshots, ~5 min
 ```
 
-The app needs Xcode 26. `project.yml` is the only source of the project: `Hatband.xcodeproj`, every `Info.plist` and every entitlements file are generated and never committed. CI lints the boundaries, generates, tests, and refuses any package beyond swift-crypto and swift-asn1. `ITSAppUsesNonExemptEncryption` is false, on the publicly-available-source exemption.
+The app needs Xcode 26. `project.yml` is the only source of the project: `Hatband.xcodeproj`, every `Info.plist` and every entitlements file are generated and never committed. CI lints the boundaries, generates, tests, and refuses any package beyond swift-crypto and swift-asn1. The screenshot run has a scheme of its own so CI never takes it: it drives the app on a 6.9" simulator through the same UI anyone else uses, and the people it shows arrive as cards do, by URL and through the review sheet, so the app carries no seeding seam. `ITSAppUsesNonExemptEncryption` is false, on the publicly-available-source exemption.
 
 ## App
 
