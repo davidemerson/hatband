@@ -2,6 +2,7 @@ name: site
 on:
   workflow_dispatch:
   push:
+    branches: [main]    # not tags: a v* tag re-runs this for a commit main already gated
     paths: ["site/**", "spec/vectors/**"]
   pull_request:
     paths: ["site/**", "spec/vectors/**"]

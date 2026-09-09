@@ -1,7 +1,17 @@
 name: release
-# Uploads a TestFlight build. Deliberately not on every push: that would put
-# a build in front of testers for every commit. Tag a release, or run it by
-# hand. The build number is the commit count, which only ever rises.
+# Two lanes, one trunk.
+#
+#   workflow_dispatch   builds and puts an ipa in TestFlight and stops. This is
+#                       how testers see work in progress; it never touches an
+#                       App Store version, so it cannot disturb a review.
+#   a v* tag            the same build, then attached to the App Store version
+#                       and submitted for review.
+#
+# Deliberately not on every push: that would put a build in front of testers for
+# every commit. The build number is the commit count, which only ever rises on a
+# linear main -- and is raised to one above whatever App Store Connect already
+# holds when it would not, because a branch cut from a tag restarts the count
+# below what has been uploaded.
 on:
   workflow_dispatch:
   push:
@@ -9,14 +19,38 @@ on:
 permissions:
   contents: read
 
+env:
+  ASC_APP_ID: "6809843834"
+
 jobs:
   testflight:
     runs-on: macos-26
     timeout-minutes: 60
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      build: ${{ steps.buildnum.outputs.build }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # Everything that can refuse the run costs seconds and goes first. A tag
+      # that disagrees with MARKETING_VERSION would otherwise be found by the
+      # archive, twenty minutes in, having already spent a build number.
+      - name: version
+        id: version
+        run: |
+          v=$(sed -n 's/^ *MARKETING_VERSION: *//p' project.yml | head -1 | tr -d "\"' ")
+          [ -n "$v" ] || { echo "no MARKETING_VERSION in project.yml"; exit 1; }
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$v" ]; then
+            echo "tag $GITHUB_REF_NAME does not match MARKETING_VERSION $v"; exit 1
+          fi
+          p=$(sed -n '/CFBundleShortVersionString/ s/.*"\([0-9][0-9.]*\)".*/\1/p' \
+              HatbandTests/BundleInfoTests.swift | head -1)
+          [ "$p" = "$v" ] || { echo "BundleInfoTests pins $p, project.yml says $v"; exit 1; }
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
       - run: xcodebuild -version
       - run: brew install xcodegen
       - name: App Store Connect key
@@ -30,8 +64,40 @@ jobs:
           chmod 600 ~/private_keys/AuthKey_$ASC_KEY_ID.p8
       - run: scripts/lint-boundaries.sh --no-stubs
       - run: xcodegen generate --spec project.yml
+
       - name: build number
-        run: echo "BUILD=$(git rev-list --count HEAD)" >> "$GITHUB_ENV"
+        id: buildnum
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          count=$(git rev-list --count HEAD)
+          highest=$(scripts/asc.sh GET \
+            "/v1/builds?filter[app]=$ASC_APP_ID&sort=-version&limit=200&fields[builds]=version" \
+            | jq -r '([.data[].attributes.version | tonumber] | max) // 0')
+          # The commit count on a linear main, and it has never been anything
+          # else. But a branch cut from a tag restarts it below what has already
+          # been uploaded, and a shallow checkout collapses it to 1, so take
+          # whichever is higher and say when the count was not it.
+          if [ "$count" -gt "$highest" ]; then
+            BUILD=$count
+          else
+            BUILD=$((highest + 1))
+            echo "commit count is $count, at or below App Store Connect's $highest: using $BUILD"
+          fi
+          echo "build $BUILD, highest on App Store Connect $highest"
+          echo "BUILD=$BUILD" >> "$GITHUB_ENV"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+
+      # The tag lane ends in a submission. Refuse now, before twenty minutes and
+      # a build number, if App Review already holds something for this app.
+      - name: nothing in flight
+        if: github.ref_type == 'tag'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: scripts/submit-release.sh --preflight "$VERSION"
+
       - name: test
         run: |
           set -o pipefail
@@ -82,3 +148,25 @@ jobs:
       - name: remove the key from the runner
         if: always()
         run: rm -f ~/private_keys/AuthKey_*.p8
+
+  # Its own job, and on Linux: waiting out Apple's build processing takes up to
+  # forty-five minutes, which will not fit beside a twenty-minute build under one
+  # timeout, and idling on a macOS runner costs ten times what idling here does.
+  submit:
+    needs: testflight
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # the tag's message body is the release note
+      - name: submit for review
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          scripts/submit-release.sh \
+            "${{ needs.testflight.outputs.version }}" \
+            "${{ needs.testflight.outputs.build }}"

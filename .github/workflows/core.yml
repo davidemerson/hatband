@@ -2,6 +2,7 @@ name: core
 on:
   workflow_dispatch:
   push:
+    branches: [main]    # not tags: a v* tag re-runs this for a commit main already gated
     paths: ["Packages/**", "spec/**", "Hatband/**", "Shared/**", "HatbandWidgets/**", "HatbandMessages/**", "scripts/**", ".github/workflows/core.yml"]
   pull_request:
     paths: ["Packages/**", "spec/**", "Hatband/**", "Shared/**", "HatbandWidgets/**", "HatbandMessages/**", "scripts/**", ".github/workflows/core.yml"]

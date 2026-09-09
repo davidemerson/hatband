@@ -33,6 +33,26 @@ sh scripts/screenshots.sh                               # App Store screenshots,
 
 The app needs Xcode 26. `project.yml` is the only source of the project: `Hatband.xcodeproj`, every `Info.plist` and every entitlements file are generated and never committed. CI lints the boundaries, generates, tests, and refuses any package beyond swift-crypto and swift-asn1. The screenshot run has a scheme of its own so CI never takes it: it drives the app on a 6.9" simulator through the same UI anyone else uses, and the people it shows arrive as cards do, by URL and through the review sheet, so the app carries no seeding seam. `ITSAppUsesNonExemptEncryption` is false, on the publicly-available-source exemption.
 
+## Releasing
+
+One app record, one build stream. Every upload lands in TestFlight; a release is that same binary attached to an App Store version. There is no separate beta artefact to keep in step, and so no release branch — `main` is the only branch, and the version string is what separates testers from the public.
+
+```
+scripts/bump-version.sh 1.0.1                        # MARKETING_VERSION and the test that pins it
+gh workflow run release.yml                          # a TestFlight build, and nothing else
+git tag -s v1.0.1 -F notes.txt && git push --tags    # build, attach, submit for review
+```
+
+`main` carries the version in flight until it ships. While a version is in review a dispatched build is a straight replacement for the one under review, so the bump waits; the moment a commit lands that is not part of that release, bump. If a version in review is rejected after `main` has moved on, withdraw it and submit the next one rather than patching it — version numbers are free and branches are not.
+
+A tag whose name disagrees with `MARKETING_VERSION` is refused in the first seconds of the run, and so is a tag pushed while App Review already holds a submission for the app. The tag's message body becomes the release note, which is why the tag is cut with `-F`: App Store Connect refuses one on an app's first version and requires it on every version after. The build number is the commit count, raised to one above App Store Connect's highest whenever a branch or a shallow checkout would make the count fall short. Release is manual, so an approval does not ship itself.
+
+`scripts/asc.sh` is the App Store Connect client all of this runs on: an ES256 JWT signed with `openssl`, because the machinery carries no more third-party code than the app does. `scripts/submit-release.sh --preflight 1.0.1` asks only whether a submission would be accepted, and `--dry-run` walks the whole chain and sends nothing.
+
+A new marketing version needs a fresh Beta App Review before external testers see it. The internal group never waits.
+
+The one case that wants a branch is an urgent fix to a released version while `main` holds work that must not ship: `git switch -c release/1.0.x v1.0.0`, cherry-pick, bump, tag, merge back.
+
 ## App
 
 - **Card.** Your selected persona as a QR code. Brightness rises while it shows; the code hides while the screen is recorded. Share it as a hatband.link URL or a `.hatband` file, or print it as SVG, PNG or a PDF card. "What's in this QR" lists every field and the code's size on screen.
