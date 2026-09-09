@@ -317,16 +317,16 @@ import SwiftUI
             List {
                 if let files {
                     Section {
-                        ShareLink(item: files.svg, preview: SharePreview("SVG")) {
+                        ShareLink(item: files.svg, preview: SharePreview(files.svg.name)) {
                             Label("SVG", systemImage: "square.on.square")
                         }
                         if let png = files.png {
-                            ShareLink(item: png, preview: SharePreview("PNG")) {
+                            ShareLink(item: png, preview: SharePreview(png.name)) {
                                 Label("PNG, 1024 pixels", systemImage: "photo")
                             }
                         }
                         if let pdf = files.pdf {
-                            ShareLink(item: pdf, preview: SharePreview("PDF card")) {
+                            ShareLink(item: pdf, preview: SharePreview(pdf.name)) {
                                 Label("PDF card", systemImage: "doc.richtext")
                             }
                         }

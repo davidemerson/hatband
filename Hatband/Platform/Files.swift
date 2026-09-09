@@ -58,7 +58,10 @@ nonisolated enum TransferredFiles {
     /// file is unreadable the moment the phone locks behind the share sheet.
     /// The bytes are still unreadable at rest, which is what the class is for.
     static func write(_ bytes: [UInt8], name: String, now: Date = Date()) throws -> URL {
-        let stamp = String(Int(now.timeIntervalSinceReferenceDate.rounded()))
+        // Rounded down, never up: a stamp in the future makes the age
+        // negative, and a negative age is younger than any grace — including
+        // the zero an erase passes.
+        let stamp = String(Int(now.timeIntervalSinceReferenceDate.rounded(.down)))
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(prefix + stamp + "-" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(

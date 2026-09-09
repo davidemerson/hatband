@@ -80,6 +80,22 @@ struct FilesTests {
     #expect(FileManager.default.fileExists(atPath: other.path))
 }
 
+/// A stamp rounded to nearest lands in the future for half of every second,
+/// which makes the directory's age negative — younger than any grace, and so
+/// spared even by the zero an erase passes.
+@Test func aStampIsNeverInTheFuture() throws {
+    for fraction in [0.0, 0.4, 0.5, 0.6, 0.99] {
+        let now = Date(timeIntervalSinceReferenceDate: 800_000_000 + fraction)
+        let url = try TransferredFiles.write([1], name: "a.png", now: now)
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let name = url.deletingLastPathComponent().lastPathComponent
+        let written = try #require(TransferredFiles.stamp(in: name))
+        #expect(now.timeIntervalSince(written) >= 0, "stamped \(fraction) into the future")
+        TransferredFiles.sweep(in: url.deletingLastPathComponent().deletingLastPathComponent(), olderThan: 0, now: now)
+        #expect(!FileManager.default.fileExists(atPath: url.path), "an erase spared it")
+    }
+}
+
 @Test func aWrittenDirectoryCarriesItsTime() throws {
     let when = Date(timeIntervalSinceReferenceDate: 800_000_000)
     let url = try TransferredFiles.write([1], name: "a.png", now: when)
