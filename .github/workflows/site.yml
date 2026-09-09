@@ -5,6 +5,9 @@ on:
     paths: ["site/**", "spec/vectors/**"]
   pull_request:
     paths: ["site/**", "spec/vectors/**"]
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-24.04

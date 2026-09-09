@@ -13,8 +13,8 @@ The format library, its vectors, the iPhone app and the site at hatband.link all
 | Path | Contents | License |
 |---|---|---|
 | `Packages/HatbandCore` | Model, HB1 codec, crypto, QR encoder. Swift package; builds on Linux and Apple platforms. | Apache-2.0 |
-| `spec` | HB1 wire format and test vectors. | CC-BY-4.0 |
-| `site` | The static page at hatband.link. | GPL-3.0-or-later |
+| `spec` | Test vectors for the wire format, which is specified below. | CC-BY-4.0 |
+| `site` | The static page at hatband.link. | GPL-3.0-or-later; the Jost faces it carries are OFL 1.1, `site/fonts/Jost-OFL.txt` |
 | `Hatband`, `HatbandWidgets`, `HatbandMessages` | The iOS app, its Live Activity extension and its Messages extension. | GPL-3.0-or-later, see `COPYING.iOS` |
 
 ## Build and test

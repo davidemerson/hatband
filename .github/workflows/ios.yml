@@ -5,6 +5,9 @@ on:
     paths: [project.yml, "Hatband/**", "HatbandWidgets/**", "HatbandMessages/**", "Shared/**", "HatbandTests/**", "Packages/**", "spec/vectors/**", "scripts/**", ".github/workflows/ios.yml"]
   pull_request:
     paths: [project.yml, "Hatband/**", "HatbandWidgets/**", "HatbandMessages/**", "Shared/**", "HatbandTests/**", "Packages/**", "spec/vectors/**", "scripts/**", ".github/workflows/ios.yml"]
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: macos-26

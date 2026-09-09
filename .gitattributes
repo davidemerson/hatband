@@ -1,0 +1,4 @@
+# Two of these carry raw control bytes in their hostile-text pools, which trips
+# git's binary heuristic: GitHub then refuses to render them, blame and diff go
+# away, and most secret scanners skip binary blobs. They are UTF-8 text.
+*.mjs text diff

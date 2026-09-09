@@ -6,6 +6,9 @@ on:
   workflow_dispatch:
   push:
     tags: ["v*"]
+permissions:
+  contents: read
+
 jobs:
   testflight:
     runs-on: macos-26
@@ -76,6 +79,6 @@ jobs:
         run: |
           xcrun altool --upload-app -f build/export/Hatband.ipa -t ios \
             --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
-      - name: shred the key
+      - name: remove the key from the runner
         if: always()
         run: rm -f ~/private_keys/AuthKey_*.p8

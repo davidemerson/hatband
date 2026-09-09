@@ -32,5 +32,7 @@ infra/outputs*.json
 # OS
 .DS_Store
 
-# Agent worktrees
+# Agent scaffolding. CLAUDE.md was excluded through .git/info/exclude,
+# which is local to one clone and travels nowhere.
 .claude/
+CLAUDE.md

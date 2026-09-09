@@ -53,7 +53,7 @@ struct QRLogoTests {
     @Test func theFindersAreUntouched() {
         for version in versions() {
             let size = 17 + 4 * version
-            guard let hole = QRLogo.hole(size: size) else { continue }
+            guard QRLogo.hole(size: size) != nil else { continue }
             for corner in [(0, 0), (size - 7, 0), (0, size - 7)] {
                 for x in corner.0..<(corner.0 + 7) {
                     for y in corner.1..<(corner.1 + 7) {
