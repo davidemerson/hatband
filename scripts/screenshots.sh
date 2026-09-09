@@ -11,7 +11,7 @@ set -eu
 cd "$(dirname "$0")/.."
 DEVICE="${DEVICE:-iPhone 17 Pro Max}"
 OUT="${OUT:-$PWD/build/screenshots}"
-CARDS="${CARDS:-spec/screenshots/cards.txt}"
+CARDS="${CARDS:-HatbandScreenshots/cards.txt}"
 
 id=$(xcrun simctl list devices available -j | python3 -c "
 import json,sys

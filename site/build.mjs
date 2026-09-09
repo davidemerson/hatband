@@ -30,12 +30,14 @@ export function bundle(hb1, page) {
   return `(() => {\n'use strict';\n${body}\n})();\n`;
 }
 
+/** No `frame-ancestors`: browsers ignore it in a `<meta>` policy, and the
+    real one is a header from CloudFront (`infra/site.yaml`). */
 export function indexCSP(script, style) {
-  return `default-src 'none'; script-src ${hashSource(script)}; style-src ${hashSource(style)}; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'`;
+  return `default-src 'none'; script-src ${hashSource(script)}; style-src ${hashSource(style)}; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'`;
 }
 
 export function pageCSP(style) {
-  return `default-src 'none'; style-src ${hashSource(style)}; font-src data:; form-action 'none'; base-uri 'none'; frame-ancestors 'none'`;
+  return `default-src 'none'; style-src ${hashSource(style)}; font-src data:; form-action 'none'; base-uri 'none'`;
 }
 
 export const PAGES = [['contribute', 'Contribute']];

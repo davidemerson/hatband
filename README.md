@@ -8,7 +8,7 @@ Named for the card Bloom keeps in his hatband in *Ulysses*, bearing the name of 
 
 ## Status
 
-The format library, its vectors, the iPhone app and the site at hatband.link all exist. The app runs on a phone and has been through TestFlight. What device testing showed is under Validation.
+1.0.0. The format library, its vectors, the iPhone app and the site at hatband.link all exist; the app has run on a phone and been through TestFlight, and the App Store listing is written and waiting on review. What device testing showed is under Validation.
 
 ## Layout
 
@@ -173,7 +173,7 @@ infra/deploy-stack.sh                           # creates the stack
 TEAMID=JKXH9239G4 sh scripts/deploy-site.sh     # uploads and invalidates
 ```
 
-The build output is committed, and CI checks it is current.
+The build output is committed, and CI checks it is current. The page fetches nothing at all: the script, the styles, the Jost faces and the hat in the tab are every one of them inline, and the Content-Security-Policy admits no other source.
 
 ## License
 

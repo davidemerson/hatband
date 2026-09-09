@@ -25,15 +25,17 @@ test('the CSP is exactly as specified and its hashes match the inline content', 
   const policy = csp();
   const script = inline('script');
   const style = inline('style');
-  assert.equal(policy, `default-src 'none'; script-src ${hash(script)}; style-src ${hash(style)}; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'`);
-  assert.match(policy, /^default-src 'none'; script-src 'sha256-[A-Za-z0-9+/]{43}='; style-src 'sha256-[A-Za-z0-9+/]{43}='; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'$/);
+  assert.equal(policy, `default-src 'none'; script-src ${hash(script)}; style-src ${hash(style)}; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'`);
+  assert.match(policy, /^default-src 'none'; script-src 'sha256-[A-Za-z0-9+/]{43}='; style-src 'sha256-[A-Za-z0-9+/]{43}='; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'$/);
   assert.ok(index.indexOf('<meta http-equiv="Content-Security-Policy"') < index.indexOf('<meta name="viewport"'), 'CSP comes first');
   assert.ok(!/<script\s/.test(index), 'no script tag with attributes');
-  assert.ok(!/<link\b/.test(index), 'no link element');
+  const links = [...index.matchAll(/<link\b[^>]*>/g)].map((m) => m[0]);
+  assert.equal(links.length, 1, 'one link element, the icon');
+  assert.match(links[0], /^<link rel="icon" href="data:image\/svg\+xml;base64,[A-Za-z0-9+/]+=*">$/, 'the icon is inline data');
   for (const [name] of PAGES) {
     const page = read(name + '.html');
     const pageStyle = /<style>([\s\S]*?)<\/style>/.exec(page)[1];
-    assert.match(page, new RegExp(`content="default-src 'none'; style-src ${hash(pageStyle).replace(/[+/]/g, '\\$&')}; font-src data:; form-action 'none'; base-uri 'none'; frame-ancestors 'none'"`));
+    assert.match(page, new RegExp(`content="default-src 'none'; style-src ${hash(pageStyle).replace(/[+/]/g, '\\$&')}; font-src data:; form-action 'none'; base-uri 'none'"`));
     assert.ok(!/<script/.test(page), name + ' has no script');
     assert.equal(pageStyle, style, name + ' shares the stylesheet');
   }
@@ -45,7 +47,10 @@ test('nothing external except the GitHub and App Store links', () => {
   for (const host of hosts) assert.ok(allowed.has(host), host);
   const markup = index.replace(/<script>[\s\S]*<\/script>/, '').replace(/<style>[\s\S]*<\/style>/, '');
   const hrefs = [...markup.matchAll(/href="([^"]*)"/g)].map((m) => m[1]);
-  for (const href of hrefs) assert.ok(href.startsWith('/') || href.startsWith('https://github.com/davidemerson/hatband'), href);
+  for (const href of hrefs) {
+    assert.ok(href.startsWith('/') || href.startsWith('https://github.com/davidemerson/hatband')
+              || href.startsWith('data:image/svg+xml;base64,'), href);
+  }
   const script = inline('script');
   for (const forbidden of ['innerHTML', 'outerHTML', 'insertAdjacentHTML', 'document.write', 'eval(', 'new Function', 'fetch(', 'XMLHttpRequest', 'WebSocket', 'sendBeacon', 'import(', 'importScripts', 'url(', '@import', 'localStorage', 'indexedDB', 'document.cookie']) {
     assert.ok(!script.includes(forbidden), forbidden);
