@@ -162,20 +162,18 @@ import UIKit
         #expect(model.dbKey == nil)
     }
 
-    /// Shares used to be swept on the next write, and then on the next return
-    /// to the app — which is still inside the window where an extension like
-    /// Signal's is preparing the attachment. Returning now spares what was
-    /// written recently and takes what was not.
-    @Test func returningToTheAppSparesAShareStillInFlight() async throws {
+    /// Nothing writes share files any more, so coming back to the app just
+    /// clears what an older build left behind.
+    @Test func returningToTheAppClearsOldShareFiles() async throws {
         let (model, _) = try await onboarded()
-        let inFlight = try TransferredFiles.write([0x51, 0x52], name: "card.png")
-        let old = try TransferredFiles.write([0x53], name: "older.png", now: Date().addingTimeInterval(-TransferredFiles.grace - 60))
-        defer { try? FileManager.default.removeItem(at: inFlight.deletingLastPathComponent()) }
+        let temporary = FileManager.default.temporaryDirectory
+        let stale = temporary.appendingPathComponent(TransferredFiles.prefix + "old-" + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: stale, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: stale) }
         model.scenePhase(.inactive)
-        #expect(FileManager.default.fileExists(atPath: inFlight.path), "swept while the share sheet was up")
+        #expect(FileManager.default.fileExists(atPath: stale.path))
         model.scenePhase(.active)
-        #expect(FileManager.default.fileExists(atPath: inFlight.path), "swept a share the receiver had not finished reading")
-        #expect(!FileManager.default.fileExists(atPath: old.deletingLastPathComponent().path))
+        #expect(!FileManager.default.fileExists(atPath: stale.path))
     }
 
     @Test func identityDerivesFromSeed() async throws {

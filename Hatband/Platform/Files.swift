@@ -7,71 +7,27 @@ nonisolated extension UTType {
     static let hatbandExport = UTType(exportedAs: "link.hatband.export")
 }
 
-/// Writes bytes for a share in a fresh temporary directory. Every
-/// `FileRepresentation` below goes through it.
+/// Everything below shares bytes it already holds, so nothing is written to
+/// disk to be shared. This only clears up after builds that did.
+///
+/// Sharing through a `FileRepresentation` cost a temporary directory, a
+/// protection class and a sweep that had to guess when a receiver had finished
+/// reading — and Signal's share extension refused a PNG, an SVG and a PDF
+/// vended that way while accepting a `.hatband` file through the same code.
+/// A `DataRepresentation` hands over the bytes and lets the system put them
+/// wherever the receiver needs them. The bytes were in memory either way.
 nonisolated enum TransferredFiles {
     static let prefix = "Transfer-"
 
-    /// How long a share's file is left alone. A receiver resolves the file
-    /// after the sheet it came from has gone, so "the app is frontmost again"
-    /// is not the same as "no share is in flight". A minute is far longer than
-    /// any receiver has ever needed and keeps the bytes' life short, which is
-    /// the point of sweeping at all.
-    static let grace: TimeInterval = 60
-
-    /// Removes the directories earlier shares left behind, so plaintext card
-    /// bytes never outlive the share by much longer than the trip out and back.
-    ///
-    /// Age comes from the directory's own name, not from the file system: the
-    /// boundary lint forbids reading creation dates, and a name cannot be
-    /// touched by anything that reads the file.
-    ///
-    /// Never sweep indiscriminately. A `FileRepresentation` is resolved more
-    /// than once — the share sheet resolves it to draw a thumbnail, then the
-    /// receiving extension resolves it to take the bytes — and an extension
-    /// like Signal's goes on preparing the attachment after its sheet has
-    /// closed and Hatband is frontmost again. Deleting a file that is still
-    /// being vended is what Signal reports as "Unable to Prepare Attachment".
-    static func sweep(
-        in temporary: URL = FileManager.default.temporaryDirectory,
-        olderThan grace: TimeInterval = grace,
-        now: Date = Date()
-    ) {
+    /// Deletes what earlier builds left in the temporary directory, so their
+    /// plaintext card bytes do not sit there until iOS gets round to it.
+    /// Nothing writes these any more, so there is nothing in flight to race.
+    static func sweep(in temporary: URL = FileManager.default.temporaryDirectory) {
         let manager = FileManager.default
         guard let names = try? manager.contentsOfDirectory(atPath: temporary.path) else { return }
         for name in names where name.hasPrefix(prefix) {
-            // A name from a build that wrote no stamp is from a previous
-            // launch by definition, and goes.
-            if let written = stamp(in: name), now.timeIntervalSince(written) < grace { continue }
             try? manager.removeItem(at: temporary.appendingPathComponent(name))
         }
-    }
-
-    /// `Transfer-<seconds since the reference date>-<uuid>`, or nil if the
-    /// name does not carry one.
-    static func stamp(in name: String) -> Date? {
-        let rest = name.dropFirst(prefix.count)
-        guard let dash = rest.firstIndex(of: "-"), let seconds = Double(rest[rest.startIndex..<dash]) else { return nil }
-        return Date(timeIntervalSinceReferenceDate: seconds)
-    }
-
-    /// `.completeUnlessOpen` rather than `.complete`: another process reads
-    /// this file while Hatband is in the background, and a complete-protected
-    /// file is unreadable the moment the phone locks behind the share sheet.
-    /// The bytes are still unreadable at rest, which is what the class is for.
-    static func write(_ bytes: [UInt8], name: String, now: Date = Date()) throws -> URL {
-        // Rounded down, never up: a stamp in the future makes the age
-        // negative, and a negative age is younger than any grace — including
-        // the zero an erase passes.
-        let stamp = String(Int(now.timeIntervalSinceReferenceDate.rounded(.down)))
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent(prefix + stamp + "-" + UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(
-            at: directory, withIntermediateDirectories: true,
-            attributes: [.protectionKey: FileProtectionType.completeUnlessOpen])
-        let url = directory.appendingPathComponent(name)
-        try Data(bytes).write(to: url, options: [.atomic, .completeFileProtectionUnlessOpen])
-        return url
     }
 }
 
@@ -86,9 +42,8 @@ nonisolated struct CardFile: Transferable {
     }
 
     static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(exportedContentType: .hatbandCard) { file in
-            SentTransferredFile(try TransferredFiles.write(file.bytes, name: file.name), allowAccessingOriginalFile: false)
-        }
+        DataRepresentation(exportedContentType: .hatbandCard) { Data($0.bytes) }
+            .suggestedFileName { $0.name }
     }
 }
 
@@ -103,9 +58,8 @@ nonisolated struct ExportFile: Transferable {
     }
 
     static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(exportedContentType: .hatbandExport) { file in
-            SentTransferredFile(try TransferredFiles.write(file.bytes, name: file.name), allowAccessingOriginalFile: false)
-        }
+        DataRepresentation(exportedContentType: .hatbandExport) { Data($0.bytes) }
+            .suggestedFileName { $0.name }
     }
 }
 
@@ -119,9 +73,8 @@ nonisolated struct VCardFile: Transferable {
     }
 
     static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(exportedContentType: .vCard) { file in
-            SentTransferredFile(try TransferredFiles.write(file.bytes, name: file.name), allowAccessingOriginalFile: false)
-        }
+        DataRepresentation(exportedContentType: .vCard) { Data($0.bytes) }
+            .suggestedFileName { $0.name }
     }
 }
 
@@ -135,9 +88,8 @@ nonisolated struct PNGFile: Transferable {
     }
 
     static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(exportedContentType: .png) { file in
-            SentTransferredFile(try TransferredFiles.write(file.bytes, name: file.name), allowAccessingOriginalFile: false)
-        }
+        DataRepresentation(exportedContentType: .png) { Data($0.bytes) }
+            .suggestedFileName { $0.name }
     }
 }
 
@@ -151,9 +103,8 @@ nonisolated struct PDFFile: Transferable {
     }
 
     static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(exportedContentType: .pdf) { file in
-            SentTransferredFile(try TransferredFiles.write(file.bytes, name: file.name), allowAccessingOriginalFile: false)
-        }
+        DataRepresentation(exportedContentType: .pdf) { Data($0.bytes) }
+            .suggestedFileName { $0.name }
     }
 }
 
@@ -167,8 +118,7 @@ nonisolated struct SVGFile: Transferable {
     }
 
     static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(exportedContentType: .svg) { file in
-            SentTransferredFile(try TransferredFiles.write(file.bytes, name: file.name), allowAccessingOriginalFile: false)
-        }
+        DataRepresentation(exportedContentType: .svg) { Data($0.bytes) }
+            .suggestedFileName { $0.name }
     }
 }

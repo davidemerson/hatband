@@ -148,14 +148,17 @@ import Testing
         #expect(feedPresentAtReload == [false])
     }
 
-    /// A file written for the share sheet (a card, a vCard, an export)
-    /// does not outlive an erase.
+    /// A share file an older build left behind does not outlive an erase.
     @Test func eraseSweepsSharedFiles() async throws {
         let (model, _) = try await onboarded()
-        let shared = try TransferredFiles.write([0x42, 0x45, 0x47, 0x49, 0x4E], name: "someone.vcf")
-        #expect(FileManager.default.fileExists(atPath: shared.path))
+        let shared = FileManager.default.temporaryDirectory
+            .appendingPathComponent(TransferredFiles.prefix + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: shared, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: shared) }
+        let file = shared.appendingPathComponent("someone.vcf")
+        try Data([0x42, 0x45, 0x47, 0x49, 0x4E]).write(to: file)
         await model.eraseEverything()
+        #expect(!FileManager.default.fileExists(atPath: file.path))
         #expect(!FileManager.default.fileExists(atPath: shared.path))
-        #expect(!FileManager.default.fileExists(atPath: shared.deletingLastPathComponent().path))
     }
 }

@@ -197,14 +197,6 @@ import SwiftUI
                           preview: SharePreview("Hatband card")) {
                     Label("Share as file", systemImage: "doc")
                 }
-                // PROBE, temporary, paired with the one in `PrintSheet`: the
-                // known-bad type in the working place.
-                if let code = shown?.code, let png = PrintExport.png(code) {
-                    let file = PNGFile(bytes: png, name: CardView.fileBase(shown?.card?.name ?? persona.label) + ".png")
-                    ShareLink(item: file, preview: SharePreview(file.name)) {
-                        Label("Probe: PNG from the toolbar", systemImage: "ladybug")
-                    }
-                }
             }
         } label: {
             Label("Share", systemImage: "square.and.arrow.up")
@@ -318,8 +310,6 @@ import SwiftUI
         var svg: SVGFile
         var png: PNGFile?
         var pdf: PDFFile?
-        // PROBE, temporary. See the note on the probe section below.
-        var card: CardFile?
     }
 
     var body: some View {
@@ -342,21 +332,6 @@ import SwiftUI
                         }
                     } footer: {
                         Text("Rendered on this iPhone. Each file carries the full signed card.")
-                    }
-                    // PROBE, temporary, paired with the one in `shareMenu`.
-                    // Sharing to Signal fails from this sheet for PNG, SVG and
-                    // PDF, and works from the toolbar for a `.hatband` file.
-                    // Every failing share is both a system media type and
-                    // inside a `.sheet`; the two probes separate those. This
-                    // one is the known-good type in the failing place.
-                    if let card = files.card {
-                        Section {
-                            ShareLink(item: card, preview: SharePreview(card.name)) {
-                                Label("Probe: .hatband from this sheet", systemImage: "ladybug")
-                            }
-                        } footer: {
-                            Text("A diagnostic. If this reaches Signal and the three above do not, the fault is the file type, not the sheet.")
-                        }
                     }
                 } else if let problem {
                     Text(problem)
@@ -395,10 +370,7 @@ import SwiftUI
             let png = PrintExport.png(code).map { PNGFile(bytes: $0, name: base + ".png") }
             let pdf = PrintExport.pdf(code: code, name: card.name, company: card.company, color: card.color)
                 .map { PDFFile(bytes: $0, name: base + ".pdf") }
-            // PROBE, temporary: the same bytes the toolbar's working share sends.
-            let file = try model.card(for: persona, form: .file)
-            let probe = CardFile(bytes: HB1.fileBytes(for: file), name: base + ".hatband")
-            files = Files(svg: SVGFile(bytes: PrintExport.svg(code), name: base + ".svg"), png: png, pdf: pdf, card: probe)
+            files = Files(svg: SVGFile(bytes: PrintExport.svg(code), name: base + ".svg"), png: png, pdf: pdf)
         } catch {
             problem = AppError(error).message
         }
