@@ -13,6 +13,12 @@ struct BrandedQRImageTests {
         try #require(CardQR.code(for: try Vectors.url("compact-name-only"), form: .lockScreen))
     }
 
+    /// What the Messages balloon actually draws. Twice the modules of the
+    /// Lock Screen form, and the size every one of these tests missed.
+    private func fullCode() throws -> QRCode {
+        try #require(CardQR.code(for: try Vectors.url("typical-signed"), form: .fullQR))
+    }
+
     private func gray(_ image: CGImage, x: Int, y: Int) throws -> UInt8 {
         let provider = try #require(image.dataProvider)
         let bytes = try #require(provider.data) as Data
@@ -94,6 +100,34 @@ struct BrandedQRImageTests {
         let centroid = columnInk.enumerated().reduce(0.0) { $0 + Double($1.offset) * Double($1.element) } / Double(ink)
         let middle = Double(columnInk.count - 1) / 2
         #expect(abs(centroid - middle) < 1, "the hat is off-centre horizontally by \(centroid - middle) px")
+    }
+
+    /// The balloon's own form and scale, which nothing covered before.
+    @Test func theBalloonsFormComposites() throws {
+        let code = try fullCode()
+        let pixelsPerModule = 8
+        let quietZone = 4
+        let hole = try #require(QRLogo.hole(size: code.size))
+        let bare = try #require(QRBitmap.cgImage(code, pixelsPerModule: pixelsPerModule, quietZone: quietZone))
+        let branded = try #require(BrandedQRImage.cgImage(code, pixelsPerModule: pixelsPerModule, quietZone: quietZone))
+        #expect(branded.width == bare.width)
+        // Same format as the bitmap it replaces: Messages was handed one of
+        // these before and must be handed the same kind now.
+        #expect(branded.bitsPerComponent == bare.bitsPerComponent)
+        #expect(branded.bitsPerPixel == bare.bitsPerPixel)
+        #expect(branded.bytesPerRow == bare.bytesPerRow)
+        #expect(branded.alphaInfo == bare.alphaInfo)
+        #expect(branded.colorSpace?.model == bare.colorSpace?.model)
+        let total = code.size + 2 * quietZone
+        var ink = 0
+        for row in hole {
+            for column in hole {
+                let x = (column + quietZone) * pixelsPerModule + pixelsPerModule / 2
+                let y = (total - 1 - (row + quietZone)) * pixelsPerModule + pixelsPerModule / 2
+                if try gray(branded, x: x, y: y) < 128 { ink += 1 }
+            }
+        }
+        #expect(ink > 0, "no hat at the balloon's own size")
     }
 
     @Test func aSymbolTooSmallForAHatIsReturnedUntouched() throws {

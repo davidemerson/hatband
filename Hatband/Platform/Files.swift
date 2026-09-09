@@ -14,8 +14,10 @@ nonisolated enum TransferredFiles {
 
     /// How long a share's file is left alone. A receiver resolves the file
     /// after the sheet it came from has gone, so "the app is frontmost again"
-    /// is not the same as "no share is in flight".
-    static let grace: TimeInterval = 300
+    /// is not the same as "no share is in flight". A minute is far longer than
+    /// any receiver has ever needed and keeps the bytes' life short, which is
+    /// the point of sweeping at all.
+    static let grace: TimeInterval = 60
 
     /// Removes the directories earlier shares left behind, so plaintext card
     /// bytes never outlive the share by much longer than the trip out and back.

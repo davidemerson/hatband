@@ -10,7 +10,7 @@ struct BundleInfoTests {
     private let info = Bundle.main.infoDictionary ?? [:]
 
     @Test func versionComesFromTheBuildSetting() {
-        #expect(info["CFBundleShortVersionString"] as? String == "0.5.2")
+        #expect(info["CFBundleShortVersionString"] as? String == "0.5.3")
         // Not pinned: every upload needs a build number above the last, so
         // pinning one here would fail the release this test exists to protect.
         // What matters is that the setting reaches the bundle at all.
